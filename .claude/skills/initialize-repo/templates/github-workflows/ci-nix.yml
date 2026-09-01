@@ -1,0 +1,44 @@
+# Nix CI skeleton.
+#
+# The preamble (checkout + Install Nix + Cache Nix store) is the canonical
+# shared block; everything after the marker is repo-specific by design.
+# Copy this file to .github/workflows/ci.yml and replace the TODO steps.
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # Pulls from the public devenv cache; skipPush keeps this auth-free
+      # (no CACHIX_AUTH_TOKEN secret needed, nothing is uploaded).
+      - name: Cache Nix store
+        uses: cachix/cachix-action@v15
+        with:
+          name: devenv
+          skipPush: true
+
+      # --- end of shared preamble; steps below are repo-specific ---
+
+      - name: Build
+        run: |
+          nix develop --command echo "TODO: replace with the repo's build command"
+
+      - name: Test
+        run: |
+          nix develop --command echo "TODO: replace with the repo's test command"

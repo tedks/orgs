@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+
+# Create or reuse a sibling worktree for the given branch, using the central
+# bare repository located at .git in the directory containing this script.
+# Idempotent: rerunning for an existing worktree reuses it.
+#
+# Expected project layout (this script lives at the project root):
+#   ~/Projects/<project>/
+#   ├── .git/                    # bare repo
+#   ├── create-worktree          # this script
+#   ├── master/                  # primary worktree (master or main)
+#   └── <project>-<branch>/      # feature worktrees created by this script
+#
+# Issue tracking needs nothing here: ditz keeps its issues on the
+# ditz-metadata branch rather than in the working tree, so a new worktree
+# requires no per-worktree issue-tracker setup.
+#
+# Branch names containing '/' are flattened to '-' in the worktree directory
+# name (note: feat/x and feat-x therefore map to the same directory; the
+# reuse check below catches the collision).
+#
+# Environment overrides:
+#   REMOTE    Remote URL. Defaults to the bare repo's origin URL; only
+#             required when the bare repo does not exist yet (first run).
+#   BASE_REF  Base reference for new branches. Defaults to origin/master,
+#             falling back to origin/main.
+
+set -euo pipefail
+
+usage() {
+  echo "Usage: $(basename "$0") <branch>" >&2
+  exit 1
+}
+
+# Print the path of the worktree that has <ref> checked out, if any.
+# Paths are taken from the full porcelain line ("worktree <path>"), so
+# embedded spaces survive this parse.
+worktree_for_ref() {
+  git --git-dir="$GIT_DIR" worktree list --porcelain 2>/dev/null \
+    | awk -v ref="$1" '/^worktree /{p=substr($0,10)} $1=="branch" && $2==ref{print p; exit}'
+}
+
+# Print the ref checked out at worktree <path>, if any (empty if detached).
+ref_for_worktree() {
+  git --git-dir="$GIT_DIR" worktree list --porcelain 2>/dev/null \
+    | awk -v dir="$1" '/^worktree /{p=substr($0,10)} $1=="branch" && p==dir{print $2; exit}'
+}
+
+BRANCH="${1:-}"
+[ -n "$BRANCH" ] || usage
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GIT_DIR="$ROOT/.git"
+PROJECT="$(basename "$ROOT")"
+case "$BRANCH" in
+  master|main) WORKTREE_DIR="$ROOT/$BRANCH" ;;                  # primary worktree
+  *)           WORKTREE_DIR="$ROOT/$PROJECT-${BRANCH//\//-}" ;; # feature worktrees
+esac
+
+# Ensure the central bare repo exists.
+if [ -d "$GIT_DIR" ]; then
+  if ! git --git-dir="$GIT_DIR" rev-parse --is-bare-repository >/dev/null 2>&1; then
+    echo "$GIT_DIR exists but is not a valid git repository. Aborting." >&2
+    exit 1
+  fi
+  REMOTE="${REMOTE:-$(git --git-dir="$GIT_DIR" remote get-url origin 2>/dev/null || true)}"
+else
+  if [ -z "${REMOTE:-}" ]; then
+    echo "No bare repository at $GIT_DIR and REMOTE is not set." >&2
+    echo "First run: REMOTE=git@github.com:<user>/<repo>.git $(basename "$0") <branch>" >&2
+    exit 1
+  fi
+  echo "Creating bare repository in $GIT_DIR..."
+  git clone --bare "$REMOTE" "$GIT_DIR"
+fi
+
+# Make sure the remote is set correctly (in case the bare repo pre-existed).
+if [ -n "${REMOTE:-}" ]; then
+  if git --git-dir="$GIT_DIR" remote get-url origin >/dev/null 2>&1; then
+    git --git-dir="$GIT_DIR" remote set-url origin "$REMOTE"
+  else
+    git --git-dir="$GIT_DIR" remote add origin "$REMOTE"
+  fi
+fi
+
+# Ensure a fetch refspec exists (handles older bare clones without one).
+if ! git --git-dir="$GIT_DIR" config --get-all remote.origin.fetch >/dev/null 2>&1; then
+  git --git-dir="$GIT_DIR" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+fi
+
+# Stay up to date. Non-fatal: offline use is fine when the refs already exist.
+if ! git --git-dir="$GIT_DIR" fetch origin --prune; then
+  echo "[warn] Fetch from origin failed; continuing with local refs." >&2
+fi
+
+# Pick the base reference for new branches: origin/master, then origin/main.
+if [ -z "${BASE_REF:-}" ]; then
+  for candidate in origin/master origin/main; do
+    if git --git-dir="$GIT_DIR" rev-parse --verify --quiet "refs/remotes/$candidate" >/dev/null; then
+      BASE_REF="$candidate"
+      break
+    fi
+  done
+fi
+if [ -z "${BASE_REF:-}" ]; then
+  echo "Could not find origin/master or origin/main; set BASE_REF explicitly." >&2
+  exit 1
+fi
+
+echo "Using GIT_DIR:    $GIT_DIR"
+echo "Branch:           $BRANCH"
+echo "Worktree path:    $WORKTREE_DIR"
+echo "Base reference:   $BASE_REF"
+echo "Remote:           ${REMOTE:-<none configured>}"
+
+# If the branch is already checked out somewhere, reuse it only when it is
+# at the expected worktree path; never steal a branch from another worktree.
+CHECKED_OUT_AT="$(worktree_for_ref "refs/heads/$BRANCH")"
+if [ -n "$CHECKED_OUT_AT" ] && [ "$CHECKED_OUT_AT" != "$WORKTREE_DIR" ]; then
+  echo "Branch $BRANCH is already checked out at $CHECKED_OUT_AT. Reuse it there or pick a new branch name." >&2
+  exit 1
+fi
+
+# Reuse or add the worktree. All path checks happen before the branch is
+# created locally, so aborts leave no stray branch behind.
+if git --git-dir="$GIT_DIR" worktree list --porcelain | awk '/^worktree /{print substr($0,10)}' | grep -Fx "$WORKTREE_DIR" >/dev/null; then
+  # Registered: reuse only if it is intact and has the requested branch.
+  if [ ! -e "$WORKTREE_DIR/.git" ]; then
+    echo "Worktree $WORKTREE_DIR is registered but missing on disk." >&2
+    echo "Run: git --git-dir=\"$GIT_DIR\" worktree prune   and rerun." >&2
+    exit 1
+  fi
+  if [ "$CHECKED_OUT_AT" != "$WORKTREE_DIR" ]; then
+    ACTUAL_REF="$(ref_for_worktree "$WORKTREE_DIR")"
+    echo "Worktree $WORKTREE_DIR has ${ACTUAL_REF:-a detached HEAD} checked out, not refs/heads/$BRANCH." >&2
+    echo "(Branch names with '/' flatten to '-', so this may be a name collision.) Aborting." >&2
+    exit 1
+  fi
+  echo "Worktree already registered at $WORKTREE_DIR; reusing."
+elif [ -e "$WORKTREE_DIR" ]; then
+  echo "Path $WORKTREE_DIR exists but is not registered as a worktree. Aborting to avoid overwriting." >&2
+  exit 1
+else
+  # Ensure the branch exists locally, then add the worktree.
+  if git --git-dir="$GIT_DIR" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    :
+  elif git --git-dir="$GIT_DIR" ls-remote --exit-code origin "refs/heads/$BRANCH" >/dev/null 2>&1; then
+    git --git-dir="$GIT_DIR" branch --track "$BRANCH" "origin/$BRANCH"
+  else
+    git --git-dir="$GIT_DIR" branch "$BRANCH" "$BASE_REF"
+  fi
+  echo "Adding worktree at $WORKTREE_DIR..."
+  git --git-dir="$GIT_DIR" worktree add "$WORKTREE_DIR" "$BRANCH"
+fi
+
+echo
+echo "Active worktrees:"
+git --git-dir="$GIT_DIR" worktree list

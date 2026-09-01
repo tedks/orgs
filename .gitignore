@@ -1,0 +1,45 @@
+# Nix
+result
+result-*
+.direnv/
+
+# Node
+node_modules/
+dist/
+.next/
+.nuxt/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Rust
+target/
+
+# OCaml
+_build/
+*.install
+
+# Go
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
