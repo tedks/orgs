@@ -284,3 +284,31 @@ Rulings, subject to CEO ratification where noted:
 (b) does Codex's unified event/case log subsume the interpretation log, or do
 they stay separate artifacts; (c) who chairs a standup when the convener is an
 interested party; (d) CEO ruling on v0 review breadth.
+
+---
+
+## CEO rulings — Round 1
+
+- **Firewall hardness (1a): not ratified as doctrine — promoted to a bench
+  question.** Precedent argument: google3 and Amazon both expose source across
+  team boundaries; the API remains the contract anyway. Whether clean-room
+  isolation (hard wall / diagnostic clone / direct read) actually reduces
+  accidental coupling in *agents* is an empirical claim, so it joins the
+  ablation list. Interim default: context assembly still excludes foreign
+  source for leanness; a direct peek is an ordinary logged bend.
+- **Standup registry: suspected overengineering.** v0 keeps only the minimal
+  core — at most one open standup per issue, and decisions reconciled against
+  head before they apply. Chair/expiry/affected-artifact formality is deferred
+  until a standup storm is actually observed.
+- **meta:product token ratio: adopted as a soft constraint** (tripwire and
+  retro signal, not a hard gate), consistent with the soft-invariant doctrine.
+  **Cold-start audit: adopted** as a standing milestone ritual.
+- **v0 review rung: build directly on the existing council-review skill**
+  rather than new review machinery. Council review stays in v0 (agy's
+  deferral not taken); single-provider review is recorded as a bench
+  ablation question instead.
+- **Warm-seat rounds: approved and dispatched.** ask-agent gains a
+  `--resume <id>` option (dotfiles ditz `ask-agent-session-resume`;
+  implementation in flight in tmux `orgs:ask-resume`, Claude Opus). Once it
+  lands, fixpoint rounds chain each seat's yielded session instead of
+  re-feeding transcripts to fresh instances.
