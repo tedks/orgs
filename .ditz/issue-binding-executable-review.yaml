@@ -15,3 +15,15 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-09-02T09:41:41-00:00
+  who: Ted Smith
+  what: commented
+  comment: "PRIORITY (from the v0 Anthropic seat's close-out): do this BEFORE the
+    resp-pilot-sprint fans out. The Claude Code binding is the pilot's only binding,
+    and every worker's takeover, huddle, and review seat maps through it, so a latent
+    binding defect poisons the whole pilot. It must be an EXECUTABLE review (run the
+    primitives / check against the tool contract), not prose \u2014 prose review structurally
+    cannot catch a false capability claim, which is exactly how the fork/model Critical
+    survived every foreign seat in the v0 council. The one known defect (fork inherits
+    caller context + ignores model) is already fixed in PR #6; this issue is to verify
+    every remaining claim the same way."
