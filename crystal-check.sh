@@ -4,23 +4,35 @@
 # Textual conflicts are detected with `git merge-tree --write-tree`, which
 # computes the merge without touching the index, any worktree, or any ref.
 # Semantic conflicts (a clean merge whose tests fail) are detected by
-# extracting the merged tree as PLAIN FILES (git archive | tar, no .git in
-# the scratch dir) and running the boundary-test command there. The test
-# therefore sees files only — it has no path to the real object store or
-# refs — so nothing real is mutated and nothing is ever pushed.
+# checking the merged tree out as PLAIN FILES (via a throwaway index +
+# `git checkout-index`, no .git in the scratch dir) and running the
+# boundary-test command there with git's environment variables and OLDPWD
+# unset.
 #
-# Consequences of the plain-files sandbox, by design:
-#   - a --test-cmd that itself needs a git repository is out of scope in v0;
-#     it will see no .git and should be treated as unsupported, not as a
-#     semantic conflict.
+# Isolation is best-effort against ACCIDENTS, not a security sandbox against
+# hostile code. It defeats the common accidental mutation — a test that runs
+# git in its working directory (a shared-.git worktree would let that reach
+# the real object store and refs; this does not) — and the inherited-env and
+# OLDPWD paths back to the real repo. It does NOT contain a command that uses
+# an absolute path to the real repo, escapes via a symlink, or otherwise
+# means harm. Only point --test-cmd at boundary-test commands you trust; in
+# the org, those are commands the team authored.
+#
+# Other consequences, by design:
+#   - a --test-cmd that itself requires a git repository is out of scope in
+#     v0: it will find no .git and report FAIL. Do not point Crystal at such
+#     commands; that FAIL is noise, not a semantic conflict.
 #   - a --test-cmd that backgrounds a process can still leak that process
-#     (a --timeout bounds a wedged foreground command, not a daemon it
-#     spawns). Boundary-test commands must not daemonize.
+#     (--timeout bounds a wedged foreground command, not a daemon it spawns).
+#     Boundary-test commands must not daemonize.
 #
-# Assumptions: git >= 2.38 (checked); the test command is green on each
-# branch individually — if it fails on a branch by itself, every pairing of
-# that branch will report FAIL and the report is noise, not signal.
+# Requires: bash >= 4 (associative arrays); git >= 2.38 (both checked); a
+# coreutils `timeout` for --timeout. The test command should be green on each
+# branch individually — a branch red on its own makes every pairing FAIL,
+# which is noise.
 set -Eeuo pipefail
+
+[ "${BASH_VERSINFO[0]:-0}" -ge 4 ] || { echo "crystal: bash >= 4 required" >&2; exit 2; }
 
 usage() {
     cat >&2 <<'EOF'
@@ -131,14 +143,29 @@ found_conflict=0
 had_error=0
 wt_seq=0
 
-# run_test <dir> — run the test command in <dir>; return its status. Never
-# aborts the script (called in an `if`), so a failing test is data, not death.
+# Git's own environment variables, unset before running a test so an
+# inherited GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE cannot point it back at the
+# real repository. Computed once.
+git_env_vars=$(git rev-parse --local-env-vars 2>/dev/null || true)
+
+# run_test <dir> — run the test command in <dir>; return its status. The dir
+# is applied with `cd` (not interpolated into the bash -c source, so an odd
+# TMPDIR path is harmless); git env vars and OLDPWD are unset so the sandbox
+# cannot be escaped by inherited environment or `cd -`. Called in an `if`,
+# so a failing test is data, not death.
 run_test() {
-    if [ "$have_timeout" -eq 1 ]; then
-        timeout --kill-after=10 "$timeout_s" bash -c "cd \"$1\" && $test_cmd" >/dev/null 2>&1
-    else
-        ( cd "$1" && bash -c "$test_cmd" ) >/dev/null 2>&1
-    fi
+    (
+        cd "$1" || exit 127
+        # Unset AFTER cd: cd itself re-sets OLDPWD to the invoking (real
+        # repo) directory, so `cd -` would otherwise walk straight back.
+        # shellcheck disable=SC2086
+        unset $git_env_vars OLDPWD 2>/dev/null || true
+        if [ "$have_timeout" -eq 1 ]; then
+            timeout --kill-after=10 "$timeout_s" bash -c "$test_cmd"
+        else
+            bash -c "$test_cmd"
+        fi
+    ) >/dev/null 2>&1
 }
 
 # join_conflicts — read conflicted paths on stdin, emit ", "-joined (paste
@@ -165,8 +192,15 @@ check_pair() {
         tree=${mt_out%%$'\n'*}
         if [ -n "$test_cmd" ]; then
             wt_seq=$((wt_seq + 1)); wt="$scratch_root/wt-$wt_seq"; mkdir "$wt"
-            # Plain-files sandbox: no .git reaches the test command.
-            git archive --format=tar "$tree" | tar -x -C "$wt"
+            # Faithful checkout of the merged tree as plain files via a
+            # throwaway index. checkout-index applies smudge filters like a
+            # real checkout but ignores export-ignore/export-subst (unlike
+            # git archive), so the sandbox matches what the merge would look
+            # like on disk. No .git reaches the test command.
+            local idx="$scratch_root/idx-$wt_seq"
+            GIT_INDEX_FILE="$idx" git read-tree "$tree"
+            GIT_INDEX_FILE="$idx" git checkout-index -a --prefix="$wt/"
+            rm -f "$idx"
             if run_test "$wt"; then echo "tests: pass"
             else echo "tests: FAIL"; found_conflict=1; fi
             rm -rf "$wt"

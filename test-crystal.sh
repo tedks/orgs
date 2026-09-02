@@ -102,25 +102,34 @@ $out"
 grep -q 'tests: FAIL\|CONFLICT' <<<"$out" && fail "compatible pair: spurious conflict:
 $out"
 
-# 4. base-only repo: a fresh repo with just master is vacuously clean
+# 4. base-only repo: a fresh repo with just master is vacuously clean.
+#    Capture without letting set -e abort, and clean up regardless.
 base_only=$(mktemp -d "${TMPDIR:-/tmp}/crystal-baseonly.XXXXXX")
+bo_status=0
 ( cd "$base_only" && git init -q -b master . \
   && git config user.email t@t && git config user.name t \
   && printf 'x\n' > f && git add -A && git commit -qm base \
-  && "$crystal" --base master >/dev/null 2>&1 )
-bo_status=$?
+  && "$crystal" --base master >/dev/null 2>&1 ) || bo_status=$?
 rm -rf "$base_only"
 [ "$bo_status" -eq 0 ] || fail "base-only repo: expected exit 0, got $bo_status"
 
 # 5. sandbox isolation: a test command that tries to mutate git must NOT
-#    affect the real repo (plain-files sandbox has no .git). We point the
-#    test at creating a branch; the real repo's branch set must be unchanged.
+#    affect the real repo. Covers the escape paths the sandbox closes — the
+#    cwd (no .git present), OLDPWD/`cd -`, and inherited GIT_DIR — each of
+#    which, if it reached the real repo, would create a branch. The real
+#    repo's branch set must be unchanged after.
 before=$(git for-each-ref --format='%(refname)' refs/heads | sort)
-evil='git checkout -b crystal-should-not-exist 2>/dev/null; git branch pwned 2>/dev/null; true'
+evil='git branch pwned-cwd 2>/dev/null;
+      cd - >/dev/null 2>&1 && git branch pwned-oldpwd 2>/dev/null;
+      cd "${OLDPWD:-/nonexistent}" 2>/dev/null && git branch pwned-oldpwd2 2>/dev/null;
+      true'
 out=$("$crystal" --base master --test-cmd "$evil" ok-a 2>&1) || true
 after=$(git for-each-ref --format='%(refname)' refs/heads | sort)
 [ "$before" = "$after" ] || fail "sandbox isolation: test command mutated the real repo:
 before=$before
 after=$after"
+if git for-each-ref --format='%(refname)' refs/heads | grep -q 'pwned'; then
+    fail "sandbox isolation: a pwned-* branch was created in the real repo"
+fi
 
 echo "PASS: crystal-check distinguishes textual/semantic/clean, handles base-only, and sandboxes tests"
