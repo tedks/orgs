@@ -1,6 +1,6 @@
 # Work package: resp-codec
 
-- **State:** READY (necessity challenge PROCEED, `events/resp-tracer/lead.md` lead:5)
+- **State:** CLAIMED — worker-codec, Sonnet 5 (Agent tool, general-purpose subagent)
 - **Owner (role):** L3 implementer · **Model:** sonnet (state-machine
   parsing correctness matters more than the mechanical dispatch work in
   command-engine — see roster/necessity-challenge rationale)

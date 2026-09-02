@@ -83,3 +83,34 @@
   next. work-package:server stays DRAFT (its Dependencies field requires
   both of the above ACCEPTED before claim) — will transition when its
   turn comes.
+
+## lead:7 · 2026-09-02T00:45:00Z · deviation
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: a04397d
+- refs: work-packages/resp-codec.md, work-packages/command-engine.md
+- what bent: dispatching resp-codec and command-engine workers
+  sequentially (one Agent-tool call, wait for completion and commit,
+  then the next) instead of in one parallel message, even though the
+  necessity challenge (lead:5) confirmed they're independent and
+  parallelizable.
+- why: both workers commit directly onto the shared pilot-resp working
+  tree (per launch instruction — no per-worker worktree isolation was
+  set up). Two subagents issuing concurrent git add/git commit Bash
+  calls against the same .git risks index-lock contention or
+  interleaved partial state; they touch disjoint files (codec.py vs.
+  engine.py) so a true content conflict is impossible, but the git
+  operations race is real and unnecessary to risk for a two-worker
+  pilot. Serving intent (clean, reconstructable git history — DOCTRINE
+  "write what you can defend") over the letter of "spawn ONE Claude
+  subagent per work package" read as simultaneous dispatch.
+- rollback: n/a (a scheduling choice, not a repo-state change).
+- protocol friction note: the binding (bindings/claude-code.md) lists
+  "Team isolation: git worktrees per team/branch" but the launch
+  instruction for this sprint said "commit on this branch" for all
+  three workers, without specifying per-worker worktrees. RUNBOOK
+  doesn't say how independently-decomposed, same-worktree work packages
+  should be dispatched concurrently without a git-race risk. Flagging
+  for retro: either the runbook should call for per-worker scratch
+  worktrees (fast-forward-merged by the integration owner) whenever
+  packages are parallel-dispatched to the same branch, or explicitly
+  bless sequential dispatch as normal for small pilots.
