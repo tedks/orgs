@@ -1,9 +1,15 @@
 # Context manifest: <work package id>
 
-What was packed into the worker's context at claim time. A packing list, not
-a firewall — the worker may read anything; this records what it was *given*,
+What was packed into an agent's context at claim time. A packing list, not
+a firewall — the agent may read anything; this records what it was *given*,
 for reproducibility and the cold-start audit.
 
+- **Pack type:** implementer | reviewer | auditor
+  - *implementer* packs additionally include **the work package itself**;
+  - *reviewer* packs include the **diff under review, the acceptance
+    criteria, and the consumed contracts** — never the implementer's
+    transcript (journeys inherit; judgments get fresh packs);
+  - *auditor* packs are the clean checkout alone.
 - **Doctrine:** DOCTRINE.md @ <sha> (prompt block verbatim in role prompt)
 - **Design doc:** <path> @ <sha> (whole document — intent must travel)
 - **Contracts:** <each consumed contract + version>

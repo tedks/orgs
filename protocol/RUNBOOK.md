@@ -15,9 +15,13 @@ council round on it is CLEAN.
 
 ## 2. Sizing (hats, not headcount)
 
-Count boundaries; assign hats. Every artifact in STATES.md gets produced
-regardless of how few agents wear the hats. The review hat always gets a
-fresh context, even on a one-agent project.
+Count boundaries; assign hats; instantiate `org/ROSTER.md` from
+`templates/roster.md` — hats, standup heartbeat, blocked threshold, and who
+monitors the triggers all get named there. Every artifact type in STATES.md
+whose triggering condition fires gets produced, regardless of how few agents
+wear the hats — a fired trigger without its artifact is a protocol defect;
+an unfired trigger (a sprint with no escalations) owes nothing. The review
+hat always gets a fresh context, even on a one-agent project.
 
 ## 3. Decomposition (lead, player-coach)
 
@@ -38,7 +42,9 @@ fresh context, even on a one-agent project.
 ## 4. Execution (worker loop)
 
 Work in your worktree, on your branch, inside your owned scope. Maintain
-your status entry (current task, last commit, budget burned, blocked-on).
+your status entry (`status/<package-id>.md` per `templates/status.md`:
+current task, last commit, budget burned, blocked-on — updated on claim,
+every push, block/unblock, and each budget quarter).
 Log deviations as they happen. Commit granularly. Hit a stop condition →
 reorient once, then escalate. Contract silent → file the interpretation
 request and keep working on what's unblocked (or fork-huddle if blocked).
@@ -46,7 +52,9 @@ request and keep working on what's unblocked (or fork-huddle if blocked).
 ## 5. Standup
 
 Convened on triggers (budget tripwire, stop condition, Crystal conflict,
-blocked > threshold, interface change) or heartbeat. The chair (usually the
+blocked past the roster's threshold, interface change) or on the roster's
+heartbeat; each accountable lead monitors the triggers for their entity's
+packages (defaults in `templates/roster.md`). The chair (usually the
 convener) facilitates; the adjudicator per ownership decides. Inputs: status
 entries, event ledger since last standup, git log, open PRs — compact state,
 never transcripts. Outputs, committed as ledger events: decisions,
@@ -79,13 +87,26 @@ by default; conflict debt visible at standup so it ages loudly.
 
 ## 8. Integration & sprint closure
 
-Integration owner merges ACCEPTED packages promptly (integrate continuously;
-late integration is the firewalled-teams failure mode), keeps main green
-against all boundary tests, then runs the retro: adjudicate remaining
-deviations; file lessons (provenance, scope, reconsider-when); record
-meta:product ratio; fold expiring interpretations; propose amendments where
-the boundary's deviation/docs-bug/interpretation counts say the contract is
-wrong. At milestones, run the cold-start audit: fresh agent, different
-harness, clean checkout — it must state current state and next authorized
-action from committed artifacts alone. Its confusion is a protocol defect;
-fix the artifacts, not the auditor.
+The **integration owner** merges ACCEPTED packages promptly (integrate
+continuously; late integration is the firewalled-teams failure mode) and
+keeps main green against all boundary tests. The **lead** then runs the
+retro (per the sprint table in STATES.md): adjudicate remaining deviations;
+file lessons (provenance, scope, reconsider-when); record the meta:product
+ratio; fold expiring interpretations; propose amendments where the
+boundary's deviation/docs-bug/interpretation counts say the contract is
+wrong.
+
+**meta:product, v0 operational definition:** coordination tokens = the sum
+across huddle, standup, review-seat, necessity-challenge, and
+ledger-maintenance agent invocations; product tokens = the sum across
+implementer work-package invocations (takeovers count as product). Each
+invocation's reported token usage is bucketed at the time it runs and
+recorded in the sprint's run manifest; where a harness hides token counts,
+substitute the word count of the invocation's output and say so. Record
+both buckets and the ratio — the number is a soft tripwire, compared
+sprint-over-sprint, never a gate.
+
+At milestones, run the cold-start audit: fresh agent, different harness,
+clean checkout — it must state current state and next authorized action
+from committed artifacts alone. Its confusion is a protocol defect; fix the
+artifacts, not the auditor.

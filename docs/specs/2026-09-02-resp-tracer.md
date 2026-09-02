@@ -21,8 +21,9 @@ does not write its own exam.
   and non-integer `INCR`.
 - Pipelined sequential requests on one connection.
 - Every boundary contract exercised by consumer-driven boundary tests.
-- The whole protocol artifact set produced (that is the actual product; the
-  server is the medium).
+- Every protocol artifact type whose trigger fires gets produced (that is
+  the actual product; the server is the medium). Unfired triggers owe
+  nothing — no synthetic incidents.
 
 **Non-goals** (excluded per council bench ruling): expiry, persistence,
 transactions, pub/sub, clustering, authentication, concurrency beyond one
@@ -71,12 +72,25 @@ graph LR
 
 None yet. Filed against contracts in `contracts/` per protocol.
 
+## Conformance grading
+
+The exam is `bench/conformance/resp_conformance.sh`, authored by the lead at
+M1 **before fan-out** and frozen for the sprint. It starts the server on an
+ephemeral port, drives it exclusively through a real `redis-cli`
+(`redis-cli -p $PORT <args>` and piped pipelining), asserts expected replies
+for: each goal command's happy path, binary-safe values (embedded `\r\n`,
+NUL), wrong-arity errors, `INCR` on a non-integer, `GET` on a missing key,
+and a pipelined batch on one connection. Pass = exit 0 with every assertion
+green; any assertion failure or server crash = fail. Implementers may run it
+freely but never edit it; changes to the exam are spec amendments.
+
 ## Milestones
 
 - **M1 — tracer bullet (lead-built, player-coach):** repo layout, contract
-  documents committed, boundary-test skeletons, and a walking end-to-end
-  slice — `redis-cli PING` answers `PONG` through all three entities in
-  their crudest form. Proves the contracts compose before fan-out.
+  documents committed, boundary-test skeletons, the frozen conformance
+  script, and a walking end-to-end slice — `redis-cli PING` answers `PONG`
+  through all three entities in their crudest form. Proves the contracts
+  compose before fan-out.
 - **M2 — fan-out:** three work packages (one per entity) execute under the
   full ladder: council review at implementer tier, lead review, fix-delta
   rounds to CLEAN.

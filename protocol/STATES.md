@@ -1,12 +1,15 @@
 # Protocol state transitions
 
 One table per artifact type. Every transition names who may perform it and
-what evidence it requires. Every state-changing entry in the event ledger
-carries `based_on` (the revision the actor reasoned from) and, where it
-applies work, `applied_at` (the revision it landed on). All artifacts live in
-git; the repo is the office, and any harness must be able to reconstruct
-current state from these tables plus the ledger (the cold-start audit tests
-exactly this).
+what evidence it requires. Role references (accountable lead, integration
+owner, escalation owner) resolve through the project's `org/ROSTER.md`
+(template: `templates/roster.md`) — the roster says *who*, these tables say
+*what*. Every state-changing entry in the event ledger carries `based_on`
+(the revision the actor reasoned from) and, where it applies work,
+`applied_at` (the revision it landed on). All artifacts live in git; the
+repo is the office, and any harness must be able to reconstruct current
+state from these tables plus the ledger and roster (the cold-start audit
+tests exactly this).
 
 ## Work package
 
@@ -16,12 +19,12 @@ exactly this).
 | DRAFT | READY | lead | acceptance criteria + boundary tests named; necessity challenge passed (PROCEED or SIMPLIFY applied) |
 | READY | CLAIMED | worker (or lead assigns) | worker + model recorded (role and model both stamped) |
 | CLAIMED | IN_PROGRESS | worker | context manifest committed |
-| IN_PROGRESS | BLOCKED | worker | blocking dependency or filed escalation named |
+| IN_PROGRESS | BLOCKED | worker | blocking dependency, filed escalation, or open huddle named |
 | BLOCKED | IN_PROGRESS | worker | blocker resolved, entry references resolution |
 | IN_PROGRESS | REVIEW | worker | PR open; self-review done; acceptance criteria addressed with evidence |
 | REVIEW | REWORK | reviewing lead | findings ledger entries (severity + evidence) |
 | REWORK | REVIEW | worker | fix delta referenced; only the delta re-reviewed |
-| REVIEW | ACCEPTED | accountable lead | council round CLEAN; findings all dispositioned |
+| REVIEW | ACCEPTED | accountable lead | council round CLEAN; one-rung-up lead review recorded (fresh context); findings all dispositioned |
 | ACCEPTED | INTEGRATED | integration owner | merged; contract tests green at head |
 | any | ABANDONED | accountable lead | reason logged; salvageable branch preserved |
 
@@ -85,13 +88,17 @@ preserved.
 
 ## Review round
 
-| From | To | Who | Evidence |
+All review-round ledger events are recorded by the accountable lead as
+scribe — external seats have no repo access; their outputs are the evidence,
+the lead's `review-seat-outcome` events are the record.
+
+| From | To | Who (records) | Evidence |
 |---|---|---|---|
 | — | OPENED | accountable lead | scope: full PR (round 1) or fix delta (round N) |
-| OPENED | FINDINGS | council seats (fresh or warm-chained; warm seats identity-verified per round) | each finding: severity, claim, evidence |
+| OPENED | FINDINGS | lead, from council seat outputs (fresh or warm-chained; warm seats identity-verified per round) | one `review-seat-outcome` per seat: findings (severity, claim, evidence) or explicit `no-finding` |
 | FINDINGS | DISPOSITIONED | accountable lead | per finding: fixed / filed with rationale / rejected with reason — never silently dropped |
 | DISPOSITIONED | next round | lead | next round reviews the fix delta only |
-| any round | CLEAN | all seats | zero new Critical/Important; fixpoint reached |
+| any round | CLEAN | lead | `review-clean` citing every seat's outcome event: zero new Critical/Important; fixpoint reached |
 
 ## Sprint
 

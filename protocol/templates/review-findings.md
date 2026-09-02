@@ -1,13 +1,17 @@
-# Review findings ledger: <PR / work package id>
+# Review findings: <PR / work package id>
 
-Round N scope: full PR for round 1; **fix delta only** thereafter. A round
-with zero new Critical/Important findings from every seat is CLEAN and
-closes the review at fixpoint. "No finding" is an acceptable seat outcome —
-no seat is obliged to manufacture work.
+A **projection** of the event ledger (see `event-log.md`): every row cites
+its ledger seq id; seat outcomes and the closing CLEAN are ledger events
+(`review-seat-outcome`, `review-clean`) recorded by the accountable lead as
+scribe. Round N scope: full PR for round 1; **fix delta only** thereafter.
+A round in which every seat's outcome event shows zero new
+Critical/Important findings is CLEAN and closes the review at fixpoint.
+"No finding" is an acceptable seat outcome, recorded explicitly as
+`no-finding` — no seat is obliged to manufacture work.
 
-| id | round | seat | severity | claim | evidence | disposition |
-|---|---|---|---|---|---|---|
-| F1 | 1 | codex | Important | <one-sentence defect> | <repro / line / trace> | fixed in <sha> / filed as <issue> with rationale / rejected: <reason> |
+| id | ledger seq | round | seat | severity | claim | evidence | disposition |
+|---|---|---|---|---|---|---|---|
+| F1 | 14 | 1 | codex | Important | <one-sentence defect> | <repro / line / trace> | fixed in <sha> / filed as <issue> with rationale / rejected: <reason> |
 
 Rules:
 - Every finding gets a disposition; none are silently dropped.

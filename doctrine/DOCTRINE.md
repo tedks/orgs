@@ -133,8 +133,9 @@ external effects. Reads are not actions and are never gated.
   harness reconstructs current state and the next authorized action from
   committed artifacts alone. Failure is a protocol defect, not an
   onboarding problem.
-- **meta:product ratio** — per-sprint soft tripwire: tokens spent on
-  coordination artifacts vs. accepted product. Watched at retro, not gated.
+- **meta:product ratio** — per-sprint soft tripwire: coordination tokens
+  vs. product tokens, counted per the operational definition in RUNBOOK §8.
+  Watched at retro, not gated.
 - **Hats** — roles are hats, agents are headcount; small orgs collapse hats
   onto fewer agents but never drop artifacts, and the review hat always gets
   a fresh context.
