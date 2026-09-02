@@ -94,8 +94,34 @@ catch or propagate any of this — a real network server built that way would
 crash on the first malformed frame.
 
 So the honest comparison is: **equal on graded conformance, protocol
-materially more robust on the adversarial surface**, at ~5–7× token cost. The
-pilot's own tests (82/82) and a 12/12 raw-socket smoke back this up.
+more robust on the adversarial surface than the baseline**, at ~5–7× token
+cost. The pilot's own tests (82/82) and a 12/12 raw-socket smoke back this up.
+
+### But the CEO-requested cross-provider council then found the protocol's own review was insufficient
+
+When the foreign-provider council (codex + agy) reviewed the pilot server —
+the review the sprint had *skipped* (a deviation flagged for CEO ruling) — it
+found **six Critical/High crash-or-DoS defects the in-org review ladder
+missed**, several verified empirically:
+
+- **The nil crash class RECURRED and was missed.** `SET k <nil>` then
+  `INCR k` → `None.decode()` → AttributeError → whole-server crash
+  (verified). This is the *same class* the sprint caught in the command-name
+  slot and propagated to the C2 clarification — it reappeared in the storage
+  path, and the same-provider review did not catch the recurrence.
+- Uncaught `ValueError` on >4300-digit integers; unbounded recursion on
+  nested arrays; unbounded buffer (OOM); O(n²) partial-frame reparse;
+  blocking-I/O slowloris; RESP response-splitting via unsanitized command
+  bytes.
+
+The lesson is sharp and it cuts both ways: **defect-class propagation through
+contracts is real but bounded to the boundary the worker was reasoning about**
+(dispatch, not storage), and **same-provider review has correlated blind spots
+that only cross-provider review closes.** The pilot's council-skip was
+consequential — provider diversity is load-bearing, not optional. So the
+protocol is more robust *than the baseline*, but its internal review ladder
+alone was **not sufficient** to ship a network server; the cross-provider
+council is the part that was.
 
 ## Reading
 
