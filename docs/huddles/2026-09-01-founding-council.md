@@ -497,3 +497,25 @@ rulings and the Round 2 resolutions, is the design baseline for the self-spec.
 The warm seat's Round 2 catch — a fix-introduced regression in squash
 semantics — is the founding example of why review rounds run to fixpoint on
 the delta.
+
+## Post-closure CEO ruling — 2026-09-02
+
+**"Read firewall" is retired as a concept.** There is no rule about reading,
+no peek-logging requirement, and no permission regime on source. What remains:
+
+- **Context assembly is a packing list, not a firewall.** The default work
+  package packs the design doc, the relevant contracts, and the owned scope —
+  because anything more is noise, not because more is forbidden. A worker may
+  read anything in the repo at will.
+- **Isolation is enforced at the dependency level, google3-style.** The
+  mechanism that actually keeps boundaries honest in a monorepo is build
+  visibility, contract tests, and review — not restricted reads. Where the
+  build system supports visibility rules, use them; elsewhere, review checks
+  that cross-boundary use sticks to published contracts.
+- **Contract gaps surface through the interpretation inbox**, which the
+  worker files because the contract was silent — the useful act. Peek-logging
+  is redundant with it and is dropped.
+- The scheduled bench trial narrows accordingly: it no longer compares
+  permission regimes, but **context-packing defaults** (lean pack vs.
+  neighbor-source-included) for junior-tier implementers — a context-hygiene
+  question, not a security one.
