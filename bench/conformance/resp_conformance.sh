@@ -62,7 +62,10 @@ check "SET n 10 / INCR"      "11"    "$(cli SET n 10 >/dev/null; cli INCR n)"
 # 0a on the readback.
 printf 'a\r\nb\x00c' | cli -x SET bin >/dev/null
 want=$(printf 'a\r\nb\x00c' | od -An -tx1 | tr -d ' \n')
-got=$(cli --raw GET bin | od -An -tx1 | tr -d ' \n'); got=${got%0a}
+# `|| got=...`: a plain assignment lets pipefail's nonzero status (e.g. the
+# server dying mid-run) trip errexit and abort with no FAIL line; the OR list
+# suppresses that so `check` reports a real failure instead.
+got=$(cli --raw GET bin | od -An -tx1 | tr -d ' \n') || got="<no reply>"; got=${got%0a}
 check "binary-safe SET/GET (CRLF+NUL)" "$want" "$got"
 # error replies (redis-cli prints the error text)
 check "INCR non-integer errs" "1" "$(cli SET s abc >/dev/null; cli INCR s 2>&1 | grep -c -i 'not an integer\|error')"
@@ -82,7 +85,7 @@ pl_got=$(timeout 5 bash -c '
     exec 3<>"/dev/tcp/127.0.0.1/'"$port"'" || exit 1
     printf "*1\r\n\$4\r\nPING\r\n*1\r\n\$4\r\nPING\r\n" >&3
     head -c 14 <&3
-    exec 3>&- 3<&-' 2>/dev/null | od -An -tx1 | tr -d ' \n')
+    exec 3>&- 3<&-' 2>/dev/null | od -An -tx1 | tr -d ' \n') || pl_got="<no reply / timeout>"
 check "pipelined PING;PING (raw RESP arrays, one conn)" "$pl_want" "$pl_got"
 # ----------------------------------------------------------------------------
 
