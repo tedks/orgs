@@ -123,6 +123,41 @@ protocol is more robust *than the baseline*, but its internal review ladder
 alone was **not sufficient** to ship a network server; the cross-provider
 council is the part that was.
 
+## Side-by-side: both builds councilled by the same seats (codex + agy)
+
+The null-check had never been reviewed; giving it the *same* council the pilot
+got makes the comparison fair — and the result is levelling.
+
+| Dimension | Null-check (solo, no protocol) | Pilot (full protocol) |
+|---|---|---|
+| Frozen exam, real redis-cli (nix) | **12/12** | **12/12** |
+| Neutral raw-socket grader | 16/16 | 16/16 |
+| Own tests | 23/23 (self smoke) | 82/82 |
+| Architecture | 1 flat file | 3 firewalled entities + 2 contracts |
+| Review *during* build | none | same-provider lead review; **cross-provider council SKIPPED** |
+| Council (post-hoc) crash/DoS findings | ~6 Critical/High | ~6 Critical/High |
+| — shared by BOTH | INCR-int-crash · response-splitting · OOM (unbounded buffer) · slowloris · length-parse laxity | (same) |
+| — divergent | nil bulk silently coerced to empty (latent ambiguity, no crash on nil *command name*) | nil **stored value** → INCR crash (verified); but dispatch-path nil/empty/non-BulkString **hardened + tested** via contract propagation |
+| Cost (tokens) | ~80K, one pass | ~632K measured subagents + unbucketed lead design work ≈ **~10×** |
+| Production-ready? | No | No |
+
+**The finding:** the two servers have **nearly identical vulnerability
+profiles.** Both crash on oversized-integer INCR, both split responses, both
+OOM on unbounded frames, both slowloris. The protocol's review ladder caught
+and hardened *one* class (dispatch-path nil handling, via defect-class
+propagation) that the null-check left as a latent coercion bug — a real but
+partial win — and it cost ~10×, yet it **did not close the robustness gap**:
+both builds ship the same critical set.
+
+Why? **Neither build ran a cross-provider council *during* construction** — the
+pilot skipped it, the null-check had none. The differentiating variable for
+robustness is therefore *not* protocol-vs-no-protocol; it is **whether a
+cross-provider council ran.** When one finally did (post-hoc), it found the
+same crash class in both. That is the sharpest form yet of the 80/20
+hypothesis: the load-bearing mechanism is **cross-provider review**, not the
+decomposition/contract hierarchy — which bought a partial robustness win and
+an audit trail at ~10× cost, without reaching a shippable bar on its own.
+
 ## Reading
 
 On a bounded 3-entity task, the full protocol cost ~5–7× the tokens of a
