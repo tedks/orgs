@@ -10,5 +10,5 @@ file is overwritten in place; history lives in git.
 - **Last commit:** <sha · one-line subject>
 - **Budget burned:** <tokens and/or wall-clock vs. budget>
 - **Blocked on:** none | <dependency / filed escalation / open huddle ref>
-- **Deviations logged:** <ledger seq ids, or none>
+- **Deviations logged:** <ledger event ids, or none>
 - **Updated:** <ISO timestamp>

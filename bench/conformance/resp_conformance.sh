@@ -54,14 +54,39 @@ check "GET missing (nil)"    ""      "$(cli GET nope)"
 check "DEL k"                "1"     "$(cli DEL k)"
 check "DEL missing"          "0"     "$(cli DEL nope)"
 check "SET n 10 / INCR"      "11"    "$(cli SET n 10 >/dev/null; cli INCR n)"
-# binary-safe value with embedded CR LF
-cli SET bin $'a\r\nb' >/dev/null
-check "binary-safe GET"      $'a\r\nb' "$(cli --no-raw GET bin | tr -d '"' )"
+# binary-safe value with embedded CR LF and a NUL byte. A NUL cannot survive
+# an argv, so the value is written via `redis-cli -x` (value read from stdin).
+# Read back with `--raw` (NOT --no-raw, which escapes NUL/CR/LF to literal
+# text like \x00) and hex-dump before the shell can strip the NUL. redis-cli
+# --raw appends a newline as its output delimiter, so tolerate one trailing
+# 0a on the readback.
+printf 'a\r\nb\x00c' | cli -x SET bin >/dev/null
+want=$(printf 'a\r\nb\x00c' | od -An -tx1 | tr -d ' \n')
+# `|| got=...`: a plain assignment lets pipefail's nonzero status (e.g. the
+# server dying mid-run) trip errexit and abort with no FAIL line; the OR list
+# suppresses that so `check` reports a real failure instead.
+got=$(cli --raw GET bin | od -An -tx1 | tr -d ' \n') || got="<no reply>"; got=${got%0a}
+check "binary-safe SET/GET (CRLF+NUL)" "$want" "$got"
 # error replies (redis-cli prints the error text)
 check "INCR non-integer errs" "1" "$(cli SET s abc >/dev/null; cli INCR s 2>&1 | grep -c -i 'not an integer\|error')"
 check "SET wrong arity errs"  "1" "$(cli SET onlykey 2>&1 | grep -c -i 'wrong number\|error')"
-# pipelining on one connection
-check "pipeline PING;PING"   $'PONG\nPONG' "$(printf 'PING\r\nPING\r\n' | redis-cli -p "$port" --pipe-mode 2>/dev/null || printf 'PING\nPING\n' | redis-cli -p "$port")"
+# True pipelining on one connection: BOTH requests are written before either
+# reply is read. redis-cli cannot assert this — feeding it two lines sends
+# them sequentially (write/read/write/read), and `--pipe` reports only
+# transfer statistics, not the replies — so a redis-cli-only check would pass
+# a server that cannot pipeline at all. We drive raw RESP over one socket via
+# bash's /dev/tcp. The two requests are proper RESP arrays (`*1\r\n$4\r\nPING\r\n`,
+# not the inline form, which the contracts do not require and the spec leaves
+# open), and the read is bounded by `timeout` so a server that answers once
+# and stalls fails the assertion instead of hanging the exam. Hex-compared so
+# CR bytes survive the shell.
+pl_want=$(printf '+PONG\r\n+PONG\r\n' | od -An -tx1 | tr -d ' \n')
+pl_got=$(timeout 5 bash -c '
+    exec 3<>"/dev/tcp/127.0.0.1/'"$port"'" || exit 1
+    printf "*1\r\n\$4\r\nPING\r\n*1\r\n\$4\r\nPING\r\n" >&3
+    head -c 14 <&3
+    exec 3>&- 3<&-' 2>/dev/null | od -An -tx1 | tr -d ' \n') || pl_got="<no reply / timeout>"
+check "pipelined PING;PING (raw RESP arrays, one conn)" "$pl_want" "$pl_got"
 # ----------------------------------------------------------------------------
 
 echo "conformance: $pass passed, $fail failed"

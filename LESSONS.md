@@ -49,3 +49,27 @@
   resume when chaining is the point.
 - **Reconsider when:** harnesses grow first-class fork/resume APIs with
   identity guarantees, making the yielded-id comparison redundant.
+
+## 2026-09-02 — A silent seat is not a CLEAN seat
+
+- **What happened:** the CTO closed the protocol-v0 council and merged it,
+  recording the Anthropic seat as "(inline) CLEAN," while that seat's
+  native subagent in fact had three Critical findings (incl. one — the
+  Claude Code binding's fork/takeover mismapping — that no foreign seat had
+  reviewed). The seat's messages were stuck in an undelivered channel
+  through five reported-successful sends; the lead polled, saw nothing, and
+  read silence as consent. The findings arrived only after the merge, and
+  were fixed forward in a follow-up PR that itself needed two more council
+  rounds (the first fix commit introduced a Critical and 7 Important).
+- **Evidence:** the founding-council/v0 review transcript; PR #6
+  (v0-review-fixes) and its round-2 convergence commit.
+- **Applies when:** closing any review to fixpoint. A CLEAN requires a
+  *received, affirmative* CLEAN from every seat that was dispatched —
+  never the absence of findings. If a seat's channel is unproven, do not
+  substitute "(inline)" for it and land; either get the verdict or hold.
+  Record which seats actually reported. Silence is missing data, and a
+  message channel that can drop a blocking verdict while reporting success
+  is itself a protocol defect worth a ledger entry.
+- **Reconsider when:** the messaging substrate delivers with an
+  acknowledged, at-least-once guarantee that the lead can verify, so a
+  non-response is reliably distinguishable from a dropped response.
