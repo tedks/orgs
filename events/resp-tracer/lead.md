@@ -114,3 +114,32 @@
   worktrees (fast-forward-merged by the integration owner) whenever
   packages are parallel-dispatched to the same branch, or explicitly
   bless sequential dispatch as normal for small pilots.
+
+## lead:8 · 2026-09-02T01:30:00Z · docs-bug
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: e65dd1a
+- refs: worker-codec:1 (events/resp-tracer/worker-codec.md), targets/resp/tests/test_codec_boundary.py
+- worker-codec's implementer self-review caught a genuine bug in my own
+  frozen fixture: `test_bulk_string_binary_safe` (both TestEncode and
+  TestFeedBasic) hardcoded a `$7` RESP length prefix for
+  `payload = b"a\r\nb\x00c"`, which is 6 bytes, not 7 (verified:
+  `len(payload) == 6`). Correctly not edited by the worker (out of their
+  owned scope — codec.py only); filed as a docs-bug and worked around in
+  their own test_codec_impl.py instead of blocking. Fixed unilaterally as
+  contract/fixture owner (DOCTRINE glossary: "Docs bug ... Owner fixes
+  unilaterally"): `$7`→`$6` at both call sites. Re-ran
+  `python3 -m unittest discover -s targets/resp/tests -p
+  'test_codec_boundary.py'`: 32/32 pass (was 30/32). This is a genuine
+  instance of the review ladder catching a lead-authored defect, not just
+  worker defects — worth citing at retro as evidence the pre-written
+  boundary tests weren't rubber-stamped.
+
+## lead:9 · 2026-09-02T01:31:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: e65dd1a
+- refs: work-packages/resp-codec.md, status/resp-codec.md
+- work-package:resp-codec IN_PROGRESS→REVIEW. Evidence: worker-codec
+  self-review complete (commits 7794bd7, e65dd1a); all 32 boundary tests
+  pass (after lead:8's fixture fix) plus 9/9 of the worker's own
+  test_codec_impl.py. Proceeding to one-rung-up lead review (fresh
+  context, RUNBOOK §6 step 3) — council review skipped per lead:2.

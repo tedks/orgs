@@ -41,7 +41,7 @@ class TestEncode(unittest.TestCase):
         payload = b"a\r\nb\x00c"
         self.assertEqual(
             codec.encode(codec.BulkString(payload)),
-            b"$7\r\n" + payload + b"\r\n",
+            b"$6\r\n" + payload + b"\r\n",
         )
 
     def test_array(self):
@@ -84,7 +84,7 @@ class TestFeedBasic(unittest.TestCase):
         payload = b"a\r\nb\x00c"
         p = codec.Parser()
         self.assertEqual(
-            p.feed(b"$7\r\n" + payload + b"\r\n"), [codec.BulkString(payload)]
+            p.feed(b"$6\r\n" + payload + b"\r\n"), [codec.BulkString(payload)]
         )
 
     def test_feed_array_of_bulkstrings(self):
