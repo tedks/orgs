@@ -512,9 +512,19 @@ no peek-logging requirement, and no permission regime on source. What remains:
   visibility, contract tests, and review — not restricted reads. Where the
   build system supports visibility rules, use them; elsewhere, review checks
   that cross-boundary use sticks to published contracts.
-- **Contract gaps surface through the interpretation inbox**, which the
-  worker files because the contract was silent — the useful act. Peek-logging
-  is redundant with it and is dropped.
+- **A peek is a symptom; the filable defect is the unmet information need**
+  (CEO refinement, 2026-09-02). Reads themselves are never logged. When a
+  worker had to find an answer in a neighbor's source, that is a bug in the
+  published surface, and it forks into two inbox types: a **docs bug** — the
+  information should live on the published surface; the owning team fixes it
+  unilaterally, cheap, no ruling — or an **interpretation request** — the
+  contract is genuinely silent or ambiguous about behavior; needs a ruling,
+  may promote to spec text. Working rule: *if you had to find it in the
+  source, it belongs in the docs.* This matters more for agents than humans:
+  the packing-list default means the published surface is what future
+  implementers get in context, so an answer that lives only in source is a
+  recurring tax on every future work package. Both filing types accumulate
+  per boundary as contract-quality and amendment evidence.
 - The scheduled bench trial narrows accordingly: it no longer compares
   permission regimes, but **context-packing defaults** (lean pack vs.
   neighbor-source-included) for junior-tier implementers — a context-hygiene
