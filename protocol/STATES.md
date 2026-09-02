@@ -3,7 +3,7 @@
 One table per artifact type. Every transition names who may perform it and
 what evidence it requires. Role references (accountable lead, integration
 owner, escalation owner) resolve through the project's `org/ROSTER.md`
-(template: `templates/roster.md`) — the roster says *who*, these tables say
+(template: `protocol/templates/roster.md`) — the roster says *who*, these tables say
 *what*. Every state-changing entry in the event ledger carries `based_on`
 (the revision the actor reasoned from) and, where it applies work,
 `applied_at` (the revision it landed on). All artifacts live in git; the
@@ -18,6 +18,7 @@ tests exactly this).
 | — | DRAFT | lead | intent field naming the spec section served |
 | DRAFT | READY | lead | acceptance criteria + boundary tests named; necessity challenge passed (PROCEED or SIMPLIFY applied) |
 | READY | CLAIMED | worker (or lead assigns) | worker + model recorded (role and model both stamped) |
+| CLAIMED/IN_PROGRESS/REVIEW/REWORK | (re-CLAIMED) | lead | `takeover` event: new owner + model + reason — so takeover rate is derivable at retro |
 | CLAIMED | IN_PROGRESS | worker | context manifest committed |
 | IN_PROGRESS | BLOCKED | worker | blocking dependency, filed escalation, or open huddle named |
 | BLOCKED | IN_PROGRESS | worker | blocker resolved, entry references resolution |
@@ -62,7 +63,7 @@ the owner disposes: accept / reject / partially salvage / supersede.
 |---|---|---|---|
 | — | FILED | any agent | contract + version; the question; what was tried |
 | FILED | RULED | contract owner (or lead chain if disputed) | ruling classed: clarification / temporary exception / amendment candidate |
-| RULED (clarification) | PROMOTED | contract owner | spec text updated immediately; narrows no permitted behavior; consumers notified |
+| RULED (clarification) | PROMOTED | contract owner | promoted into the contract's interpretation register (which is the boundary's spec text) immediately; narrows no permitted behavior; consumers notified |
 | RULED (temporary) | EXPIRED or PROMOTED | contract owner | scope + expiry stated at ruling; folded in or lapsed by expiry |
 | RULED (amendment candidate) | → Amendment | both boundary sides + doc owner | full amendment review |
 
@@ -82,9 +83,12 @@ the owner disposes: accept / reject / partially salvage / supersede.
 | OPENED | RULED | lowest lead with authority over the implicated thing | disposition + based_on |
 | RULED | CLOSED | case owner | applied and reconciled, or handed to CEO |
 
-Invariant (tracer-tested): a harness kill between case creation and decision
-commit must, on restart, yield exactly one live case with both observations
-preserved.
+Invariant: a harness kill between case creation and decision commit must, on
+restart, yield exactly one live case with both observations preserved (the
+two observations are the independent detections — e.g. a worker's deviation
+and a monitor's alert — that the dedup key must collapse into one case). This
+is verified under the **bench's `harness_restart` injected event** (v1), not
+the RESP pilot, which runs with no synthetic incidents.
 
 ## Review round
 
@@ -97,16 +101,20 @@ the lead's `review-seat-outcome` events are the record.
 | — | OPENED | accountable lead | scope: full PR (round 1) or fix delta (round N) |
 | OPENED | FINDINGS | lead, from council seat outputs (fresh or warm-chained; warm seats identity-verified per round) | one `review-seat-outcome` per seat: findings (severity, claim, evidence) or explicit `no-finding` |
 | FINDINGS | DISPOSITIONED | accountable lead | per finding: fixed / filed with rationale / rejected with reason — never silently dropped |
-| DISPOSITIONED | next round | lead | next round reviews the fix delta only |
+| DISPOSITIONED | OPENED | lead | opens the next round; it reviews the fix delta only |
 | any round | CLEAN | lead | `review-clean` citing every seat's outcome event: zero new Critical/Important; fixpoint reached |
 
 ## Sprint
 
+Evidence is the completion of the **from** state that licenses the transition
+(the convention every table here uses), so a state's own outputs never gate
+entry into it.
+
 | From | To | Who | Evidence |
 |---|---|---|---|
-| — | PLANNED | lead | spec section owned; work packages drafted |
-| PLANNED | TRACER | lead (player-coach) | thin executable vertical slice: contracts demonstrably compose |
-| TRACER | EXECUTING | lead | packages READY; fan-out begun |
-| EXECUTING | INTEGRATING | integration owner | all packages INTEGRATED or ABANDONED |
-| INTEGRATING | RETRO | lead | lessons filed with provenance/scope/reconsider-when; meta:product ratio recorded; deviations all adjudicated |
-| RETRO | CLOSED | lead | cold-start audit passed if milestone |
+| — | PLANNED | lead | spec section owned |
+| PLANNED | TRACER | lead (player-coach) | work packages drafted; decomposition necessity-challenged |
+| TRACER | EXECUTING | lead | tracer bullet green — contracts demonstrably compose; packages READY |
+| EXECUTING | INTEGRATING | integration owner | all packages ACCEPTED or ABANDONED |
+| INTEGRATING | RETRO | integration owner | all ACCEPTED packages merged; main green on boundary tests |
+| RETRO | CLOSED | lead | lessons filed (provenance/scope/reconsider-when); meta:product recorded; deviations all adjudicated; cold-start audit passed if milestone |

@@ -76,6 +76,8 @@ done
 case "$timeout_s" in ''|*[!0-9]*) die "--timeout wants a non-negative integer" ;; esac
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not inside a git repository"
+git rev-parse --verify -q HEAD >/dev/null \
+    || die "no commits yet (unborn HEAD) — nothing to check"
 git merge-tree --write-tree HEAD HEAD >/dev/null 2>&1 \
     || die "git merge-tree --write-tree unsupported (need git >= 2.38)"
 
@@ -129,14 +131,21 @@ if [ ${#branches[@]} -eq 0 ]; then
 fi
 
 have_timeout=0
-if [ "$timeout_s" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
-    have_timeout=1
-elif [ "$timeout_s" -gt 0 ]; then
-    echo "crystal: no coreutils 'timeout'; test commands run unbounded" >&2
+if [ "$timeout_s" -gt 0 ]; then
+    # Probe for GNU-coreutils semantics, not mere presence: a non-GNU
+    # `timeout` (e.g. one without --kill-after) would exit non-zero on a
+    # perfectly clean test and turn it into a spurious semantic conflict —
+    # a false positive, worse than running unbounded. Only trust a timeout
+    # that actually runs `true` to success with the flags we use.
+    if timeout --kill-after=1 1 true >/dev/null 2>&1; then
+        have_timeout=1
+    else
+        echo "crystal: no GNU 'timeout' (--kill-after); test commands run unbounded" >&2
+    fi
 fi
 
 scratch_root=$(mktemp -d "${TMPDIR:-/tmp}/crystal.XXXXXX")
-scratch_root=$(cd "$scratch_root" && pwd)   # absolutize for GIT_CEILING_DIRECTORIES
+scratch_root=$(cd "$scratch_root" && pwd -P)   # physical path for GIT_CEILING_DIRECTORIES (git walks the physical tree; a symlinked TMPDIR like macOS /tmp would else defeat the ceiling)
 cleanup() { rm -rf "$scratch_root"; }
 trap cleanup EXIT
 

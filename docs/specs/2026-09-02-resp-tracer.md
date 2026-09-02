@@ -81,13 +81,15 @@ None yet. Filed against contracts in `contracts/` per protocol.
 
 The exam is `bench/conformance/resp_conformance.sh`, authored by the lead at
 M1 **before fan-out** and frozen for the sprint. It starts the server on an
-ephemeral port, drives it exclusively through a real `redis-cli`
-(`redis-cli -p $PORT <args>` and piped pipelining), asserts expected replies
-for: each goal command's happy path, binary-safe values (embedded `\r\n`,
-NUL), wrong-arity errors, `INCR` on a non-integer, `GET` on a missing key,
-and a pipelined batch on one connection. Pass = exit 0 with every assertion
-green; any assertion failure or server crash = fail. Implementers may run it
-freely but never edit it; changes to the exam are spec amendments.
+ephemeral port, drives it exclusively through a real `redis-cli`, and asserts
+expected replies for: each goal command's happy path, wrong-arity errors,
+`INCR` on a non-integer, `GET` on a missing key, and a pipelined batch on one
+connection. **Binary-safe values** (embedded `\r\n` and NUL) are set and read
+with `redis-cli -x` (value on stdin) and `--no-raw` for readback — a NUL
+cannot survive an argv, so the plain `redis-cli <args>` path is not used for
+these cases. Pass = exit 0 with every assertion green; any assertion failure
+or server crash = fail. Implementers may run it freely but never edit it;
+changes to the exam are spec amendments.
 
 ## Milestones
 

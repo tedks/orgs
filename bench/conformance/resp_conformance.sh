@@ -54,9 +54,14 @@ check "GET missing (nil)"    ""      "$(cli GET nope)"
 check "DEL k"                "1"     "$(cli DEL k)"
 check "DEL missing"          "0"     "$(cli DEL nope)"
 check "SET n 10 / INCR"      "11"    "$(cli SET n 10 >/dev/null; cli INCR n)"
-# binary-safe value with embedded CR LF
-cli SET bin $'a\r\nb' >/dev/null
-check "binary-safe GET"      $'a\r\nb' "$(cli --no-raw GET bin | tr -d '"' )"
+# binary-safe value with embedded CR LF and a NUL byte. A NUL cannot survive
+# an argv, so the value is written via `redis-cli -x` (value read from stdin)
+# and read back with --no-raw; compare on a hex dump so the NUL is preserved
+# through the shell (command substitution also strips NULs).
+printf 'a\r\nb\x00c' | cli -x SET bin >/dev/null
+check "binary-safe SET/GET (CRLF+NUL)" \
+    "$(printf 'a\r\nb\x00c' | od -An -tx1 | tr -d ' \n')" \
+    "$(cli --no-raw GET bin | sed -e 's/^"//' -e 's/"$//' | od -An -tx1 | tr -d ' \n')"
 # error replies (redis-cli prints the error text)
 check "INCR non-integer errs" "1" "$(cli SET s abc >/dev/null; cli INCR s 2>&1 | grep -c -i 'not an integer\|error')"
 check "SET wrong arity errs"  "1" "$(cli SET onlykey 2>&1 | grep -c -i 'wrong number\|error')"
