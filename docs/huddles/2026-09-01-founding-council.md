@@ -471,3 +471,29 @@ Review resolutions 1–5 above. Anything Critical/Important they introduce?
 If not, say **CLEAN** — that closes the founding council at fixpoint.
 
 ## Round 3 responses
+
+### Codex (warm) — Round 3
+
+CLEAN
+
+### agy — Round 3
+
+**CLEAN**
+
+---
+
+## Closure
+
+**Fixpoint reached 2026-09-01: Round 3 returned CLEAN from every seat.**
+The founding council is closed.
+
+Seats over the council's life: Claude/Anthropic (moderator + scribe, native);
+Codex/OpenAI (Round 1 fresh; Rounds 2–3 warm via fork `01a05fae` of the CEO's
+original design conversation, thread chained across rounds); agy/Google
+(fresh instance each round). The CEO ruled between rounds.
+
+Net result: the settled-decisions list above, as amended by the Round 1 CEO
+rulings and the Round 2 resolutions, is the design baseline for the self-spec.
+The warm seat's Round 2 catch — a fix-introduced regression in squash
+semantics — is the founding example of why review rounds run to fixpoint on
+the delta.
