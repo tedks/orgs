@@ -73,3 +73,46 @@
 - **Reconsider when:** the messaging substrate delivers with an
   acknowledged, at-least-once guarantee that the lead can verify, so a
   non-response is reliably distinguishable from a dropped response.
+
+## 2026-09-02 — A verdict must name the state it was rendered against
+
+- **What happened:** during PR #6's review the moderator was editing the
+  working tree live. codex reviewed the *committed* `2feaffc` (inline
+  pipelining probe) and flagged two defects; the Anthropic seat reviewed
+  the *working tree* at the same wall-clock window, which already carried
+  the fixes, and cleared it. The moderator then recorded this as "codex
+  caught two defects the Anthropic seat missed" — a sequence — when it was
+  independent convergence on overlapping states. The working-tree-vs-commit
+  distinction is invisible once commits are squashed into history, so the
+  wrong record would later misattribute credit and blame with nothing to
+  audit against. This is the silence-as-consent failure one level up:
+  convergence read as sequence.
+- **Evidence:** PR #6 review-correction comment.
+- **Applies when:** any review, and acutely when the reviewed artifact can
+  change during the review (live editing, parallel commits). Every verdict
+  must name the exact state it was rendered against — a sha, or explicitly
+  "working tree at time T." A CLEAN with no named base is ambiguous, and
+  "the seat cleared X" is only meaningful once X is pinned.
+- **Reconsider when:** reviews are always rendered against immutable, named
+  revisions (a frozen PR head), so the base is unambiguous by construction.
+
+## 2026-09-02 — A binding needs a reviewer who can execute its primitives
+
+- **What happened:** the Claude Code binding claimed
+  `subagent_type: "fork"` could carry the implementer's context and shift
+  model for a takeover. In this harness a fork inherits the *caller's*
+  context and *ignores* a `model` override, so the takeover mechanism was
+  unexecutable. This Critical survived every foreign council seat because
+  no seat's scope was checking a harness-binding document against the
+  harness it binds — it was reviewed as prose, and prose review cannot
+  catch a false claim about a tool's contract.
+- **Evidence:** PR #6 finding #1; `bindings/claude-code.md`.
+- **Applies when:** reviewing any document that asserts how a tool, API, or
+  primitive behaves (bindings, integration docs, tool mappings). At least
+  one reviewer must be able to execute against the named primitives, or
+  check the claims against the authoritative tool contract — prose review
+  alone cannot verify executable behavior. The v1 review ladder should give
+  binding files such a seat explicitly (ditz `binding-executable-review`).
+- **Reconsider when:** binding claims are generated from or checked against
+  machine-readable tool schemas, so a false capability claim fails
+  mechanically rather than needing a human/agent to notice.
