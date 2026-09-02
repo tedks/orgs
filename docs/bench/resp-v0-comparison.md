@@ -54,10 +54,20 @@ not the frozen artifact run against a real `redis-cli`.
      published contracts and pre-written boundary tests, vs. one flat file.
   3. **A full audit trail** — roster, per-actor event ledger, deviation log,
      a self-caught docs-bug in a frozen test fixture, review findings.
-- **The dominant cost was coordination, not review.** The lead stalled idle
-  **three times** waiting on subagent results that had already been
-  delivered — a message-delivery gap, not a protocol defect (the protocol
-  work completed correctly each time). It only progressed when hand-nudged.
+- **A real coordination friction, correctly scoped (corrected).** An earlier
+  version of this doc said the lead "stalled idle three times ... only
+  progressed when hand-nudged." That is wrong, per the lead's own transcript,
+  and this doc was the source that wrongly propagated the number into the
+  pilot's LESSONS.md. The accurate finding: continuing an already-spawned
+  worker via `SendMessage` is **asynchronous with no wait primitive**, so the
+  lead had to *notice and route around* the wait on **two** occasions (the
+  engine REWORK dispatch and the round-2 fix-delta review). It **self-verified
+  and self-resolved each** and finished autonomously — the moderator's two
+  out-of-band "unblock" messages **crossed in transit** and were redundant,
+  not rescues. Every synchronous `Agent`-tool call (necessity challenge, both
+  initial builds, all three lead-reviews) returned in-round with no wait. So
+  the coordination cost is real but bounded: manual work to route around an
+  async-continuation with no join, not a deadlock requiring external help.
 
 ## Correction (after the pilot completed)
 
@@ -99,15 +109,19 @@ bearing on the "standup is the 80/20" hypothesis:
    (the caught crash), not in the full contract/decomposition hierarchy — the
    architecture and ledger are nice but did not change the graded outcome
    here.
-2. **The cost the protocol added was concentrated in coordination** (the three
-   delivery-stall deadlocks), not in the review. The lead spent its overhead
-   getting stuck, not reviewing.
+2. **The coordination friction the protocol hit was async worker-continuation**
+   (two `SendMessage` cycles with no wait primitive), which the lead handled
+   itself — bounded manual overhead, not a deadlock. It is still a real
+   argument for the situational-awareness layer (which would surface a landed
+   result automatically instead of the lead polling for it), but a milder one
+   than a "the pilot couldn't finish without hand-holding" framing would
+   suggest — it finished on its own.
 
-Together these are direct evidence for the hypothesis in a sharper form than
-expected: the high-value, low-cost core is **review + keeping agents observing
-each other** (the standup / forced-observe layer), while the heavy
-decomposition/contract hierarchy is the part whose payoff was not visible at
-this scale and may only appear on much larger, multi-team work. A larger
+Together these are evidence for the hypothesis in a sharper form than
+expected: the high-value, low-cost core is **review + defect-class propagation
+through contracts** (which demonstrably paid off here), while the heavy
+decomposition/necessity-challenge apparatus is the part whose payoff was not
+visible at this scale and may only appear on much larger, multi-team work. A larger
 target (more entities, real cross-boundary integration, a late amendment) is
 needed before the full hierarchy can justify its multiple — which is exactly
 what bench v1's paired-scenario runs are for.
