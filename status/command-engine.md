@@ -5,7 +5,7 @@
 - **Current task:** Fix applied for lead review finding: nil command-name
   BulkString now returns Error instead of crashing. All 26 boundary tests
   pass. Ready for re-review.
-- **Last commit:** (updated after commit)
+- **Last commit:** 65bdd9b · "command-engine: fix nil command-name BulkString crash"
 - **Budget burned:** ~45K tokens total (initial impl ~35K + lead feedback
   review + nil-guard fix + status/event-log update) of the ~100K soft
   budget. Still within one discrete turn.
