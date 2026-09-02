@@ -50,3 +50,36 @@
   same reason, and a raw-socket exam substitute will be needed then too.
   Contracts demonstrably compose. Proceeding to cut work packages
   (RUNBOOK §3 step 2).
+
+## lead:5 · 2026-09-02T00:40:00Z · necessity-challenge
+- actor: L6 lead (Claude Code, Sonnet 5), delegated to a fresh haiku
+  subagent (agentId a4706bee60ee07b63)
+- based_on: d34d638
+- refs: work-packages/resp-codec.md, work-packages/command-engine.md,
+  work-packages/server.md
+- Verdict: **PROCEED**. Fresh-context haiku seat reviewed the spec, both
+  contracts, the tracer bullet, both boundary-test files, and all three
+  draft work packages read-only. Findings: the 3-way split mirrors the
+  spec's own firewalled entities (not an invented decomposition);
+  codec/engine have zero interdependency and can fan out in parallel;
+  server's sequencing-after-acceptance is justified (its acceptance
+  criteria — pipelining, ProtocolError teardown, shared-Engine-state
+  visibility — are unfalsifiable against the crude tracer stubs, so
+  testing it in parallel would validate nothing); sonnet/haiku/sonnet
+  tier split is grounded (codec+server carry correctness-critical
+  judgment, engine is an exhaustively-specified dispatch table); no
+  unrequested machinery beyond spec goals. One decomposition-level
+  PROCEED satisfies the DRAFT→READY gate for all three packages
+  (RUNBOOK §3 step 3).
+
+## lead:6 · 2026-09-02T00:41:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: d34d638
+- refs: lead:5, work-packages/resp-codec.md, work-packages/command-engine.md
+- work-package:resp-codec DRAFT→READY; work-package:command-engine
+  DRAFT→READY. Evidence: acceptance criteria + boundary tests already
+  named at authoring time; necessity challenge PROCEED (lead:5). Both
+  claimed by the lead on behalf of fresh Agent-tool subagent workers
+  next. work-package:server stays DRAFT (its Dependencies field requires
+  both of the above ACCEPTED before claim) — will transition when its
+  turn comes.
