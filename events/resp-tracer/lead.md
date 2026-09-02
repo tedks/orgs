@@ -143,3 +143,34 @@
   pass (after lead:8's fixture fix) plus 9/9 of the worker's own
   test_codec_impl.py. Proceeding to one-rung-up lead review (fresh
   context, RUNBOOK §6 step 3) — council review skipped per lead:2.
+
+## lead:10 · 2026-09-02T01:45:00Z · lead-review
+- actor: L6 lead (Claude Code, Sonnet 5), delegated to a fresh sonnet
+  subagent (agentId a9d39d8510003d996) per RUNBOOK §2 (review hat always
+  fresh, never the implementer's transcript)
+- based_on: 0c3e6e5
+- refs: work-packages/resp-codec.md
+- Outcome: ACCEPTED. Fresh-context reviewer independently re-ran both
+  test suites (32/32 boundary, 9/9 worker's own), read codec.py in full
+  against the C1 contract (confirmed genuine incremental buffering, not
+  test-coincidence; confirmed recursive/general Array-element handling,
+  not BulkString-hardcoded; confirmed every contract-listed malformed
+  case raises ProtocolError; confirmed binary-safety via length-prefixing
+  not \r\n-scanning), independently verified the lead's $7->$6 fixture fix
+  is correct, confirmed scope stayed within codec.py + the worker's own
+  new test file, and confirmed both logged deviations (worker-codec:1
+  docs-bug, worker-codec:2 scope interpretation) are justified rather
+  than rationalized. One Minor non-blocking note: feed() rescans from
+  buffer start each call (O(n) per call, worst-case O(n^2) under
+  byte-at-a-time feeding) - performance is an explicit spec non-goal, not
+  blocking. No Critical/Important findings - no rework round needed
+  (fixpoint on round 1).
+
+## lead:11 · 2026-09-02T01:46:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 0c3e6e5
+- refs: lead:10
+- work-package:resp-codec REVIEW->ACCEPTED. Evidence: lead-review outcome
+  ACCEPTED (lead:10), council round explicitly skipped this sprint
+  (lead:2). C1 v1 is now a real, ACCEPTED implementation - command-engine
+  and server may depend on it as more than the tracer stub.

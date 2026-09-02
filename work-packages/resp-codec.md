@@ -1,6 +1,6 @@
 # Work package: resp-codec
 
-- **State:** CLAIMED — worker-codec, Sonnet 5 (Agent tool, general-purpose subagent)
+- **State:** ACCEPTED — lead review lead:10, no rework needed (fixpoint round 1)
 - **Owner (role):** L3 implementer · **Model:** sonnet (state-machine
   parsing correctness matters more than the mechanical dispatch work in
   command-engine — see roster/necessity-challenge rationale)
