@@ -1,6 +1,6 @@
 # Work package: command-engine
 
-- **State:** CLAIMED — worker-engine, Haiku 4.5 (Agent tool, general-purpose subagent)
+- **State:** ACCEPTED — lead review round 1 REWORK (lead:12), round 2 CLEAN (lead:16), fixpoint
 - **Owner (role):** L3 implementer · **Model:** haiku (the semantics are
   fully enumerated in the contract's dispatch table — this package tests
   whether a cheap model can execute a precisely specified table correctly

@@ -174,3 +174,86 @@
   ACCEPTED (lead:10), council round explicitly skipped this sprint
   (lead:2). C1 v1 is now a real, ACCEPTED implementation - command-engine
   and server may depend on it as more than the tracer stub.
+
+## lead:12 · 2026-09-02T02:05:00Z · lead-review
+- actor: L6 lead (Claude Code, Sonnet 5), delegated to a fresh sonnet
+  subagent (agentId adc6e2c6469f8d1df)
+- based_on: 84a3f7e
+- refs: work-packages/command-engine.md
+- Outcome: REWORK. Independently re-ran boundary tests (26/26 pass,
+  confirmed). Row-by-row contract check found PING/ECHO/GET/SET/DEL/INCR
+  arity, error text, INCR non-mutation-on-error, state isolation
+  (instance-scoped store, not a class-level mutable default), and
+  case-insensitive dispatch all correct and general (not hardcoded to
+  the frozen tests' literal strings). One Important finding: execute()
+  crashes with AttributeError on a command whose name slot is a RESP nil
+  bulk string (BulkString(None)) — engine.py:19 does
+  `args[0].value.lower()` assuming .value is always bytes. Confirmed this
+  is wire-producible today: C1's own Parser.feed(b"*1\r\n$-1\r\n") returns
+  [Array([BulkString(None)])], and C1 does not reject it as malformed
+  (a nil bulk string is a valid frame). server.py's accept loop has no
+  try/except around engine.execute(), so this would crash the whole
+  server process, not just close one connection. The contract's
+  "Intentionally unspecified" carve-out (empty command.value or a
+  non-BulkString element) does not cover a BulkString(None) element, so
+  this is a genuine contract-vs-implementation gap, not scope creep by
+  the reviewer. Minor: unknown-command error text echoes the
+  lower-cased name rather than the client's original case (not pinned by
+  contract either way). Reviewer also flagged the worker's "zero
+  deviations" claim as not fully credible given this gap existed and
+  went unnoticed rather than logged as an interpretation request.
+
+## lead:13 · 2026-09-02T02:06:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 84a3f7e
+- refs: lead:12
+- work-package:command-engine REVIEW->REWORK. Evidence: lead-review
+  finding (lead:12), one Important. Sending one feedback round to the
+  same worker (SendMessage to the live worker-engine subagent, agentId
+  ae1c424bf87a43ecf — same-tier continuation per bindings/claude-code.md)
+  before considering a takeover, per RUNBOOK §6 step 4.
+
+## lead:14 · 2026-09-02T02:15:00Z · review-seat-outcome
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 26bab08
+- refs: lead:12 (round 1 REWORK), work-packages/command-engine.md
+- Independently verified worker-engine's fix myself before dispatching
+  round 2: git diff 84a3f7e..26bab08 shows an 8-line guard in
+  engine.py::execute() (nil command-name -> Error("ERR unknown command
+  ''") instead of AttributeError on .lower()); repro
+  `Engine().execute(Array([BulkString(None)]))` now returns the Error
+  frame cleanly; 26/26 boundary tests still pass. Dispatching review
+  round 2 (fix-delta scope only, warm-chained to the same reviewer seat
+  that found the issue - agentId adc6e2c6469f8d1df - per RUNBOOK §6
+  step 5 and the LESSONS.md "seat that found an issue re-verifies its
+  fix" practice), frozen at commit 26bab08 (explicitly excluding the
+  unrelated bench/ commit 5aaea01 that landed after it in git log).
+
+## lead:15 · 2026-09-02T02:16:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 26bab08
+- refs: lead:14
+- review-round:command-engine DISPOSITIONED->OPENED (round 2). Scope:
+  fix delta only (84a3f7e..26bab08). Frozen revision: 26bab08.
+
+## lead:16 · 2026-09-02T02:25:00Z · review-clean
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 26bab08
+- refs: lead:12 (round 1 REWORK), lead:14 (round 2 OPENED)
+- Round 2 (fix-delta, warm-chained seat adc6e2c6469f8d1df) returned
+  CLEAN: guard placement verified correct (before any other use of
+  name_value, no extra surface area), repro re-run clean, 26/26 boundary
+  tests re-run clean, no new defect (single early return, exactly one
+  Error frame, no downstream KeyError risk), worker-engine:2
+  interpretation-request entry verified present/accurate. Zero new
+  Critical/Important. Fixpoint reached at round 2.
+
+## lead:17 · 2026-09-02T02:26:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 26bab08
+- refs: lead:16
+- work-package:command-engine REWORK->REVIEW->ACCEPTED. Evidence:
+  review-clean (lead:16) at fixpoint round 2; council round explicitly
+  skipped this sprint (lead:2). C2 v1 is now a real, ACCEPTED
+  implementation. Both C1 and C2 ACCEPTED - server's Dependencies gate
+  is satisfied; claiming work-package:server next.
