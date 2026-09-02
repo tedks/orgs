@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/tedks/orgs/bench/manifest.schema.json",
+  "title": "Bench run manifest",
+  "description": "Immutable record of one benchmark run. Append-only: a correction is a new run, not an edit. Exists so cost is never conflated with quality.",
+  "type": "object",
+  "required": [
+    "run_id", "started_at", "regime", "target", "git_revision",
+    "models", "cost", "grading"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": { "type": "string", "description": "unique id, e.g. 2026-09-02T1200Z-protocol-resp-01" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": ["string", "null"], "format": "date-time" },
+    "regime": { "enum": ["raw", "native", "protocol"] },
+    "target": { "type": "string", "description": "e.g. resp" },
+    "git_revision": { "type": "string", "description": "sha of the org protocol used" },
+    "injected_event": {
+      "type": ["object", "null"],
+      "description": "null for no-event runs (all v0.9 runs are null)",
+      "required": ["kind", "injected_at"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": [
+          "underspecified_contract", "semantic_clean_merge_conflict",
+          "late_amendment", "attractive_unnecessary_abstraction",
+          "planted_rabbit_hole", "harness_restart"
+        ] },
+        "injected_at": { "type": "string", "description": "wall-clock or milestone marker" },
+        "notes": { "type": "string" }
+      }
+    },
+    "ablation": {
+      "type": ["string", "null"],
+      "enum": ["firewall", "standup", "senior_review", "memory", null],
+      "description": "which protocol component was disabled, or null for full protocol"
+    },
+    "models": {
+      "type": "object",
+      "description": "role -> model id, so the model mix is on the record",
+      "additionalProperties": { "type": "string" }
+    },
+    "cost": {
+      "type": "object",
+      "required": ["coordination_tokens", "product_tokens", "model_calls", "wall_clock_seconds", "human_intervention_minutes"],
+      "additionalProperties": false,
+      "properties": {
+        "coordination_tokens": { "type": "integer", "minimum": 0, "description": "huddle/standup/review/necessity/ledger — RUNBOOK §8 definition" },
+        "product_tokens": { "type": "integer", "minimum": 0, "description": "implementer work-package invocations incl. takeovers" },
+        "model_calls": { "type": "integer", "minimum": 0 },
+        "wall_clock_seconds": { "type": "number", "minimum": 0 },
+        "human_intervention_minutes": { "type": "number", "minimum": 0 },
+        "lead_wait_seconds": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "grading": {
+      "type": "object",
+      "required": ["conformance_total", "conformance_passed"],
+      "additionalProperties": false,
+      "properties": {
+        "conformance_total": { "type": "integer", "minimum": 0 },
+        "conformance_passed": { "type": "integer", "minimum": 0 },
+        "malformed_total": { "type": ["integer", "null"], "minimum": 0 },
+        "malformed_passed": { "type": ["integer", "null"], "minimum": 0 },
+        "escaped_defects": { "type": ["integer", "null"], "minimum": 0, "description": "found by the external suite AFTER the org called it done" },
+        "fix_introduced_regressions": { "type": ["integer", "null"], "minimum": 0 },
+        "recovery_seconds_after_restart": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "meta_product_ratio": { "type": ["number", "null"], "description": "coordination_tokens / product_tokens; the soft tripwire" },
+    "artifacts": {
+      "type": "object",
+      "description": "paths (relative to the run dir) to logs, the built target, and the org's committed artifacts",
+      "additionalProperties": { "type": "string" }
+    },
+    "notes": { "type": "string" }
+  }
+}
