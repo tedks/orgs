@@ -1,0 +1,16 @@
+id: crystal-daemon
+title: 'crystal v1: commit-hook daemon (commit->merge->build->test->report at turn-start)'
+desc: ""
+type: feature
+component: crystal
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-09-02T09:00:19-00:00
+references: []
+log_events:
+- time: 2026-09-02T09:00:19-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
