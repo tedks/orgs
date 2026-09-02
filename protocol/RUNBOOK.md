@@ -91,6 +91,17 @@ work is preserved and dispositioned, never auto-discarded. Committed as
 
 ## 6. Review ladder (per PR)
 
+**Freeze the target, quiesce the tree (correct by construction).** A round is
+launched against a **named, immutable revision** — a committed sha, normally
+a pushed PR head — never the live working tree, and only once the lead has
+committed and stopped editing (a quiescent tree). The dispatch prompt names
+that revision and every seat reviews exactly it. This is preferred over
+having each verdict *report* which state it saw: a frozen target makes "the
+seat cleared X" unambiguous by construction, so a live edit can never turn
+independent convergence into apparent sequence (LESSONS 2026-09-02). If a
+seat cannot be pinned to the named revision (e.g. it reads a working tree),
+that round does not count — re-run it against the frozen sha.
+
 1. Implementer self-review against acceptance criteria.
 2. Council review at the implementer's tier — use the `council-review`
    skill; provider diversity is the point; findings into the ledger.

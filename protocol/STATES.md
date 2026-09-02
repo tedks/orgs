@@ -98,7 +98,7 @@ the lead's `review-seat-outcome` events are the record.
 
 | From | To | Who (records) | Evidence |
 |---|---|---|---|
-| — | OPENED | accountable lead | scope: full PR (round 1) or fix delta (round N) |
+| — | OPENED | accountable lead | names a frozen revision (sha / PR head) and a quiescent tree; scope: full PR (round 1) or fix delta (round N) |
 | OPENED | FINDINGS | lead, from council seat outputs (fresh or warm-chained; warm seats identity-verified per round) | one `review-seat-outcome` per seat: findings (severity, claim, evidence) or explicit `no-finding` |
 | FINDINGS | DISPOSITIONED | accountable lead | per finding: fixed / filed with rationale / rejected with reason — never silently dropped |
 | DISPOSITIONED | OPENED | lead | opens the next round; it reviews the fix delta only |
