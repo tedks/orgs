@@ -24,7 +24,7 @@ tests exactly this).
 | IN_PROGRESS | REVIEW | worker | PR open; self-review done; acceptance criteria addressed with evidence |
 | REVIEW | REWORK | reviewing lead | findings ledger entries (severity + evidence) |
 | REWORK | REVIEW | worker | fix delta referenced; only the delta re-reviewed |
-| REVIEW | ACCEPTED | accountable lead | council round CLEAN; one-rung-up lead review recorded (fresh context); findings all dispositioned |
+| REVIEW | ACCEPTED | accountable lead | council round CLEAN; one-rung-up `lead-review` event recorded (fresh context); findings all dispositioned |
 | ACCEPTED | INTEGRATED | integration owner | merged; contract tests green at head |
 | any | ABANDONED | accountable lead | reason logged; salvageable branch preserved |
 
