@@ -89,12 +89,17 @@ def parse_command(reader):
                 blen = int(hdr[1:])
             except ValueError:
                 raise ProtocolError("invalid bulk length: %r" % hdr)
-            if blen < 0:
-                # null bulk string as a command arg is degenerate input;
-                # treat as empty rather than raising, since it's not a
-                # framing error (the length itself parsed fine).
+            if blen == -1:
+                # RESP2's null-bulk sentinel used as a command arg is
+                # degenerate but not a framing error; treat as empty
+                # rather than raising.
                 args.append(b"")
                 continue
+            if blen < -1:
+                # Any other negative length isn't valid RESP -- -1 is the
+                # only defined sentinel. Don't silently swallow it as if
+                # it were well-formed; malformed framing is connection-fatal.
+                raise ProtocolError("invalid bulk length: %r" % hdr)
             data = reader.read_exact(blen)
             crlf = reader.read_exact(2)
             if crlf != b"\r\n":
