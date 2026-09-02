@@ -1,0 +1,16 @@
+id: resp-pilot-sprint
+title: Run the RESP pilot sprint under the protocol (build the server)
+desc: ""
+type: task
+component: pilot
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-09-02T09:00:19-00:00
+references: []
+log_events:
+- time: 2026-09-02T09:00:19-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
