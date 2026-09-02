@@ -1,6 +1,6 @@
 # Work package: command-engine
 
-- **State:** READY (necessity challenge PROCEED, `events/resp-tracer/lead.md` lead:5)
+- **State:** CLAIMED — worker-engine, Haiku 4.5 (Agent tool, general-purpose subagent)
 - **Owner (role):** L3 implementer · **Model:** haiku (the semantics are
   fully enumerated in the contract's dispatch table — this package tests
   whether a cheap model can execute a precisely specified table correctly
