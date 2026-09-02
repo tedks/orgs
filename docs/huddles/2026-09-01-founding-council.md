@@ -340,3 +340,134 @@ independently); **agy = fresh instance on this document**; **Claude =
 moderator (native)**.
 
 ## Round 2 responses
+
+> Codex seat resumed warm via `codex fork` of the CEO's original conversation
+> (fork id `01a05fae`, forked_from `01a05df2` at ordinal 123; the live parent
+> session was never touched — codex enforces a single active writer per
+> thread, hence fork-then-resume). agy seat fresh on this document.
+
+### agy — Round 2
+
+1. **CLEAN** on the firewall ruling. Testing isolation empirically as a bench question is the correct path. The interim baseline (default exclusion, logged peeks allowed) provides enough flexibility for v0 without over-constraining the initial run.
+2. **Interpretations stay distinct.** The unified event/case log is an append-only operational history (deviations, standup minutes, escalations). Interpretations are normative case law bound directly to the contract. An agent consuming a contract must read its interpretations to understand current semantics, but forcing them to read the entire operational ledger to find those semantics would guarantee context bloat and constraint amnesia.
+3. **Standup chair:** The accountable lead for that specific contract boundary must chair. A convening worker cannot chair their own standup because they cannot unilaterally waive or redefine a boundary they are bound by; they are proposing a deviation, and the lead must reconcile and accept it.
+4. **CLEAN** on fix-introduced regressions.
+
+### Codex (warm, CEO-conversation fork) — Round 2
+
+#### 1. CEO rulings
+
+The firewall ruling restores the position Ted and I had actually reached: the non-negotiable boundary is **dependency isolation**, not epistemic isolation. Looking at foreign source is not itself a contract violation; depending on unpublished behavior is. Default exclusion remains sensible for context leanness, while clean-room implementation, diagnostic clones, and direct inspection become modes the bench can compare.
+
+One Important inconsistency must be resolved: Round 1 accepted that every deviation must name a rollback operation and that irreversible information flow requires a prior huddle. Direct source inspection is irreversible information flow, yet the CEO ruling makes it an ordinary logged bend. The clean resolution is to exempt read-only information access from the general reversibility gate and govern it through the firewall policy:
+
+- Direct inspection is logged with the question that motivated it and any resulting contract gap.
+- Publishing, depending upon, or acting across a boundary remains subject to reversibility and authority rules.
+- Clean-room independence can be required by a particular work package when it is actually an acceptance condition.
+
+Otherwise the two adopted rules contradict each other.
+
+I concur with the reduced v0 standup machinery, council review in v0, the soft meta:product tripwire, and the cold-start audit.
+
+#### 2. Unified event log versus interpretation log
+
+The unified event ledger should subsume **storage and chronology**, but not the interpretation log's semantic interface.
+
+Interpretations need a distinct contract-adjacent projection or register because agents must be able to ask, "Are there unresolved questions about this contract?" without searching deviations, standups, and operational incidents. Each interpretation record should identify:
+
+- Contract and version.
+- The question or ambiguity.
+- Whether the ruling is an entailed clarification, temporary exception, or amendment candidate.
+- Compatibility rationale and affected consumers.
+- The spec revision that canonicalized it, or its expiration.
+
+This must not become a second normative specification. The criterion Ted and I established remains:
+
+> Could a fresh implementer act correctly from the current canonical specification without reading the interpretation history?
+
+If not, a binding interpretation must already have been promoted into the spec or amendment. The register is an inbox, audit trail, and unresolved-work view—not case law that consumers must continually consult.
+
+A useful implementation model is therefore:
+
+```text
+append-only event ledger
+        ↓
+case-state projection
+interpretation-register projection
+current-contract projection
+```
+
+One historical source, multiple purpose-specific views.
+
+#### 3. Standup chair
+
+An interested convener may chair by default. Almost every useful convener is interested; requiring an independent chair for routine coordination would recreate the recursive meeting problem.
+
+The important separation is between **facilitation and decision authority**:
+
+- The convener facilitates and frames the issue.
+- Existing ownership determines who adjudicates: ordinarily the affected work-package owner, contract owner, or lowest common accountable lead.
+- If that owner's own conduct or ruling is what is being challenged, adjudication moves one authority rung upward.
+- If hats have collapsed onto one agent, the adjudication hat receives a fresh context/council review; unresolved authority conflicts reach the CEO.
+
+This can remain a runbook rule in v0 rather than requiring a chair registry.
+
+#### 4. Fix-introduced regressions
+
+**Important — automatic squashing is a new defect.** The moderator adopted agy's mechanic that an intent conflict "squashes the speculative work." That contradicts the earlier conclusion Ted and I reached: speculative commits remain recoverable, and a misprediction does not imply destructive rollback. It also conflicts with the project's recoverability discipline.
+
+A Crystal merge can provide reconciliation evidence, but it cannot adjudicate semantic intent. On return from a standup:
+
+1. Reconcile the proposal against current head.
+2. Identify which speculative changes conflict with the decision.
+3. Let the accountable owner accept, reject, partially salvage, or supersede them.
+4. Preserve the speculative branch/commits for audit and recovery.
+
+"Squash" may mean "do not integrate this line of work," but must not normatively mean resetting the branch to the fork point or discarding all post-fork work.
+
+**Important — the firewall experiment currently has no scheduled resolution.** The CEO correctly promoted isolation hardness to a bench question, while the adopted v1 plan defers all ablations. That can leave the project indefinitely operating under an empirical interim rule without ever testing the disputed claim. No experiment is needed before v0, but the plan should name a checkpoint: after the organic shakedown demonstrates basic protocol reliability, run a matched direct-peek versus diagnostic-clone/clean-room trial before declaring any permanent firewall doctrine.
+
+Those two issues prevent a CLEAN finding.
+
+---
+
+## Moderator synthesis — Round 2 (Claude)
+
+Round 2 is **NOT CLEAN**: one Important inconsistency and one Important
+fix-introduced regression, both accepted. Resolutions:
+
+1. **Read-only access exempted from the reversibility gate.** The
+   reversibility/rollback rules govern *actions* (publishing, depending,
+   acting across a boundary); *reads* are governed by firewall policy —
+   logged with the motivating question and any resulting contract gap. A
+   work package may require clean-room independence explicitly when it is an
+   acceptance condition. This resolves the Round 1 contradiction.
+2. **Squash semantics corrected (fix-introduced regression, caught on the
+   delta — the fixpoint convention doing its job).** A standup decision that
+   invalidates speculative work means *non-integration*, never destruction:
+   the worker's line resets, but the speculative branch and commits are
+   preserved for audit and salvage, and the accountable owner disposes
+   (accept / reject / partially salvage / supersede). Consistent with the
+   repo-wide never-delete-branches-until-merged discipline.
+3. **Ledger + projections.** Both seats converged with different halves:
+   storage unifies (append-only event ledger), semantics stay distinct
+   (interpretation register as a contract-adjacent projection, alongside
+   case-state and current-contract views). The canonicality criterion
+   governs promotion: a fresh implementer must be able to act correctly from
+   the canonical spec alone.
+4. **Standup chair: facilitation ≠ adjudication.** The convener may chair
+   (facilitate); decision authority follows existing ownership (agy's rule
+   is the common case: the boundary's accountable lead adjudicates);
+   challenges to the adjudicator move one rung up; collapsed hats get a
+   fresh-context adjudication. Runbook rule in v0, no registry.
+5. **Firewall experiment gets a scheduled checkpoint:** after the organic
+   shakedown demonstrates protocol reliability and before any permanent
+   firewall doctrine, run a matched direct-peek vs. diagnostic-clone trial.
+   The interim rule may not quietly become doctrine by default.
+
+## Round 3 agenda (fix delta only)
+
+Review resolutions 1–5 above. Anything Critical/Important they introduce?
+If not, say **CLEAN** — that closes the founding council at fixpoint.
+
+## Round 3 responses
