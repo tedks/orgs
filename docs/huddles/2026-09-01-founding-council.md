@@ -312,3 +312,31 @@ interested party; (d) CEO ruling on v0 review breadth.
   implementation in flight in tmux `orgs:ask-resume`, Claude Opus). Once it
   lands, fixpoint rounds chain each seat's yielded session instead of
   re-feeding transcripts to fresh instances.
+
+---
+
+## Round 2 agenda
+
+Scope: **the delta only** — the moderator synthesis and CEO rulings above. Do
+not re-litigate Round 1 positions the rulings already addressed unless you
+have a genuinely new argument. If you find nothing Critical or Important, say
+**CLEAN** explicitly.
+
+1. Objections to the CEO rulings as they stand? Notably: firewall hardness
+   demoted from doctrine to a bench question (interim: default context
+   exclusion, direct peek = ordinary logged bend). If you hold that some
+   minimum isolation is non-negotiable rather than empirical, argue it now.
+2. Open item (b): does the unified event/case log subsume the interpretation
+   log, or do interpretations stay a distinct artifact (contract-adjacent in
+   a way deviations are not)?
+3. Open item (c): who chairs a standup when the convener is an interested
+   party?
+4. Fix-introduced regressions only: anything in the rulings themselves that
+   creates a new defect.
+
+Seat provenance, Round 2: **Codex = the CEO's original interactive design
+conversation, resumed warm as a fork** (the live session continues
+independently); **agy = fresh instance on this document**; **Claude =
+moderator (native)**.
+
+## Round 2 responses
