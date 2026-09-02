@@ -1,0 +1,92 @@
+# RESP tracer — Design Spec
+
+> Pilot spec: the first sprint run under the protocol, and preparation for
+> bench v0.9 (the organic shakedown — no injected events). Instantiates
+> `docs/spec-template.md`.
+
+## Overview
+
+A minimal Redis-compatible server speaking RESP2, built by the org to
+exercise the entire protocol lifecycle: spec → tracer bullet → work packages
+→ execution → review ladder → integration → retro → cold-start audit.
+Externally graded: a real `redis-cli` runs the conformance script; the org
+does not write its own exam.
+
+## Goals and Non-goals
+
+**Goals**
+
+- Commands: `PING`, `ECHO`, `GET`, `SET`, `DEL`, `INCR` — binary-safe
+  values, correct RESP2 reply types, correct error replies for wrong arity
+  and non-integer `INCR`.
+- Pipelined sequential requests on one connection.
+- Every boundary contract exercised by consumer-driven boundary tests.
+- The whole protocol artifact set produced (that is the actual product; the
+  server is the medium).
+
+**Non-goals** (excluded per council bench ruling): expiry, persistence,
+transactions, pub/sub, clustering, authentication, concurrency beyond one
+connection at a time, performance claims, RESP3.
+
+## Decisions
+
+- **Language:** Python 3, stdlib only. Rationale: fastest to grade and
+  review; nothing here is performance-bearing. Changeable by amendment.
+- **Concurrency model:** sequential accept loop, one connection served at a
+  time. Rationale: "pipelined sequential" is the graded behavior;
+  `redis-cli` needs one connection; smallest defensible design.
+
+## Firewalled Entities and Contract Boundaries
+
+Three entities, two contracts. Each entity is one work package owner's
+scope; each contract is a `protocol/templates/contract.md` instance living
+in `contracts/` before fan-out.
+
+1. **resp-codec** — bytes ↔ frames. Incremental parser (feed bytes, yield
+   complete frames, retain remainder) and serializer. No socket, no store,
+   no command knowledge.
+2. **command-engine** — command frame in, reply frame out, owning the
+   key-value store. No bytes, no sockets. Deterministic: same command
+   sequence, same replies.
+3. **server** — socket lifecycle: accept, read → codec → engine → codec →
+   write, connection teardown. No parsing, no command knowledge. Consumes
+   both contracts.
+
+- **C1 codec contract:** frame data model (simple string, error, integer,
+  bulk string incl. null, array), `feed(bytes) -> [Frame]` incremental
+  semantics, `encode(Frame) -> bytes`, behavior on malformed input
+  (raise `ProtocolError`, connection-fatal).
+- **C2 engine contract:** `execute(command: Array[BulkString]) -> Frame`,
+  per-command semantics and error replies, state visibility rules.
+
+## Boundary Diagram
+
+```mermaid
+graph LR
+    server[server<br/>socket loop] -->|C1: feed/encode| codec[resp-codec<br/>bytes ↔ frames]
+    server -->|C2: execute| engine[command-engine<br/>store + semantics]
+```
+
+## Interpretations Log
+
+None yet. Filed against contracts in `contracts/` per protocol.
+
+## Milestones
+
+- **M1 — tracer bullet (lead-built, player-coach):** repo layout, contract
+  documents committed, boundary-test skeletons, and a walking end-to-end
+  slice — `redis-cli PING` answers `PONG` through all three entities in
+  their crudest form. Proves the contracts compose before fan-out.
+- **M2 — fan-out:** three work packages (one per entity) execute under the
+  full ladder: council review at implementer tier, lead review, fix-delta
+  rounds to CLEAN.
+- **M3 — integration and closure:** conformance script green via real
+  `redis-cli`; retro (lessons, meta:product ratio, deviation adjudication);
+  cold-start audit by a fresh agent in a second harness.
+
+## Open Questions
+
+- Should inline commands (non-RESP `PING\r\n` as redis-cli sometimes sends
+  on simple probes) be in scope? Current lean: yes if `redis-cli` in
+  practice requires it for the graded commands, discovered at M1 —
+  otherwise a filed non-goal clarification.
