@@ -49,7 +49,7 @@ not enter LOGGED without a prior huddle decision reference.
 
 | From | To | Who | Evidence |
 |---|---|---|---|
-| — | CONVENED | any agent (attendance forks are terminal delegates: they may request escalation, never convene) | issue key + base revision; at most one open huddle per (issue, revision) |
+| — | CONVENED | any agent (attendance forks are terminal delegates: they may request escalation, never convene) | issue key (stable across revisions) + base revision; **at most one open huddle per issue key** — agents at different shas converge on it rather than opening duplicates (RUNBOOK §5b) |
 | CONVENED | DECIDED | adjudicator per ownership (see RUNBOOK: facilitation ≠ adjudication) | decision text + based_on |
 | DECIDED | RECONCILED | the decision's accountable owner | checked against head; applied, revised, or withdrawn; applied_at stamped |
 
@@ -113,8 +113,8 @@ entry into it.
 | From | To | Who | Evidence |
 |---|---|---|---|
 | — | PLANNED | lead | spec section owned |
-| PLANNED | TRACER | lead (player-coach) | work packages drafted; decomposition necessity-challenged |
-| TRACER | EXECUTING | lead | tracer bullet green — contracts demonstrably compose; packages READY |
-| EXECUTING | INTEGRATING | integration owner | all packages ACCEPTED or ABANDONED |
-| INTEGRATING | RETRO | integration owner | all ACCEPTED packages merged; main green on boundary tests |
+| PLANNED | TRACER | lead (player-coach) | ready to build the walking skeleton (player-coach builds the tracer *before* decomposing — RUNBOOK §3) |
+| TRACER | EXECUTING | lead | tracer bullet green — contracts demonstrably compose; only *then* are work packages drafted, necessity-challenged, and READY |
+| EXECUTING | INTEGRATING | integration owner | every non-abandoned package INTEGRATED (integration is continuous — packages merge as they are ACCEPTED, not batched here) |
+| INTEGRATING | RETRO | integration owner | main green on all boundary tests; no open Crystal conflicts |
 | RETRO | CLOSED | lead | lessons filed (provenance/scope/reconsider-when); meta:product recorded; deviations all adjudicated; cold-start audit passed if milestone |

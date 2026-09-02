@@ -55,13 +55,15 @@ check "DEL k"                "1"     "$(cli DEL k)"
 check "DEL missing"          "0"     "$(cli DEL nope)"
 check "SET n 10 / INCR"      "11"    "$(cli SET n 10 >/dev/null; cli INCR n)"
 # binary-safe value with embedded CR LF and a NUL byte. A NUL cannot survive
-# an argv, so the value is written via `redis-cli -x` (value read from stdin)
-# and read back with --no-raw; compare on a hex dump so the NUL is preserved
-# through the shell (command substitution also strips NULs).
+# an argv, so the value is written via `redis-cli -x` (value read from stdin).
+# Read back with `--raw` (NOT --no-raw, which escapes NUL/CR/LF to literal
+# text like \x00) and hex-dump before the shell can strip the NUL. redis-cli
+# --raw appends a newline as its output delimiter, so tolerate one trailing
+# 0a on the readback.
 printf 'a\r\nb\x00c' | cli -x SET bin >/dev/null
-check "binary-safe SET/GET (CRLF+NUL)" \
-    "$(printf 'a\r\nb\x00c' | od -An -tx1 | tr -d ' \n')" \
-    "$(cli --no-raw GET bin | sed -e 's/^"//' -e 's/"$//' | od -An -tx1 | tr -d ' \n')"
+want=$(printf 'a\r\nb\x00c' | od -An -tx1 | tr -d ' \n')
+got=$(cli --raw GET bin | od -An -tx1 | tr -d ' \n'); got=${got%0a}
+check "binary-safe SET/GET (CRLF+NUL)" "$want" "$got"
 # error replies (redis-cli prints the error text)
 check "INCR non-integer errs" "1" "$(cli SET s abc >/dev/null; cli INCR s 2>&1 | grep -c -i 'not an integer\|error')"
 check "SET wrong arity errs"  "1" "$(cli SET onlykey 2>&1 | grep -c -i 'wrong number\|error')"

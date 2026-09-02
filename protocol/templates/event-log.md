@@ -4,11 +4,14 @@ Append-only, **sharded per actor**: `events/<sprint-id>/<actor-id>.md`, one
 file per agent. Each agent appends only to its own shard, so workers on
 separate branches and worktrees never contend for the same file and there is
 no global counter to allocate — the pilot's parallel fan-out cannot collide
-on the ledger. The **ledger** is the union of all shards for the sprint;
-ordering across shards is by the `ISO timestamp` (ties broken by actor-id),
-not a sequence number. An entry's stable id is `<actor-id>:<local-seq>`,
-where `local-seq` is monotonic **within one shard only** (so it is
-collision-free without coordination). Never edited retroactively —
+on the ledger. The **ledger** is the union of all shards for the sprint.
+An entry's stable id is `<actor-id>:<local-seq>`, where `local-seq` is
+monotonic **within one shard only** (so it is collision-free without
+coordination). The `ISO timestamp` (ties broken by actor-id) gives a
+*display* order only — **lifecycle state is reconstructed by following each
+artifact's own event chain** (`refs` / `based_on` point at the predecessor
+event), never by wall-clock, so a clock tie or skew across shards can never
+place `DECIDED` before `CONVENED` or a takeover before its prior state. Never edited retroactively —
 corrections are new events referencing the old by id. Projections
 (interpretation register, case state, current-contract view) are derived
 views over the union; in v0 they are maintained by hand at standup/retro and
@@ -46,7 +49,8 @@ requires.
 
 Deviation entries additionally carry: what bent · why · rollback operation
 (or `read — n/a`). Adjudication is a separate `deviation-adjudicated` event
-referencing the deviation's seq: justified / unjustified · one line why.
+referencing the deviation's event id (`<actor-id>:<local-seq>`): justified /
+unjustified · one line why.
 
 `review-seat-outcome` records one seat's result for one round (seat · round
 · `findings: <ids>` or `no-finding`), written by the accountable lead as
@@ -55,4 +59,5 @@ at fixpoint, citing the seat-outcome events it rests on.
 
 The per-PR findings file (`protocol/templates/review-findings.md`) is a
 **projection** of this ledger: every row cites its `review-finding` /
-`review-seat-outcome` seq ids; the ledger is the source of truth.
+`review-seat-outcome` event id (`<actor-id>:<local-seq>`); the ledger is the
+source of truth.

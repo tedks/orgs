@@ -32,9 +32,9 @@ Convene a huddle **first** only at the reversibility gate:
 
 - you cannot name the operation that would undo what you're about to do;
 - you would *change* something across a contract boundary — publish a new
-  version, break an existing one, or newly depend on a surface the boundary
-  does not publish (consuming the contracts your work package already
-  declares is not gated; reading anything never is);
+  version, break an existing one, or depend on a surface the boundary does
+  not publish (ordinary use of a published contract is not gated, whether or
+  not your package pre-declared it; reading anything never is);
 - you would exceed your owned scope.
 
 Convene one **voluntarily** whenever you genuinely cannot tell what intent
@@ -154,8 +154,9 @@ The distilled form, packed verbatim into every role prompt:
 > deviate to serve intent on your own judgment and log the bend in one line
 > — review reads your whole change (never a skim), and justified is
 > justified. Huddle FIRST only when you can't name your rollback, would
-> change something across a contract boundary (publish/break/newly-depend —
-> not ordinary use of your declared dependencies, and never a read), or
+> change something across a contract boundary (publish a new version, break
+> an existing one, or depend on a surface the boundary does not publish —
+> ordinary use of published contracts is never gated, nor is any read), or
 > would exceed owned scope; huddle voluntarily when you can't tell what
 > intent requires — fork and keep working while you ask, knowing the answer
 > arrives stale. Reorient fast: a thrice-failed approach is a signal, not a
