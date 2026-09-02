@@ -9,8 +9,13 @@
 A minimal Redis-compatible server speaking RESP2, built by the org to
 exercise the entire protocol lifecycle: spec → tracer bullet → work packages
 → execution → review ladder → integration → retro → cold-start audit.
-Externally graded: a real `redis-cli` runs the conformance script; the org
-does not write its own exam.
+**Externally graded** in the sense that matters: the conformance assertions
+encode Redis's own RESP2 behavior and are driven through a real, unmodified
+`redis-cli` client, and the exam is frozen by the lead before fan-out so no
+implementer can tune it to their code. (The lead *authors* the assertion
+list from the RFC/Redis behavior — "external" means the grader is a real
+client and the target of conformance is an outside standard, not that a
+third party writes the file.)
 
 ## Goals and Non-goals
 
