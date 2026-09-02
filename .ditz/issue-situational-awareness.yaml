@@ -15,3 +15,14 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-09-02T18:45:22-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Design doc: docs/design/situational-awareness.md. Primary v1 blocker for
+    long-running/multi-provider sprints. Core: never leave the OODA Observe to the
+    agent''s volition (the agent that needs redirecting is the one that stopped observing);
+    force it at unavoidable chokepoints (tool-result piggyback + exit-code weaponization;
+    git-hook gate; cadence; preempt-and-resume reusing the budget tripwire). situational_awareness()
+    = the tripwires unified into one Observe injection. Build only when a real long-running
+    sprint needs it; blocks resp-pilot-sprint only if that sprint uses long-running
+    foreign workers.'
