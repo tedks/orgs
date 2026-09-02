@@ -92,4 +92,14 @@ grep -q 'hard stop' <<<"$ferr" || fail "halt not delivered (stderr):
 $ferr"
 [ "$fstat" -eq 87 ] || fail "a pending halt among the two should force 87, got $fstat"
 
-echo "PASS: bus one-shot delivery, guard footer + status passthrough, halt→87 override, standup enqueue"
+# 7. at-least-once: a drain whose OUTPUT fails must NOT lose the message — it
+#    stays in the inbox to be re-shown (losing a halt is worse than showing it
+#    twice). Drain to a closed fd so cat fails; the message must survive.
+"$bus" send worker-g halt "must not be lost" >/dev/null
+"$bus" drain worker-g >&- 2>/dev/null || true
+[ "$("$bus" count worker-g)" = "1" ] || fail "a failed-output drain must leave the message (at-least-once)"
+gshow=$("$bus" drain worker-g)
+grep -q 'must not be lost' <<<"$gshow" || fail "the surviving message must re-show on the next drain:
+$gshow"
+
+echo "PASS: one-shot on success, at-least-once on failure, stderr footer, halt→87 (incl. during-run), stream-clean stdout"

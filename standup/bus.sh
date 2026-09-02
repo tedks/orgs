@@ -89,19 +89,24 @@ cmd_halting() {
 
 cmd_drain() { # print each pending message, then move it to delivered/
     req_agent "$1"
-    local agent=$1 f base ddir; ddir="$(bus_root)/$agent/delivered"; mkdir -p "$ddir"
+    local agent=$1 f base ddir hdr; ddir="$(bus_root)/$agent/delivered"; mkdir -p "$ddir"
     while IFS= read -r f; do
         [ -n "$f" ] || continue
         base=${f##*/}
-        # Claim the file first (mv is the exclusive claim); if another drainer
-        # already took it, skip rather than crash under set -e.
-        mv "$f" "$ddir/$base" 2>/dev/null || continue
         case "$base" in
-            *-halt.msg)     echo "━━ SITUATION [HALT] ━━";;
-            *-redirect.msg) echo "━━ SITUATION [redirect] ━━";;
-            *)              echo "━━ SITUATION ━━";;
+            *-halt.msg)     hdr="━━ SITUATION [HALT] ━━";;
+            *-redirect.msg) hdr="━━ SITUATION [redirect] ━━";;
+            *)              hdr="━━ SITUATION ━━";;
         esac
-        cat "$ddir/$base" || true
+        # Print FIRST, then claim (move) ONLY if the message was actually
+        # emitted. Delivery is AT-LEAST-ONCE by design: if output fails
+        # (e.g. a full disk) the file stays in the inbox to be re-shown, and a
+        # concurrent drainer may also show it — re-showing a redirect/halt is
+        # harmless, losing one is not. The mv is the idempotent claim; a
+        # drainer that loses the race simply moved nothing.
+        if { printf '%s\n' "$hdr" && cat "$f"; }; then
+            mv "$f" "$ddir/$base" 2>/dev/null || true
+        fi
     done < <(_pending "$agent")
 }
 
