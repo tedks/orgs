@@ -7,7 +7,7 @@
   to the full C2 contract; all six goal commands (PING, ECHO, GET, SET,
   DEL, INCR) implemented per contract specification; self-review complete;
   deviations logged. Ending turn per discrete-turn worker instructions.
-- **Last commit:** (will be updated after git commit)
+- **Last commit:** a6daa5f · "command-engine: harden engine.py to full C2 contract"
 - **Budget burned:** ~35K tokens (reading spec/contract/work-package/
   stub/frozen tests/templates, implementing 6 commands with proper error
   handling and state management, running and verifying 26 tests,
