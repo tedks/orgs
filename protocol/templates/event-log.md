@@ -20,7 +20,15 @@ Types: `deviation`, `deviation-adjudicated`, `huddle-convened`,
 `huddle-decided`, `huddle-reconciled`, `standup`, `escalation`,
 `interpretation-filed`, `interpretation-ruled`, `docs-bug`,
 `amendment-proposed`, `review-finding`, `review-seat-outcome`,
-`review-clean`, `necessity-challenge`, `state-change`, `lesson`.
+`review-clean`, `lead-review`, `necessity-challenge`, `crystal-conflict`,
+`semantic-deadlock`, `state-change`, `lesson`.
+
+`lead-review` records the one-rung-up lead's fresh-context result for a
+package (outcome: approved / findings `<ids>` / no-finding), the evidence the
+work-package ACCEPTED gate requires. `crystal-conflict` records a speculative
+merge conflict (branches + revisions + textual|semantic); `semantic-deadlock`
+records a conflict whose resolution ownership is disputed and awaiting lead
+adjudication.
 
 `state-change` is generic across every STATES.md artifact type — body reads
 `<artifact-type>:<id> <FROM>→<TO>` plus the required evidence — so any

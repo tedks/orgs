@@ -100,11 +100,13 @@ wrong.
 across huddle, standup, review-seat, necessity-challenge, and
 ledger-maintenance agent invocations; product tokens = the sum across
 implementer work-package invocations (takeovers count as product). Each
-invocation's reported token usage is bucketed at the time it runs and
-recorded in the sprint's run manifest; where a harness hides token counts,
-substitute the word count of the invocation's output and say so. Record
-both buckets and the ratio — the number is a soft tripwire, compared
-sprint-over-sprint, never a gate.
+invocation's reported token usage is bucketed at the time it runs; where a
+harness hides token counts, substitute the word count of the invocation's
+output and say so. Both buckets and the ratio are recorded in the retro's
+`state-change`→RETRO ledger entry (a `lesson` event may cite it) — the
+number is a soft tripwire, compared sprint-over-sprint, never a gate. (Under
+the bench, the same two buckets also populate the run manifest's `cost`
+fields; a normal sprint needs only the ledger entry.)
 
 At milestones, run the cold-start audit: fresh agent, different harness,
 clean checkout — it must state current state and next authorized action
