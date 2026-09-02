@@ -71,15 +71,19 @@ check "SET wrong arity errs"  "1" "$(cli SET onlykey 2>&1 | grep -c -i 'wrong nu
 # reply is read. redis-cli cannot assert this — feeding it two lines sends
 # them sequentially (write/read/write/read), and `--pipe` reports only
 # transfer statistics, not the replies — so a redis-cli-only check would pass
-# a server that cannot pipeline at all. We therefore drive raw RESP over one
-# socket via bash's /dev/tcp and require both `+PONG\r\n` replies. Compared as
-# a hex dump so CR bytes survive the shell.
+# a server that cannot pipeline at all. We drive raw RESP over one socket via
+# bash's /dev/tcp. The two requests are proper RESP arrays (`*1\r\n$4\r\nPING\r\n`,
+# not the inline form, which the contracts do not require and the spec leaves
+# open), and the read is bounded by `timeout` so a server that answers once
+# and stalls fails the assertion instead of hanging the exam. Hex-compared so
+# CR bytes survive the shell.
 pl_want=$(printf '+PONG\r\n+PONG\r\n' | od -An -tx1 | tr -d ' \n')
-pl_got=$( { exec 3<>"/dev/tcp/127.0.0.1/$port" || exit 1
-           printf 'PING\r\nPING\r\n' >&3          # both requests, one write
-           head -c 14 <&3                          # 2 × len("+PONG\r\n")=7
-           exec 3>&- 3<&-; } 2>/dev/null | od -An -tx1 | tr -d ' \n')
-check "pipelined PING;PING (raw RESP, one conn)" "$pl_want" "$pl_got"
+pl_got=$(timeout 5 bash -c '
+    exec 3<>"/dev/tcp/127.0.0.1/'"$port"'" || exit 1
+    printf "*1\r\n\$4\r\nPING\r\n*1\r\n\$4\r\nPING\r\n" >&3
+    head -c 14 <&3
+    exec 3>&- 3<&-' 2>/dev/null | od -An -tx1 | tr -d ' \n')
+check "pipelined PING;PING (raw RESP arrays, one conn)" "$pl_want" "$pl_got"
 # ----------------------------------------------------------------------------
 
 echo "conformance: $pass passed, $fail failed"
