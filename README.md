@@ -1,71 +1,42 @@
-# Crystal
+# orgs
 
-Speculative merge checking for the org, after Brun, Holmes, Ernst, and
-Notkin's Crystal (ESEC/FSE 2011): most speculative merges are clean, and the
-value is early warning on the rare real conflict — textual, or *semantic*
-(both branches green alone, red together).
+**Draft — design in active discussion; everything here is subject to change.**
 
-## Usage
+A harness-portable set of skills and protocols for running a *virtual
+engineering organization* of AI agents.
 
-```bash
-crystal/crystal-check.sh [--base <branch>] [--test-cmd <cmd>] [branch ...]
-```
+The human operator acts as CEO. A root CTO agent iterates with the CEO on a
+design-doc-style spec whose most important content is the **firewalled
+contract boundaries** between agent teams. Once the spec stabilizes,
+team-lead agents (L5–L7) decompose their slice into tactical tasks executed
+by junior-model agents (L3/L4); work flows back up a review ladder where
+senior-tier agents refine or take over PRs. Periodic standups — attended by
+context-carrying forks of the workers — catch rabbit-holing and redirect
+effort. Spec gaps are resolved cheaply through logged "interpretations,"
+with amendments kept rare and deliberate. Lessons learned persist in the
+repo.
 
-Checks every named branch against the base and every pair against each
-other. Textual detection uses `git merge-tree --write-tree` (git ≥ 2.38) —
-no worktree, no index, no ref is touched. With `--test-cmd`, the clean
-merged tree is extracted as **plain files** (`git archive | tar`, no `.git`
-in the scratch dir) and the command runs there (`bash -c`, cwd = the merged
-files; git env, OLDPWD unset and `GIT_CEILING_DIRECTORIES` set so git cannot
-discover a real repo above the scratch dir); failure is reported as a
-semantic conflict. Only local branch names are accepted,
-each pinned to a commit once up front so a concurrent ref update cannot
-desync the report from the tested tree. Requires bash ≥ 4. Exit codes: `0`
-all clean · `1` conflicts found · `2` error.
+Design goals:
 
-Assumptions and residuals worth knowing:
+- **Protocol over application.** Durable state is files in git; the repo is
+  the office. Any harness (Claude Code, Codex, Antigravity) binds the
+  protocol to its native agent primitives.
+- **Contracts first.** Boundaries are designed up front and enforced at the
+  dependency level — build visibility, consumer-driven contract tests, and
+  total review. Context packing is lean by default (an implementer is
+  *given* the published contract, not the neighboring team's source), but
+  reading is always free: the packing list is hygiene, not a firewall.
+- **Mission-type tactics.** Agents carry the commander's intent and are
+  empowered to deviate from instruction to serve it, on their own judgment,
+  logging the bend; huddles are reserved for irreversible or
+  boundary-crossing moves and for genuine uncertainty.
+- **Existing org wisdom, applied.** Agents act out the processes of a
+  well-run engineering org — design review, player-coach leads, written
+  standups, blameless retros — rituals models already understand deeply.
 
-- The test command should be green on each branch individually — a branch
-  that fails alone makes every one of its pairings FAIL, which is noise.
-- Isolation is **best-effort against accidents, not a security sandbox.** It
-  defeats the common accidental mutation (a test that runs git in its cwd —
-  a shared-`.git` worktree would let that reach the real object store; this
-  does not) and the inherited-env / `cd -` paths back to the real repo. It
-  does *not* contain a command that uses an absolute path to the real repo
-  or means harm. Point `--test-cmd` only at boundary-test commands you trust
-  — in the org, ones the team authored.
-- A `--test-cmd` that itself requires a git repository is out of scope in v0
-  (it finds no `.git` and reports FAIL — noise, not a semantic conflict).
-- A repo that relies on `export-ignore`/`export-subst` for a buildable tree,
-  or on clean/smudge filters (e.g. Git LFS), is out of scope for v0 semantic
-  checks: extraction is `git archive`, chosen over `checkout-index` because
-  it runs no filter code (the safer failure for a background tool).
-- `--timeout` (default 120s, needs coreutils `timeout`) bounds a wedged
-  foreground command but not a process the test *backgrounds*; boundary-test
-  commands must not daemonize.
+No skills are implemented yet; see [docs/spec-template.md](docs/spec-template.md)
+and [skills/README.md](skills/README.md) for the intended shape.
 
-## Org integration (RUNBOOK §7)
+## License
 
-- Run at standup cadence, or continuously: `/loop 30m` invoking this script
-  with the boundary-test command. Exit 1 is the standup trigger.
-- Report stanzas are revision-stamped (`branch@sha × branch@sha`) —
-  speculative results go stale; a decision made on a stanza must be
-  reconciled if either branch moved.
-- Resolution ownership is semantic: contract change → provider migrates
-  callers; invalid assumption → consumer fixes; disputed → record a
-  semantic-deadlock event, the lead adjudicates. Whoever merges second
-  cleans up by default. Conflict debt is visible at standup so it ages
-  loudly.
-
-## v0 scope
-
-Invocable script + loop integration only. The commit-hook daemon
-(commit → merge → build → test → report at next agent turn-start) is
-deferred until the pilot shows the loop cadence is insufficient.
-
-## Tests
-
-`crystal/test-crystal.sh` builds a scratch repo with an engineered textual
-conflict, an engineered semantic conflict (clean merge, red tests), and a
-compatible pair, and asserts crystal distinguishes all three — so the test
-can fail, by construction, if detection breaks in either direction.
+[AGPL-3.0](LICENSE).
