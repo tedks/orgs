@@ -35,3 +35,18 @@
 - sprint:resp-tracer PLANNED→TRACER. Evidence: ready to build the walking
   skeleton (RUNBOOK §3) — spec's three firewalled entities and two
   contracts identified, boundary diagram present in spec.
+
+## lead:4 · 2026-09-02T00:20:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 4281655
+- refs: targets/resp/{codec,engine,server}.py
+- sprint:resp-tracer TRACER→EXECUTING. Evidence: tracer bullet green —
+  raw-socket smoke test confirms `PING` round-trips to `+PONG\r\n` through
+  codec.Parser → engine.Engine.execute → codec.encode → socket write,
+  committed at 4281655. redis-cli is not installed in this environment
+  (`command -v redis-cli` fails) so the smoke test used a raw Python
+  socket client instead; this is expected to recur at integration (M3) —
+  the frozen `bench/conformance/resp_conformance.sh` will exit 2 for the
+  same reason, and a raw-socket exam substitute will be needed then too.
+  Contracts demonstrably compose. Proceeding to cut work packages
+  (RUNBOOK §3 step 2).
