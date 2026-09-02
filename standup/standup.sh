@@ -13,8 +13,9 @@
 #   standup.sh halt <agent-id> <message>        # queue a halt (forces a reorient)
 #
 # Config via env: STANDUP_BUS (bus root), STANDUP_STALL_MIN (minutes without a
-# commit before an agent is flagged, default 15), STANDUP_STATUS_GLOB (where
-# agents' status files live, default status/*.md relative to the repo).
+# commit before an agent is flagged, default 15). Agents surface in the digest
+# by (a) having a bus inbox and (b) referencing their agent-id in their commit
+# messages and/or a status/<agent>.md file.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -27,11 +28,11 @@ agents_with_bus() {
     for d in "$root"/*/; do [ -d "$d" ] && basename "$d"; done
 }
 
-# last_commit_age_min <since-grep> — minutes since the newest commit whose
-# message or author matches the agent id; empty if none.
+# last_commit_epoch_for <agent> — epoch of the newest commit whose message
+# mentions the agent id (literal match, not a regex); empty if none.
 last_commit_epoch_for() {
     local agent=$1
-    git log --all --grep="$agent" --pretty=%ct -1 2>/dev/null \
+    git log --all --fixed-strings --grep="$agent" --pretty=%ct -1 2>/dev/null \
         || true
 }
 

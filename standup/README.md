@@ -22,10 +22,13 @@ Observe — not the agent's goodwill.
   `delivered/` only once actually shown), which is why it can't silently drop
   a redirect. Severities: `info | redirect | halt`.
 - **`guard.sh <agent> -- <cmd...>`** — the forced-observe wrapper. Wrap the
-  tools an agent uses in its dev loop (tests, build, git); it runs the
-  command, appends any pending bus messages as a footer the agent can't miss
-  (it ran the command to read the result), and on a pending `halt` forces a
-  nonzero exit (code 87) so the agent treats it as a stop-and-reorient.
+  tools an agent uses in its dev loop (tests, build, git); it runs the command
+  (in a subshell), appends any pending bus messages as a footer **on stderr**
+  (so structured stdout stays intact for machine consumers) that the agent
+  can't miss (it ran the command to read the result), and on a pending `halt`
+  forces a nonzero exit (code 87) so the agent treats it as a stop-and-reorient.
+  A halt that arrives *while* the command runs is caught too (halt-state is
+  sampled after the command, before delivery).
 - **`standup.sh`** — the Observe step for a lead or human: `observe` reads
   git history + status files, flags stalls (no commit past a threshold =
   candidate rabbit-hole), and `redirect`/`halt` queue guidance the guarded

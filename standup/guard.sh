@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # guard.sh — the forced-observe wrapper. Runs the agent's inner-loop command
-# and appends any pending bus messages to the output, so the agent — which
-# ran the command to read its result — cannot miss them. A pending `halt`
-# forces a nonzero exit even when the command itself succeeded, weaponizing
-# the agent's own error-handling reflex into a reorient.
+# and appends any pending bus messages to STDERR (so structured STDOUT stays
+# intact for machine consumers), where the agent — which ran the command to
+# read its result — still sees them. A pending `halt` forces a nonzero exit
+# even when the command succeeded, weaponizing the agent's own error-handling
+# reflex into a reorient.
 #
 #   guard.sh <agent-id> -- <command...>
 #
@@ -13,8 +14,8 @@
 # the Observe at the tool-call chokepoint it already passes through.
 #
 # Exit: the command's own status, UNLESS a halt is pending, in which case 87
-# (a distinctive "halted by standup" code) after the command output and the
-# situation footer are emitted.
+# (a distinctive "halted by standup" code) after the output and the situation
+# footer are emitted. A command that failed on its own keeps its own status.
 set -uo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -26,18 +27,21 @@ agent=$1; shift
 shift
 [ $# -ge 1 ] || { echo "guard: empty command" >&2; exit 2; }
 
-# Capture halt-state BEFORE draining (drain moves messages out of the inbox).
-halt=0
-"$bus" halting "$agent" 2>/dev/null && halt=1
-
-# Run the wrapped command, stdout/stderr passing through live.
-"$@"
+# Run the wrapped command in a SUBSHELL so a wrapped `exec`/`exit`/`set` cannot
+# replace this process or bypass the footer. stdout/stderr pass through live.
+( "$@" )
 status=$?
 
-# Append pending situation messages as a footer (drain shows + marks delivered).
+# Sample halt-state AFTER the command (catches a halt that arrived while it
+# ran) and BEFORE the drain that would consume it. The footer goes to stderr,
+# leaving the command's stdout uncorrupted for machine consumers.
+halt=0
 if "$bus" haspending "$agent"; then
-    echo
-    "$bus" drain "$agent"
+    "$bus" halting "$agent" && halt=1 || true
+    {
+        echo
+        "$bus" drain "$agent"
+    } >&2
 fi
 
 # A pending halt overrides a success: force the reorient. A command that
