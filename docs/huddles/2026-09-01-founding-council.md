@@ -529,3 +529,25 @@ no peek-logging requirement, and no permission regime on source. What remains:
   permission regimes, but **context-packing defaults** (lean pack vs.
   neighbor-source-included) for junior-tier implementers — a context-hygiene
   question, not a security one.
+
+## Post-closure CEO ruling — 2026-09-02: deviation empowerment restored
+
+The CEO caught a doctrinal inconsistency between two settled lines:
+"instruction-vs-intent conflict → huddle, never a silent pick" contradicts
+the ratified deviation rule "reversible in-scope bends log and proceed." The
+second line governs; the first is amended. Corrected doctrine:
+
+- **The Boydian default stands: those on the ground are empowered to deviate
+  from instruction to serve intent, on their own judgment — logged, not
+  asked.** "Never a silent pick" narrows to "never an *unlogged* pick."
+- The huddle is **mandatory** only where the reversibility gate already
+  requires it (irreversible effects, boundary-crossing, beyond owned scope),
+  and **voluntary** whenever the worker is uncertain what intent requires.
+- Fork-and-continue is what makes the voluntary huddle real: consultation
+  costs no tempo, so uncertainty no longer forces the human soldier's choice
+  between asking and acting. That — not a mandatory gate — is the
+  agent-native improvement on mission command.
+- Deviations are adjudicated retroactively at the next standup (the manager
+  model: justified is justified). A lead may explicitly *tighten* the
+  deviation envelope for a specific work package as a stated acceptance
+  condition; the doctrine's default stays loose.
