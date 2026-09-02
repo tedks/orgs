@@ -1,0 +1,17 @@
+id: claude-md-refresh
+title: 'Update CLAUDE.md: origin remote now exists (github.com/tedks/orgs); refresh
+  project-structure section'
+desc: ""
+type: task
+component: docs
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-09-02T09:00:19-00:00
+references: []
+log_events:
+- time: 2026-09-02T09:00:19-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
