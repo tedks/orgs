@@ -33,3 +33,7 @@ Design goals:
 
 No skills are implemented yet; see [docs/spec-template.md](docs/spec-template.md)
 and [skills/README.md](skills/README.md) for the intended shape.
+
+## License
+
+[AGPL-3.0](LICENSE).
