@@ -1,0 +1,17 @@
+id: crystal-archive-guard
+title: 'crystal: guard git archive|tar per-pair (one extraction failure aborts whole
+  run)'
+desc: ""
+type: bugfix
+component: crystal
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-09-02T09:09:02-00:00
+references: []
+log_events:
+- time: 2026-09-02T09:09:02-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
