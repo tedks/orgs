@@ -1,12 +1,11 @@
 # Work package: server
 
-- **State:** DRAFT
+- **State:** CLAIMED — worker-server, Sonnet 5 (Agent tool, general-purpose subagent)
 - **Owner (role):** L3 implementer · **Model:** sonnet (integration
   judgment — socket lifecycle, partial-read handling, connection
   persistence across multiple pipelined commands — carries more open
   design surface than the other two packages' fully-enumerated contracts)
-- **Base revision:** <to be stamped at claim — after resp-codec and
-  command-engine are ACCEPTED; see Dependencies>
+- **Base revision:** 3f70fdc (resp-codec and command-engine both ACCEPTED)
 - **Intent:** Serves spec §"Firewalled Entities" entity 3 (server) and the
   spec's stated Decisions ("sequential accept loop, one connection served
   at a time" — "pipelined sequential" is the graded behavior). This
