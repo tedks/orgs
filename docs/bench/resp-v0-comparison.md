@@ -59,11 +59,40 @@ not the frozen artifact run against a real `redis-cli`.
   delivered — a message-delivery gap, not a protocol defect (the protocol
   work completed correctly each time). It only progressed when hand-nudged.
 
+## Correction (after the pilot completed)
+
+The "equal graded correctness" headline is true only of the **16 graded
+assertions** — and it undersells the protocol. On the **un-graded adversarial
+surface** (malformed wire input) the protocol build is meaningfully more
+robust, via a mechanism the baseline structurally cannot have:
+
+- Lead review found a crash class — a wire-producible RESP nil bulk string as
+  the command name `AttributeError`s and kills the whole server process (a DoS
+  on a network server, not a cosmetic bug) — fixed it to fixpoint over two
+  rounds, and **promoted the fix as a contract clarification**.
+- The server implementer, handed that defect class in its **context manifest**,
+  then independently found and fixed **three more instances of the same shape**
+  (nil arrays, non-`BulkString` elements, empty arrays) before ever submitting.
+
+This is **defect-class propagation through the published contract** — a bug
+found in one entity becomes a contract clarification that is packed into the
+next worker's context, preventing the whole class. It is the firewall/contract
+/context-assembly thesis delivering: knowledge flows through the published
+surface, not by everyone reading everyone's code. The null-check, single flat
+file with no reviewer, shipped with honest un-graded gaps and no mechanism to
+catch or propagate any of this — a real network server built that way would
+crash on the first malformed frame.
+
+So the honest comparison is: **equal on graded conformance, protocol
+materially more robust on the adversarial surface**, at ~5–7× token cost. The
+pilot's own tests (82/82) and a 12/12 raw-socket smoke back this up.
+
 ## Reading
 
 On a bounded 3-entity task, the full protocol cost ~5–7× the tokens of a
-single capable agent for **equal graded correctness**, buying one real caught
-crash, better architecture, and an audit trail. Two things follow, both
+single capable agent for equal *graded* correctness plus materially better
+robustness, buying a caught+propagated crash class, firewalled architecture,
+and an audit trail. Two things follow, both
 bearing on the "standup is the 80/20" hypothesis:
 
 1. **The value the protocol added was concentrated in the review ladder**
