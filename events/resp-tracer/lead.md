@@ -295,3 +295,183 @@
   sense - everything already lives on pilot-resp branch directly, no
   separate feature branches per package this sprint - so INTEGRATED
   means: assemble, keep boundary tests green, run the conformance exam).
+
+## lead:20 · 2026-09-02T03:00:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: work-packages/resp-codec.md, work-packages/command-engine.md, work-packages/server.md
+- sprint:resp-tracer EXECUTING->INTEGRATING. Evidence: every
+  non-abandoned work package (resp-codec, command-engine, server) is
+  ACCEPTED. Integration here is trivial in the merge sense - all three
+  landed directly on pilot-resp (no per-package branches this sprint,
+  per lead:7's sequential-dispatch deviation) - so INTEGRATING is:
+  assemble, keep boundary tests green, run the conformance exam.
+
+## lead:21 · 2026-09-02T03:01:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: bench/conformance/resp_conformance.sh, bench/conformance/resp_smoke_rawsocket.py
+- Integration evidence: full suite `python3 -m unittest discover -s
+  targets/resp/tests` -> 82/82 pass (26 codec + 26 engine + 15 server-
+  integration + ~15 codec_impl/other extras). Frozen conformance exam
+  `bash bench/conformance/resp_conformance.sh python3
+  targets/resp/server.py` -> exits 2 ("redis-cli not found"), confirming
+  the redis-cli-absence prediction logged at lead:4/lead:9. Raw-socket
+  substitute `python3 bench/conformance/resp_smoke_rawsocket.py python3
+  targets/resp/server.py` -> **12 passed, 0 failed**, exit 0. This is
+  weaker evidence than a real redis-cli pass (per the script's own
+  header) but is the strongest available evidence in this environment:
+  PING, ECHO, GET, SET (incl. missing-key nil), DEL (present+missing),
+  INCR, binary-safe SET/GET (embedded CRLF+NUL), INCR-non-integer error,
+  SET-wrong-arity error, and true one-connection pipelining (both
+  requests written before either reply read) all pass against the fully
+  assembled, ACCEPTED three-entity server.
+
+## lead:22 · 2026-09-02T03:02:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: lead:21
+- sprint:resp-tracer INTEGRATING->RETRO. Evidence: pilot-resp branch (this
+  sprint's integration line) green on all boundary tests (82/82) plus the
+  raw-socket conformance substitute (12/12); no open Crystal conflicts
+  (none possible - single-branch, sequential execution this sprint, no
+  parallel feature branches to speculatively merge-check).
+
+## lead:23 · 2026-09-02T03:10:00Z · deviation-adjudicated
+- actor: L6 lead (Claude Code, Sonnet 5), as retro adjudicator (no
+  standup was convened this sprint - no trigger fired; RUNBOOK routes
+  unadjudicated deviations to retro)
+- based_on: 2cb0853
+- refs: lead:2
+- lead:2 (skip foreign-provider council review ladder step) ->
+  **justified, with a flagged caveat**. Justified because: explicit
+  instruction from the invoking lead who assigned this whole sprint, for
+  an explicitly-named "first stab" whose own purpose (per bench/README.md
+  v0.9 "organic shakedown") is finding protocol failure modes cheaply
+  before scaling cost - skipping the most expensive review-ladder step
+  for a bounded 3-entity pilot is a defensible reading of that intent.
+  Caveat (not resolved by this adjudication, escalated): DOCTRINE.md is
+  explicit that only the CEO loosens below doctrine defaults, and I
+  cannot cite an artifact establishing the invoking lead's CEO-delegation
+  for this call. Recommend the CEO (or the invoking lead, if delegated)
+  issue an actual ruling confirming or overriding this before it's
+  treated as precedent for any sprint beyond this one.
+
+## lead:24 · 2026-09-02T03:11:00Z · deviation-adjudicated
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: lead:7
+- lead:7 (sequential rather than parallel worker dispatch, despite
+  necessity-challenge confirming resp-codec/command-engine were
+  independent) -> **justified**. Avoided a real, unnecessary git
+  index-lock race on a shared working tree for a two-worker case; cost
+  was wall-clock only (no token/quality cost), and the friction note
+  is already filed for the runbook to address structurally (per-worker
+  scratch worktrees) rather than leaving future leads to rediscover the
+  same tradeoff ad hoc.
+
+## lead:25 · 2026-09-02T03:12:00Z · deviation-adjudicated
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: worker-codec:2 (events/resp-tracer/worker-codec.md)
+- worker-codec:2 (creating test_codec_impl.py despite the Owned-scope
+  line's broad "don't edit any file under targets/resp/tests/" wording)
+  -> **justified**. Already assessed during lead-review (lead:10); the
+  work package's own Acceptance-criteria section explicitly carves out
+  this exact filename as the implementer's scope - the specific
+  instruction controls over the general one, and reading it the other
+  way would make the work package self-contradictory. Protocol friction
+  note: the work-package template doesn't warn authors (i.e. me) to keep
+  "Owned scope" and "Acceptance criteria" mutually consistent when one
+  names a specific carve-out file - worth a template callout so future
+  leads don't create this same latent self-contradiction.
+
+## lead:26 · 2026-09-02T03:13:00Z · deviation-adjudicated
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: worker-server:1 (events/resp-tracer/worker-server.md)
+- worker-server:1 (_is_command() precondition guard added beyond the
+  work package's literal instruction) -> **justified**. Already assessed
+  during lead-review (lead:18): correctly grounded in C2's own
+  "server is responsible for only calling execute() with such input"
+  text, reproducibly prevents a real crash class, no scope creep into
+  C1/C2 territory (no wire-format or command-semantic literals
+  introduced), four dedicated non-vacuous tests. This is Auftragstaktik
+  working as designed: the worker was explicitly prompted (in its
+  context manifest) to think about the analogous edge-case class the
+  prior package's review had just caught, and it did, unprompted by any
+  further human/lead intervention, catching a second real crash before
+  it ever reached review.
+
+## lead:27 · 2026-09-02T03:14:00Z · lesson
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: lead:12, lead:18, worker-server:1
+- Cross-package pattern worth naming explicitly for LESSONS.md: telling
+  one worker's context manifest about a defect class another worker's
+  review just caught propagated the fix forward without another review
+  round catching it after the fact - the second instance was caught by
+  the *implementer itself*, pre-submission, not by review. This is
+  cheaper than the review ladder catching the same bug shape three
+  times across three packages. Filing as a LESSONS.md entry next.
+
+## lead:28 · 2026-09-02T03:20:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: lead:5, lead:10, lead:12, lead:14, lead:16, lead:18
+- sprint:resp-tracer RETRO evidence, meta:product ratio (RUNBOOK §8 v0
+  operational definition):
+  Product (implementer work-package invocations), token-metered where
+  the harness reported subagent_tokens:
+    worker-codec 118,996 + worker-engine(initial) 66,188 +
+    worker-server 129,743 = 314,927.
+  Word-count-substituted (SendMessage-continuation invocation, no
+  harness token report): worker-engine rework-fix reply, 127 words.
+  Coordination (necessity-challenge + review-seat invocations),
+  token-metered: necessity-challenge 56,442 + lead-review-resp-codec-r1
+  85,083 + lead-review-command-engine-r1 79,803 + lead-review-server-r1
+  96,259 = 317,587. Word-count-substituted: lead-review-command-engine-r2
+  (warm-chained via SendMessage), 123 words.
+  Seat-only ratio (both buckets' invocations only, excluding the lead's
+  own session): coordination:product ~= 317,587:314,927 ~= 1.01:1 (near
+  parity) by token count; 123:127 by the word-substituted pair
+  (also near parity) - consistent trend across both measurement methods.
+  **Protocol-definition gap found while computing this**: RUNBOOK §8's
+  bucket list (huddle, standup, review-seat, necessity-challenge,
+  ledger-maintenance for coordination; implementer work-package for
+  product) has **no bucket for the lead's own decomposition, contract-
+  authoring, work-package-cutting, dispatch-prompt-writing, or tracer-
+  bullet-building** - the single largest continuous chunk of token spend
+  this sprint (this session's own context usage, ~260K+ tokens across
+  the whole sprint per the harness's total-budget counter, versus zero
+  cited in either bucket above). Ledger-maintenance (a real subset of
+  the lead's session) IS a named coordination bucket, but decomposition/
+  contract-authoring is not named anywhere, and the tracer bullet is
+  product-shaped work with no product bucket that fits a *lead*
+  performing it (the bucket says "implementer work-package invocations,"
+  which the tracer-bullet build is not - it precedes work-package
+  cutting entirely, per RUNBOOK §3). Filing as protocol friction / a
+  LESSONS.md entry rather than picking an arbitrary split that would
+  make the ratio look more finished than the definition actually
+  supports.
+
+## lead:29 · 2026-09-02T03:30:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 2cb0853
+- refs: lead:23, lead:24, lead:25, lead:26, lead:28, LESSONS.md
+- sprint:resp-tracer RETRO->CLOSED. Evidence: all logged deviations
+  adjudicated (lead:23-26, all justified, one flagged for CEO
+  confirmation); meta:product recorded (lead:28, including the
+  bucket-definition gap found); five LESSONS.md entries filed (defect-
+  class propagation via context manifest, concurrent-worktree git-race,
+  meta:product bucket gap, frozen-fixture self-review catch, async
+  SendMessage-continuation wait); no amendment proposals warranted this
+  sprint (deviation/docs-bug/interpretation counts per boundary: C1 one
+  docs-bug (lead-authored fixture, fixed), C2 one clarification
+  (promoted), both within normal single-sprint noise, not a pattern
+  indicating the contracts themselves are wrong). Cold-start audit: not
+  run - this sprint is not a declared milestone requiring one (M3 is
+  "integration and closure," and the launch instruction's ask was
+  narrower than a full milestone cold-start; flagging as a candidate for
+  the invoking lead to run separately if desired, since the artifacts
+  are now complete enough to attempt one).
