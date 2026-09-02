@@ -9,9 +9,12 @@ An entry's stable id is `<actor-id>:<local-seq>`, where `local-seq` is
 monotonic **within one shard only** (so it is collision-free without
 coordination). The `ISO timestamp` (ties broken by actor-id) gives a
 *display* order only — **lifecycle state is reconstructed by following each
-artifact's own event chain** (`refs` / `based_on` point at the predecessor
-event), never by wall-clock, so a clock tie or skew across shards can never
-place `DECIDED` before `CONVENED` or a takeover before its prior state. Never edited retroactively —
+artifact's own event chain**: `refs` carries the predecessor event id(s)
+(`<actor-id>:<local-seq>`), and reconstruction follows those, never
+wall-clock, so a clock tie or skew across shards can never place `DECIDED`
+before `CONVENED` or a takeover before its prior state. (`based_on` is a
+separate field and stays what it is everywhere else — the git sha the actor
+reasoned from — not an event pointer.) Never edited retroactively —
 corrections are new events referencing the old by id. Projections
 (interpretation register, case state, current-contract view) are derived
 views over the union; in v0 they are maintained by hand at standup/retro and

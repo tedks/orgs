@@ -18,7 +18,7 @@ tests exactly this).
 | — | DRAFT | lead | intent field naming the spec section served |
 | DRAFT | READY | lead | acceptance criteria + boundary tests named; necessity challenge passed (PROCEED or SIMPLIFY applied) |
 | READY | CLAIMED | worker (or lead assigns) | worker + model recorded (role and model both stamped) |
-| CLAIMED/IN_PROGRESS/REVIEW/REWORK | (re-CLAIMED) | lead | `takeover` event: new owner + model + reason — so takeover rate is derivable at retro |
+| CLAIMED/IN_PROGRESS/REVIEW/REWORK | CLAIMED | lead | takeover — resets to CLAIMED under the new (higher-tier) owner with a fresh context pack, re-walking the ladder from there; a `takeover` event records new owner + model + reason, so takeover rate is derivable at retro |
 | CLAIMED | IN_PROGRESS | worker | context manifest committed |
 | IN_PROGRESS | BLOCKED | worker | blocking dependency, filed escalation, or open huddle named |
 | BLOCKED | IN_PROGRESS | worker | blocker resolved, entry references resolution |

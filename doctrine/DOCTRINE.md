@@ -101,10 +101,15 @@ loose. No one but the CEO loosens below doctrine defaults.
 
 ## The reversibility gate, precisely
 
-An action is gated when its rollback operation cannot be named in the
-deviation log entry. `git reset` reverses repo state; it does not reverse
-publishing across a boundary, messages sent, credentials consumed, or
-external effects. Reads are not actions and are never gated.
+Huddle-first is required when any of the three bullets above holds. The first
+is about reversibility: an action is gated when its rollback operation cannot
+be named in the deviation log entry — `git reset` reverses repo state, but
+not publishing across a boundary, messages sent, credentials consumed, or
+external effects. The second is about boundaries: publishing a new version,
+breaking an existing one, or depending on an unpublished surface is gated;
+ordinary use of a published contract, and any read, is not. The third is
+about scope: work outside your package's owned scope is gated. A close call
+is gated if it trips any of the three, not only the reversibility one.
 
 ## Glossary
 
