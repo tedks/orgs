@@ -49,6 +49,7 @@ visibility below):
 | `INCR` | 1 (key) | key present, does not parse as base-10 int | `Error("ERR value is not an integer or out of range")`, store unchanged |
 | `INCR` | 0 or 2+ | — | `Error("ERR wrong number of arguments for 'incr' command")` |
 | *(anything else)* | — | unrecognized command name | `Error("ERR unknown command '<name>'")` — included for robustness (a garbage command must not crash the engine), not itself a goal-command assertion in the frozen exam |
+| *(nil command name)* | — | `command.value[0].value is None` (a RESP nil `BulkString` in the name slot — legal per C1, wire-producible via `*1\r\n$-1\r\n`) | `Error("ERR unknown command ''")` — same path as an unrecognized command name, never raises |
 
 - `SET` takes **no options** (no `EX`/`PX`/`NX`/`XX` — expiry is a spec
   non-goal). Any arg count other than exactly 2 is a wrong-arity error;
@@ -93,10 +94,25 @@ visibility below):
 
 ## Intentionally unspecified
 
-- Behavior when `command.value` is empty or contains a non-`BulkString`
-  element — not a case the boundary tests exercise; `execute()` may raise
-  or behave arbitrarily. The server never constructs such a call (its own
-  boundary tests cover that it doesn't).
+- Behavior when `command.value` is empty, is `None` (nil `Array`), or
+  contains a non-`BulkString` element — not a case the boundary tests
+  exercise; `execute()` may raise or behave arbitrarily. The server is
+  the enforcement point for this precondition (see
+  `targets/resp/server.py`'s `_is_command()` guard, added by the server
+  work package specifically because these shapes are C1-well-formed and
+  therefore wire-reachable) — it must not let such a frame reach
+  `execute()`. This carve-out is deliberately narrower than it was at v1
+  authoring: a *nil command-name* (`BulkString(None)` as element 0 of an
+  otherwise well-formed `Array[BulkString]`) is **not** in this
+  unspecified set — see the per-command table's "(nil command name)"
+  row, added 2026-09-02 as a clarification (STATES.md Interpretation:
+  fills silence, narrows no previously-promised behavior — nothing could
+  have relied on "arbitrary" before this). Provenance: found by lead
+  review on the command-engine work package (a wire-producible input the
+  frozen boundary tests didn't probe, causing an uncaught `AttributeError`
+  that would have crashed the whole server process); ruled by the lead as
+  contract owner; implemented in `engine.py` and independently
+  defended-in-depth by the server's own `_is_command()` guard.
 - Case handling of argument *values* (e.g. key names) — always treated as
   opaque bytes, case-sensitive; only the **command name** is
   case-folded.
@@ -124,5 +140,11 @@ state persisting across `execute()` calls on one instance). Run:
 
 ## Interpretation register
 
-None yet. File against this contract in `contracts/` per protocol;
-clarifications promote into this document immediately.
+- **2026-09-02 · clarification · PROMOTED.** Nil command-name
+  (`BulkString(None)` as `command.value[0]`) is defined behavior, not
+  unspecified: `Error("ERR unknown command ''")`, never a raised
+  exception. Filed as `worker-engine:2`
+  (`events/resp-tracer/worker-engine.md`), ruled by the lead
+  (`events/resp-tracer/lead.md` lead:12/lead:18), promoted here
+  immediately per protocol. See per-command table and "Intentionally
+  unspecified" above.
