@@ -19,7 +19,10 @@
 ## Interpretations Log
 
 <!-- Cheap, logged rulings on what a contract means where it was silent.
-     Folded into amendments at retro cadence. -->
+     Lifecycle per protocol/STATES.md: a clarification (fills silence,
+     narrows no permitted behavior) promotes into spec text immediately; a
+     temporary exception carries scope and expiry; an amendment candidate
+     enters the full amendment process. -->
 
 ## Milestones
 
