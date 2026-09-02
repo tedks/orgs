@@ -14,10 +14,11 @@ crystal/crystal-check.sh [--base <branch>] [--test-cmd <cmd>] [branch ...]
 Checks every named branch against the base and every pair against each
 other. Textual detection uses `git merge-tree --write-tree` (git ≥ 2.38) —
 no worktree, no index, no ref is touched. With `--test-cmd`, the clean
-merged tree is checked out as **plain files** (a throwaway index +
-`git checkout-index`, no `.git` in the scratch dir) and the command runs
-there (`bash -c`, cwd = the merged files, git env and OLDPWD unset); failure
-is reported as a semantic conflict. Only local branch names are accepted,
+merged tree is extracted as **plain files** (`git archive | tar`, no `.git`
+in the scratch dir) and the command runs there (`bash -c`, cwd = the merged
+files; git env, OLDPWD unset and `GIT_CEILING_DIRECTORIES` set so git cannot
+discover a real repo above the scratch dir); failure is reported as a
+semantic conflict. Only local branch names are accepted,
 each pinned to a commit once up front so a concurrent ref update cannot
 desync the report from the tested tree. Requires bash ≥ 4. Exit codes: `0`
 all clean · `1` conflicts found · `2` error.
@@ -35,6 +36,10 @@ Assumptions and residuals worth knowing:
   — in the org, ones the team authored.
 - A `--test-cmd` that itself requires a git repository is out of scope in v0
   (it finds no `.git` and reports FAIL — noise, not a semantic conflict).
+- A repo that relies on `export-ignore`/`export-subst` for a buildable tree,
+  or on clean/smudge filters (e.g. Git LFS), is out of scope for v0 semantic
+  checks: extraction is `git archive`, chosen over `checkout-index` because
+  it runs no filter code (the safer failure for a background tool).
 - `--timeout` (default 120s, needs coreutils `timeout`) bounds a wedged
   foreground command but not a process the test *backgrounds*; boundary-test
   commands must not daemonize.

@@ -114,22 +114,46 @@ rm -rf "$base_only"
 [ "$bo_status" -eq 0 ] || fail "base-only repo: expected exit 0, got $bo_status"
 
 # 5. sandbox isolation: a test command that tries to mutate git must NOT
-#    affect the real repo. Covers the escape paths the sandbox closes — the
-#    cwd (no .git present), OLDPWD/`cd -`, and inherited GIT_DIR — each of
-#    which, if it reached the real repo, would create a branch. The real
-#    repo's branch set must be unchanged after.
-before=$(git for-each-ref --format='%(refname)' refs/heads | sort)
+#    affect the real repo. Covers every escape path the sandbox closes — cwd
+#    (no .git present + GIT_CEILING stops upward discovery), OLDPWD/`cd -`,
+#    and an inherited GIT_DIR pointing at the real repo — each of which, if
+#    it reached the real repo, would create a pwned-* branch. Crystal must
+#    exit 0 (evil ends in `true`, so tests pass); a non-zero exit would mean
+#    crystal errored before evil ran, which must not count as a pass.
+branch_names() { git for-each-ref --format='%(refname)' refs/heads | sort; }
+before=$(branch_names)
 evil='git branch pwned-cwd 2>/dev/null;
       cd - >/dev/null 2>&1 && git branch pwned-oldpwd 2>/dev/null;
       cd "${OLDPWD:-/nonexistent}" 2>/dev/null && git branch pwned-oldpwd2 2>/dev/null;
+      git branch pwned-gitdir 2>/dev/null;
       true'
-out=$("$crystal" --base master --test-cmd "$evil" ok-a 2>&1) || true
-after=$(git for-each-ref --format='%(refname)' refs/heads | sort)
+iso_status=0
+# Export GIT_DIR/GIT_WORK_TREE at the real repo so a regressed sandbox that
+# stops unsetting git-env would let `git branch` inside evil hit the real repo.
+out=$(GIT_DIR="$tmp/.git" GIT_WORK_TREE="$tmp" \
+      "$crystal" --base master --test-cmd "$evil" ok-a 2>&1) || iso_status=$?
+[ "$iso_status" -eq 0 ] || fail "sandbox isolation: crystal exited $iso_status (should be 0):
+$out"
+after=$(branch_names)
 [ "$before" = "$after" ] || fail "sandbox isolation: test command mutated the real repo:
 before=$before
 after=$after"
-if git for-each-ref --format='%(refname)' refs/heads | grep -q 'pwned'; then
-    fail "sandbox isolation: a pwned-* branch was created in the real repo"
-fi
 
-echo "PASS: crystal-check distinguishes textual/semantic/clean, handles base-only, and sandboxes tests"
+# 6. upward-discovery isolation: when TMPDIR sits INSIDE the real repo, git's
+#    parent-directory discovery would find it from the scratch dir — unless
+#    GIT_CEILING_DIRECTORIES stops the walk. Point TMPDIR at a dir under the
+#    test repo and assert an evil `git branch` from the sandbox cannot reach it.
+mkdir -p "$tmp/nested"
+before6=$(branch_names)
+iso6_status=0
+out=$(TMPDIR="$tmp/nested" \
+      "$crystal" --base master --test-cmd 'git branch pwned-ceiling 2>/dev/null; true' ok-a 2>&1) \
+      || iso6_status=$?
+[ "$iso6_status" -eq 0 ] || fail "upward-discovery: crystal exited $iso6_status (should be 0):
+$out"
+after6=$(branch_names)
+[ "$before6" = "$after6" ] || fail "upward-discovery: sandbox reached the enclosing repo via TMPDIR:
+before=$before6
+after=$after6"
+
+echo "PASS: crystal distinguishes textual/semantic/clean, handles base-only, and sandboxes tests (env, OLDPWD, upward-discovery)"

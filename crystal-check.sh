@@ -136,6 +136,7 @@ elif [ "$timeout_s" -gt 0 ]; then
 fi
 
 scratch_root=$(mktemp -d "${TMPDIR:-/tmp}/crystal.XXXXXX")
+scratch_root=$(cd "$scratch_root" && pwd)   # absolutize for GIT_CEILING_DIRECTORIES
 cleanup() { rm -rf "$scratch_root"; }
 trap cleanup EXIT
 
@@ -160,6 +161,10 @@ run_test() {
         # repo) directory, so `cd -` would otherwise walk straight back.
         # shellcheck disable=SC2086
         unset $git_env_vars OLDPWD 2>/dev/null || true
+        # Stop git's upward repo discovery at the scratch root, so a test
+        # running `git` cannot find a real repo that TMPDIR happens to sit
+        # inside. (Not in --local-env-vars, so the unset above leaves it.)
+        export GIT_CEILING_DIRECTORIES="$scratch_root"
         if [ "$have_timeout" -eq 1 ]; then
             timeout --kill-after=10 "$timeout_s" bash -c "$test_cmd"
         else
@@ -192,15 +197,15 @@ check_pair() {
         tree=${mt_out%%$'\n'*}
         if [ -n "$test_cmd" ]; then
             wt_seq=$((wt_seq + 1)); wt="$scratch_root/wt-$wt_seq"; mkdir "$wt"
-            # Faithful checkout of the merged tree as plain files via a
-            # throwaway index. checkout-index applies smudge filters like a
-            # real checkout but ignores export-ignore/export-subst (unlike
-            # git archive), so the sandbox matches what the merge would look
-            # like on disk. No .git reaches the test command.
-            local idx="$scratch_root/idx-$wt_seq"
-            GIT_INDEX_FILE="$idx" git read-tree "$tree"
-            GIT_INDEX_FILE="$idx" git checkout-index -a --prefix="$wt/"
-            rm -f "$idx"
+            # Extract the merged tree as plain files with `git archive`.
+            # Settled v0 choice (do not flip back to checkout-index): archive
+            # emits stored blobs and runs NO clean/smudge filter code, so a
+            # repo-configured filter (e.g. LFS) cannot execute side effects
+            # or hit the network from a speculative background check. The
+            # cost is that archive honors export-ignore/export-subst, so a
+            # repo relying on those for its buildable tree is out of scope
+            # for v0 semantic checks — the safer failure of the two.
+            git archive --format=tar "$tree" | tar -x -C "$wt"
             if run_test "$wt"; then echo "tests: pass"
             else echo "tests: FAIL"; found_conflict=1; fi
             rm -rf "$wt"
