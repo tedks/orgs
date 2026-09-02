@@ -543,10 +543,26 @@ second line governs; the first is amended. Corrected doctrine:
 - The huddle is **mandatory** only where the reversibility gate already
   requires it (irreversible effects, boundary-crossing, beyond owned scope),
   and **voluntary** whenever the worker is uncertain what intent requires.
-- Fork-and-continue is what makes the voluntary huddle real: consultation
-  costs no tempo, so uncertainty no longer forces the human soldier's choice
-  between asking and acting. That — not a mandatory gate — is the
-  agent-native improvement on mission command.
+- Fork-and-continue makes the voluntary huddle *cheaper* than human
+  consultation — the worker never stops — but **not free, and not
+  epistemically privileged** (CEO correction, 2026-09-02). Consultation has
+  real latency and real plumbing failure modes (observed in practice:
+  writer-lock conflicts, silent wrong-session resumes, minutes-long seat
+  round-trips), and — basic Boyd — the adjudicator rules on a transmitted
+  snapshot of a world that has moved: the clone carries a compressed, stale
+  picture, and the worker's ground truth does not fit through the huddle.
+  The `based_on`/`applied_at` reconciliation machinery exists precisely
+  because of this. Forward-vested judgment is therefore justified on
+  epistemic grounds, not merely permitted by cheap asking.
+- **Deviations surface structurally regardless of the log.** Every deviation
+  appears in the diff at code review — and agent review is total, not
+  sampled; there is no skimming — and in the delta at standup. The review
+  ladder is what makes forward-vested authority safe: human mission command
+  ran on trust because verification at tempo was impossible; this org keeps
+  forward authority AND total verification, a combination human orgs never
+  had. The one-line deviation log is an accelerator, not the safety
+  mechanism — it converts "anomaly to investigate" into "decision to
+  evaluate" for the reviewer.
 - Deviations are adjudicated retroactively at the next standup (the manager
   model: justified is justified). A lead may explicitly *tighten* the
   deviation envelope for a specific work package as a stated acceptance
