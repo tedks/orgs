@@ -1,6 +1,6 @@
 # Work package: server
 
-- **State:** CLAIMED — worker-server, Sonnet 5 (Agent tool, general-purpose subagent)
+- **State:** ACCEPTED — lead review lead:18, no rework needed (round 1)
 - **Owner (role):** L3 implementer · **Model:** sonnet (integration
   judgment — socket lifecycle, partial-read handling, connection
   persistence across multiple pipelined commands — carries more open

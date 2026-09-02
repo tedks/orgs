@@ -257,3 +257,41 @@
   skipped this sprint (lead:2). C2 v1 is now a real, ACCEPTED
   implementation. Both C1 and C2 ACCEPTED - server's Dependencies gate
   is satisfied; claiming work-package:server next.
+
+## lead:18 · 2026-09-02T02:50:00Z · lead-review
+- actor: L6 lead (Claude Code, Sonnet 5), delegated to a fresh sonnet
+  subagent (agentId aa3a8ce68b9897e67)
+- based_on: 3789994
+- refs: work-packages/server.md
+- Outcome: ACCEPTED (round 1, no rework). Independently re-ran full
+  suite (82/82). Verified: exactly one Engine() constructed before the
+  accept loop and shared across connections; accept loop genuinely
+  sequential; read loop handles arbitrary recv() chunk sizes and
+  iterates all frames per feed() call (byte-at-a-time pipelining test
+  genuinely writes-before-read, not a false-positive read-write-read-
+  write pattern); ProtocolError closes only the offending connection,
+  never re-invokes feed() on the same parser, server keeps running;
+  --port/$PORT CLI untouched. The worker's own deviation (a precondition
+  guard before engine.execute() rejecting empty/nil Array and non-
+  BulkString-element commands) independently verified justified: all
+  three inputs are C1-well-formed but C2-undefined, reproducibly crash
+  engine.py by inspection, and C2's own text delegates exactly this
+  precondition to the server - not scope creep, no RESP/command literals
+  introduced, zero effect on graded exam behavior (redis-cli never sends
+  such frames), four dedicated non-vacuous tests. One Minor non-blocking
+  note: no per-connection recv timeout, so a connect-and-never-send
+  client stalls the sequential server - acceptable given the spec's
+  concurrency non-goal, flagged for retro.
+
+## lead:19 · 2026-09-02T02:51:00Z · state-change
+- actor: L6 lead (Claude Code, Sonnet 5)
+- based_on: 3789994
+- refs: lead:18
+- work-package:server REVIEW->ACCEPTED. Evidence: lead-review ACCEPTED
+  (lead:18), council skipped (lead:2). All three work packages
+  (resp-codec, command-engine, server) are now ACCEPTED. sprint:
+  EXECUTING->INTEGRATING next (every non-abandoned package INTEGRATED
+  is the STATES.md gate, but integration here is "merge" in the trivial
+  sense - everything already lives on pilot-resp branch directly, no
+  separate feature branches per package this sprint - so INTEGRATED
+  means: assemble, keep boundary tests green, run the conformance exam).
