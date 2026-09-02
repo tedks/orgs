@@ -89,12 +89,17 @@
   convergence read as sequence.
 - **Evidence:** PR #6 review-correction comment.
 - **Applies when:** any review, and acutely when the reviewed artifact can
-  change during the review (live editing, parallel commits). Every verdict
-  must name the exact state it was rendered against — a sha, or explicitly
-  "working tree at time T." A CLEAN with no named base is ambiguous, and
-  "the seat cleared X" is only meaningful once X is pinned.
-- **Reconsider when:** reviews are always rendered against immutable, named
-  revisions (a frozen PR head), so the base is unambiguous by construction.
+  change during the review (live editing, parallel commits). **Prefer correct
+  by construction over reporting:** launch every round against a named,
+  immutable revision (a committed sha / PR head) from a quiescent tree, and
+  name it in the dispatch prompt so each seat reviews exactly it (now RUNBOOK
+  §6). Reporting the state in the verdict — "a sha, or explicitly 'working
+  tree at time T'" — is the weaker fallback for when a frozen target isn't
+  available; a CLEAN with no pinned base is ambiguous, and "the seat cleared
+  X" is only meaningful once X is pinned.
+- **Reconsider when:** the harness makes reviewing a live/unpinned tree
+  impossible (review always resolves a named revision), so the freeze is
+  enforced by tooling rather than discipline.
 
 ## 2026-09-02 — A binding needs a reviewer who can execute its primitives
 
