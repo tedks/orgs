@@ -16,7 +16,13 @@ class Engine:
 
     def execute(self, command):
         args = command.value  # list[BulkString]
-        name = args[0].value.lower()  # bytes, case-insensitive
+        name_value = args[0].value
+
+        # Guard against nil command-name BulkString (RESP nil)
+        if name_value is None:
+            return Error("ERR unknown command ''")
+
+        name = name_value.lower()  # bytes, case-insensitive
 
         # Dispatch to command handlers
         if name == b"ping":

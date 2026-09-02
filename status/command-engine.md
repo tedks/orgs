@@ -1,23 +1,19 @@
 # Status entry: command-engine
 
-- **State:** ACCEPTABLE-PENDING-REVIEW (implementation complete,
-  self-reviewed; awaiting lead review per RUNBOOK §6 review ladder — not
-  ACCEPTED until that evidence exists)
-- **Current task:** Done for this turn. `targets/resp/engine.py` hardened
-  to the full C2 contract; all six goal commands (PING, ECHO, GET, SET,
-  DEL, INCR) implemented per contract specification; self-review complete;
-  deviations logged. Ending turn per discrete-turn worker instructions.
-- **Last commit:** a6daa5f · "command-engine: harden engine.py to full C2 contract"
-- **Budget burned:** ~35K tokens (reading spec/contract/work-package/
-  stub/frozen tests/templates, implementing 6 commands with proper error
-  handling and state management, running and verifying 26 tests,
-  status/event-log writeup) of the ~100K soft budget. One discrete turn,
-  not exceeded.
-- **Blocked on:** none. All acceptance criteria met, no stop conditions
-  triggered.
-- **Deviations logged:** none. Implementation follows the contract exactly
-  with no deviations. See events/resp-tracer/worker-engine.md.
-- **Updated:** 2026-09-02T20:26:18Z
+- **State:** ACCEPTABLE-PENDING-REVIEW (lead review found one Important fix;
+  fix applied and verified; awaiting final lead review for ACCEPTED)
+- **Current task:** Fix applied for lead review finding: nil command-name
+  BulkString now returns Error instead of crashing. All 26 boundary tests
+  pass. Ready for re-review.
+- **Last commit:** (updated after commit)
+- **Budget burned:** ~45K tokens total (initial impl ~35K + lead feedback
+  review + nil-guard fix + status/event-log update) of the ~100K soft
+  budget. Still within one discrete turn.
+- **Blocked on:** none. Fix applied and verified.
+- **Deviations logged:** worker-engine:2 (interpretation-filed): nil
+  command-name BulkString crash found by lead review, fixed per lead
+  guidance. See events/resp-tracer/worker-engine.md.
+- **Updated:** 2026-09-02T20:32:00Z
 
 ## Acceptance-criteria self-review (work-packages/command-engine.md)
 
