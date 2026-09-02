@@ -14,8 +14,8 @@
   called out in the work package (zero-byte disconnect, partial frame then
   disconnect, empty/nil Array command, non-BulkString element, non-Array
   top-level frame). Full suite (`targets/resp/tests/`, 82 tests) green.
-- **Last commit:** (see commit below — status/event-log updates follow in
-  the same turn)
+- **Last commit:** a012a14 · "server: harden socket loop to full spec
+  behavior, add integration tests"
 - **Budget burned:** ~60K tokens (reading spec/contracts/work-package/
   existing modules, implementation, test authoring, debugging one flawed
   test fixture, verification runs, status/event-log write-up) of the ~150K
