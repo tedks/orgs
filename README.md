@@ -21,15 +21,22 @@ Design goals:
 - **Protocol over application.** Durable state is files in git; the repo is
   the office. Any harness (Claude Code, Codex, Antigravity) binds the
   protocol to its native agent primitives.
-- **Contracts first.** Boundaries are designed up front and enforced
-  physically through context assembly — an implementer sees the published
-  contract, not the neighboring team's source.
-- **Mission-type tactics.** Agents carry the commander's intent, are
-  empowered to deviate toward it, huddle when instruction and intent
-  conflict, and log the bends.
+- **Contracts first.** Boundaries are designed up front and enforced at the
+  dependency level — build visibility, consumer-driven contract tests, and
+  total review. Context packing is lean by default (an implementer is
+  *given* the published contract, not the neighboring team's source), but
+  reading is always free: the packing list is hygiene, not a firewall.
+- **Mission-type tactics.** Agents carry the commander's intent and are
+  empowered to deviate from instruction to serve it, on their own judgment,
+  logging the bend; huddles are reserved for irreversible or
+  boundary-crossing moves and for genuine uncertainty.
 - **Existing org wisdom, applied.** Agents act out the processes of a
   well-run engineering org — design review, player-coach leads, written
   standups, blameless retros — rituals models already understand deeply.
 
 No skills are implemented yet; see [docs/spec-template.md](docs/spec-template.md)
 and [skills/README.md](skills/README.md) for the intended shape.
+
+## License
+
+[AGPL-3.0](LICENSE).
