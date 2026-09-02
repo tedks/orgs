@@ -260,16 +260,25 @@
   productively on independent, unblocked prep (the raw-socket
   conformance substitute) rather than stalling — but this required
   noticing the asymmetry and improvising a workaround, not something the
-  runbook told the lead to expect or plan for. A concurrent
-  bench-comparison write-up (`benchcmp` worktree, observing this same
-  session) independently characterized this exact pattern as "the lead
-  stalled idle three times waiting on subagent results" — external
-  corroboration that this is a real, repeated cost, not a one-off.
+  runbook told the lead to expect or plan for. This happened **twice**
+  this sprint (the command-engine REWORK dispatch, and the round-2
+  fix-delta re-review dispatch) — both self-verified and self-resolved
+  by the lead's own next tool calls (re-running the repro and boundary
+  tests; reading the CLEAN verdict) before any external nudge, not
+  rescued by one. **Correction:** a concurrent bench-comparison write-up
+  originally characterized this as "the lead stalled idle three times,"
+  which this entry repeated uncritically at first filing; that count was
+  wrong and has since been corrected at the source
+  (`benchcmp` worktree, `docs/bench/resp-v0-comparison.md`,
+  reconciled 2026-09-02 after the lead's own turn-by-turn transcript
+  showed two cycles, not three) — recorded here as an example of
+  provenance pollution (an unverified figure from one artifact silently
+  becoming "evidence" in another) as much as of the underlying finding.
 - **Evidence:** this session's own SendMessage calls to
   `ae1c424bf87a43ecf` (rework) and `adc6e2c6469f8d1df` (round-2
-  re-review); `/home/tedks/Projects/orgs/benchcmp/docs/bench/resp-v0-comparison.md`
-  ("The lead stalled idle three times... It only progressed when
-  hand-nudged").
+  re-review) — two, per the lead's own transcript;
+  `/home/tedks/Projects/orgs/benchcmp/docs/bench/resp-v0-comparison.md`
+  (corrected copy, post-reconciliation).
 - **Applies when:** any review round beyond round 1 (feedback rounds,
   warm-chained re-review) that continues a subagent via `SendMessage`
   rather than a fresh `Agent` call. The binding
