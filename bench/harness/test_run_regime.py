@@ -190,12 +190,13 @@ def test_off_mechanisms_are_named_off_against_the_shared_runbook() -> None:
         off = [k for k in rr.TOGGLE_KEYS if not cfg.toggles[k]]
         if not off:
             continue
-        check("this table wins" in build,
+        check("That table is exhaustive" in build,
               f"{path.name}: the prompt carries the runbook but never says the "
-              "toggle table outranks it")
+              "toggle table is the closed list")
         for mech in off:
-            check(f"`{mech}`" in build,
-                  f"{path.name}: {mech} is off but the prompt never names it as OFF")
+            check(f"`{mech}`" not in build,
+                  f"{path.name}: {mech} is OFF but the prompt names it — the "
+                  "arm defined by lacking a mechanism must not read its name")
 
 
 def test_standup_bus_is_pinned_in_every_guard_invocation() -> None:
@@ -225,6 +226,75 @@ def test_standup_bus_is_pinned_in_every_guard_invocation() -> None:
             check(str(ctx.bus_root) in line,
                   f"{n}: a guard invocation points at the wrong bus: {line.strip()!r}")
         check(guard in build, f"{n}: standup is on but no guard command is shown")
+
+
+def test_an_off_mechanisms_name_never_appears_in_any_prompt() -> None:
+    """The CTO's non-negotiable: r4's prompts must not say "crystal", r5's
+    must not say "standup".
+
+    A precedence warning ("crystal is OFF, don't use it") does not satisfy
+    this. The arm is DEFINED by lacking the mechanism; naming it tells the
+    agent it is in an ablation and which one, which is contamination the
+    study cannot absorb. Checked across every composed prompt, not just the
+    build one, and with a neutral run root so the test's own directory names
+    cannot mask a real leak.
+    """
+    for path in all_configs():
+        cfg = rr.load_config(path)
+        ctx = make_ctx(cfg, run_id="neutral-probe")
+        prompts = {"build": rr.compose_build_prompt(cfg, ctx),
+                   "fix": rr.compose_fix_prompt(cfg, ctx, rr.DRY_MATERIALS),
+                   "audit": rr.compose_audit_prompt(cfg, ctx, rr.DRY_MATERIALS)}
+        for step in ("native", "lead", "cto"):
+            if cfg.steps[step]:
+                prompts[f"review-{step}"] = rr.compose_review_prompt(
+                    cfg, ctx, step, rr.DRY_MATERIALS)
+        if cfg.steps["council"]:
+            prompts["council"] = rr.compose_council_prompt(
+                cfg, ctx, rr.DRY_MATERIALS)
+        for mech in ("crystal", "standup"):
+            if cfg.toggles[mech]:
+                continue
+            for name, text in prompts.items():
+                # The regime label itself must not reach the agent either --
+                # `bench-run/r5-orgs-no-crystal-no-standup` would announce the
+                # arm in every path and branch name the prompt contains.
+                check(mech not in text.lower(),
+                      f"{path.name}: {mech} is OFF but its name appears in "
+                      f"the {name} prompt")
+        if not cfg.toggles["decomposition"]:
+            continue
+        check(cfg.regime not in rr.compose_build_prompt(cfg, ctx),
+              f"{path.name}: the build prompt names the regime, telling the "
+              "agent which arm of the study it is in")
+
+
+def test_the_agent_cannot_tell_which_arm_it_is_in() -> None:
+    """The branch and the working directory are the two things every build
+    prompt states outright. Neither may carry the regime's name."""
+    with tempfile.TemporaryDirectory() as td:
+        for name in ("r4-orgs-no-crystal.json", "r5-orgs-no-crystal-no-standup.json"):
+            run = _fake_run(name, Path(td))
+            check(run.cfg.regime not in run.run_branch,
+                  f"{name}: the run branch names the regime")
+            check(run.cfg.regime not in str(run.ctx.run_tree),
+                  f"{name}: the worktree path names the regime")
+            check(run.cfg.regime not in str(run.ctx.workers_dir),
+                  f"{name}: the workers path names the regime")
+            check(run.slug in run.run_branch and len(run.slug) >= 8,
+                  f"{name}: the branch should carry the opaque slug")
+        # The operator's own run directory KEEPS the readable name -- that is
+        # the whole point of splitting them. Checked on the DEFAULT run id,
+        # since _fake_run overrides it.
+        args = argparse.Namespace(
+            framework=str(FRAMEWORK), runs_root=td,
+            ask_agent=str(rr.DEFAULT_ASK_AGENT), run_id=None, dry_run=False,
+            print_prompt=None, config=str(CONFIG_DIR / "r4-orgs-no-crystal.json"))
+        run = rr.Run(rr.load_config(Path(args.config)), args)
+        check(run.cfg.regime in str(run.run_dir),
+              "the operator's run dir should stay identifiable by regime")
+        check(run.cfg.regime not in str(run.ctx.run_tree),
+              "but the agent's worktree must not be")
 
 
 def test_review_steps_gate_prompt_creation() -> None:
@@ -966,8 +1036,12 @@ def test_runbook_is_ablated_with_its_mechanism() -> None:
         kept, removed = rr.filter_runbook(runbook, off)
         check(any(marker in r for r in removed),
               f"{mech} off: section '{marker}' should have been removed")
-        check("REMOVED for this run" in kept,
+        check("not part of this run" in kept,
               f"{mech} off: the removed section leaves no explanatory stub")
+        check(mech not in kept.lower(),
+              f"{mech} off: the filtered runbook still contains the word "
+              f"{mech!r} — removing the section is not enough if the name "
+              "survives elsewhere in the same document")
         check(len(kept) < len(runbook),
               f"{mech} off: the runbook did not actually get shorter")
 
@@ -1875,6 +1949,129 @@ def test_council_mid_loop_abort_keeps_the_rounds_it_ran() -> None:
           "a step that ran rounds must report ran=True even when it aborted")
 
 
+def test_preflight_refuses_a_drifted_arm() -> None:
+    """Six arms are comparable only if built from the same commit against the
+    same inputs. Each arm resolves `master` and re-reads the spec/exam itself,
+    so a commit or an edit between arms silently gives the later ones a
+    different target — and nothing in the resulting manifest would look
+    wrong."""
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("r3-orgs-full.json", Path(td))
+        real = run.ctx.input_hashes
+        check(run.preflight(None, None), "an unpinned arm should proceed")
+        check(run.preflight(run.pinned["base_sha"], dict(real)),
+              "an arm matching the pin should proceed")
+        check(not run.preflight("f" * 40, None),
+              "an arm built from a different base must refuse")
+        check(any(f["kind"] == "base-sha-mismatch" for f in run.failures),
+              "the base mismatch must be recorded")
+        run.failures.clear()
+        check(not run.preflight(None, dict(real, spec="0" * 64)),
+              "an arm reading a different spec must refuse")
+        check(any(f["kind"] == "input-hash-mismatch" for f in run.failures),
+              "the input mismatch must be recorded")
+        check(run.pinned["base_sha"] and len(run.pinned["base_sha"]) == 40,
+              "the arm records what it actually ran against")
+
+
+def test_budget_breach_is_recorded_as_a_failure() -> None:
+    """A `claude -p` run cannot be stopped mid-flight, so the budget is an
+    accounting bound rather than a gate — but an arm that blew through it is
+    not silently comparable with one that stayed inside it."""
+    def tok(n):
+        return {"input": n, "output": 0, "cache_read": 0, "cache_creation": 0,
+                "total_tokens": n, "estimated": False}
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("r3-orgs-full.json", Path(td))
+        budget = run.cfg.budget_tokens
+        check(budget, "r3 should declare a budget")
+        run.tokens = {"build": tok(budget - 1)}
+        man = run.manifest(rr.utc_now())
+        check_eq(man["budget_overrun"], 0, "inside budget -> no overrun")
+        check(not any(f["kind"] == "exceeded" for f in run.failures),
+              "an arm inside budget must not be flagged")
+        run.failures.clear()
+        run.tokens = {"build": tok(budget + 5000)}
+        man = run.manifest(rr.utc_now())
+        check_eq(man["budget_overrun"], 5000, "the overrun is quantified")
+        check(any(f["kind"] == "exceeded" for f in run.failures),
+              "a budget breach must be a recorded failure, not just a number")
+
+
+def test_findings_parser_never_falls_back_to_an_earlier_fence() -> None:
+    """An illustrative `[]` earlier in the reply must never become the
+    recorded result when the real, final block fails to parse. That turns a
+    reviewer whose findings were malformed into a silent clean verdict — the
+    single most expensive way this harness could lie."""
+    text = ('Here is the format:\n\n```json\n[]\n```\n\nMy findings:\n\n'
+            '```json\n[{"severity": "Critical", "claim": "boom",}]\n```\n')
+    f = rr.parse_findings(text)
+    check(not f.ok,
+          "a malformed FINAL block fell back to the illustrative earlier one")
+    check(f.counts is None, "a parse failure must leave counts null")
+
+    # A well-formed last block still wins over an earlier example.
+    good = ('```json\n[]\n```\n\n```json\n'
+            '[{"severity": "Critical", "claim": "real"}]\n```')
+    f2 = rr.parse_findings(good)
+    check(f2.ok and f2.counts["critical"] == 1,
+          "the last well-formed block must still win")
+    # With no fence at all, bare JSON is still recovered.
+    f3 = rr.parse_findings('[{"severity": "Minor", "claim": "x"}]')
+    check(f3.ok, "bare JSON with no fence should still parse")
+
+
+def test_a_failed_seat_is_not_parsed() -> None:
+    """A timed-out seat may have emitted a syntactically valid PREFIX of its
+    findings. Parsing it yields a plausible, smaller number indistinguishable
+    from a real result."""
+    partial = '```json\n[{"severity": "Critical", "claim": "one of many"}]\n```'
+    ok = rr.parse_findings(partial, proc_ok=True)
+    check(ok.ok and ok.counts["critical"] == 1, "a healthy seat parses")
+    dead = rr.parse_findings(partial, proc_ok=False)
+    check(not dead.ok,
+          "output from a failed or timed-out seat must not be parsed")
+    check(dead.counts is None, "and must not produce counts")
+
+
+def test_worker_brief_follows_the_doctrine_toggle() -> None:
+    """Injecting the doctrine block into worker briefs regardless of
+    cfg.doctrine handed it to workers in an arm whose LEAD was deliberately
+    denied it — the contamination the control arms exist to avoid, one level
+    down."""
+    for path in all_configs():
+        cfg = rr.load_config(path)
+        if not cfg.toggles["decomposition"]:
+            continue
+        brief = rr.compose_worker_brief(cfg, make_ctx(cfg))
+        if cfg.doctrine:
+            check("schwerpunkt" in brief.lower(),
+                  f"{path.name}: doctrine is on but the worker brief lacks it")
+        else:
+            check("schwerpunkt" not in brief.lower(),
+                  f"{path.name}: doctrine is OFF for the lead but the worker "
+                  "brief still carries the doctrine block")
+
+
+def test_review_steps_must_be_booleans() -> None:
+    """`bool("false")` is True and `bool(0)` is False: coercion would have
+    switched a review step ON for a config that said "false"."""
+    base = json.loads((CONFIG_DIR / "r3-orgs-full.json").read_text())
+    for bad in ("false", 0, 1, "yes", None):
+        cfg = copy.deepcopy(base)
+        cfg["review_steps"] = {"native": bad}
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            json.dump(cfg, fh)
+            p = Path(fh.name)
+        try:
+            rr.load_config(p)
+            FAILURES.append(f"review_steps.native={bad!r} was coerced, not rejected")
+        except rr.ConfigError:
+            pass
+        finally:
+            p.unlink(missing_ok=True)
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -2248,7 +2445,65 @@ def mutation_check() -> int:
     mutants.append(("a partial round is banked as a complete one",
                     break_partial, lambda: setattr(rr, "_sum_rounds", orig_sum)))
 
-    # (25) The schema validator stops validating.
+    # --- the fairness mutants: each is a way an arm gets contaminated ---
+
+    orig_sum = rr._toggle_summary
+
+    def break_off_names() -> None:
+        rr._toggle_summary = lambda cfg: orig_sum(cfg) + "\n" + "\n".join(
+            f"| `{k}` | OFF |" for k in rr.TOGGLE_KEYS if not cfg.toggles[k])
+
+    mutants.append(("an OFF mechanism is named in the prompt",
+                    break_off_names,
+                    lambda: setattr(rr, "_toggle_summary", orig_sum)))
+
+    orig_filt = rr.filter_runbook
+
+    def break_scrub() -> None:
+        def unscrubbed(runbook, toggles):
+            text, removed = orig_filt(runbook, toggles)
+            return text.replace("[not used on this run]", "standup"), removed
+        rr.filter_runbook = unscrubbed
+
+    mutants.append(("the filtered runbook keeps the removed mechanism's name",
+                    break_scrub,
+                    lambda: setattr(rr, "filter_runbook", orig_filt)))
+
+    orig_pf = rr.parse_findings
+
+    def break_fence_fallback() -> None:
+        def lenient(text, *, proc_ok=True):
+            f = orig_pf(text, proc_ok=proc_ok)
+            if not f.ok and text and "```" in text:
+                for blk in reversed(re.findall(r"```[a-z]*\n(.*?)```", text, re.S)):
+                    g = orig_pf("```json\n" + blk + "```", proc_ok=proc_ok)
+                    if g.ok:
+                        return g
+            return f
+        rr.parse_findings = lenient
+
+    mutants.append(("the parser falls back to an earlier illustrative block",
+                    break_fence_fallback,
+                    lambda: setattr(rr, "parse_findings", orig_pf)))
+
+    def break_proc_ok() -> None:
+        rr.parse_findings = lambda text, *, proc_ok=True: orig_pf(text, proc_ok=True)
+
+    mutants.append(("a failed seat's partial output is parsed",
+                    break_proc_ok,
+                    lambda: setattr(rr, "parse_findings", orig_pf)))
+
+    orig_brief = rr.compose_worker_brief
+
+    def break_worker_doctrine() -> None:
+        rr.compose_worker_brief = lambda cfg, ctx: (
+            orig_brief(cfg, ctx) + "\n> " + ctx.doctrine_block)
+
+    mutants.append(("the worker brief carries doctrine the lead was denied",
+                    break_worker_doctrine,
+                    lambda: setattr(rr, "compose_worker_brief", orig_brief)))
+
+    # (30) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:

@@ -439,6 +439,14 @@ def run_capture(
                 p.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 _kill_tree(p)
+        except BaseException:
+            # Ctrl-C, SystemExit, anything. `start_new_session=True` puts the
+            # child in its own group, which SHIELDS it from the SIGINT the
+            # terminal delivers to us -- so an interrupt that we do not handle
+            # here leaves a headless agent running and billing with nobody
+            # waiting on it. Kill the group, then re-raise.
+            _kill_tree(p)
+            raise
         # Sweep the group even when the leader exited CLEANLY. A clean exit is
         # not evidence that nothing survives: the conformance exam backgrounds
         # a server, an agent can leave a child behind, and a survivor holds a
@@ -783,11 +791,22 @@ def load_config(path: Path) -> Config:
     unknown_rs = set(rs) - set(REVIEW_STEP_ORDER)
     if unknown_rs:
         raise ConfigError(f"{where}: unknown review_steps key(s) {sorted(unknown_rs)}")
+    # Validated, not coerced. `bool("false")` is True and `bool(0)` is
+    # False: a config that says "false" would have switched a review step ON.
+    def _step(key: str, default: bool) -> bool:
+        if key not in rs:
+            return default
+        v = rs[key]
+        if not isinstance(v, bool):
+            raise ConfigError(f"{where}: review_steps.{key} must be true or "
+                              f"false, got {v!r}")
+        return v
+
     steps = {
-        "native": bool(rs.get("native", toggles["review_native"])),
-        "lead": bool(rs.get("lead", toggles["review_lead"])),
-        "cto": bool(rs.get("cto", toggles["review_cto"])),
-        "council": bool(rs.get("council", toggles["council"])),
+        "native": _step("native", toggles["review_native"]),
+        "lead": _step("lead", toggles["review_lead"]),
+        "cto": _step("cto", toggles["review_cto"]),
+        "council": _step("council", toggles["council"]),
     }
 
     # Write the resolved ladder BACK onto the toggle vector, so there is one
@@ -1060,7 +1079,7 @@ class Ctx:
 
 
 def build_ctx(cfg: Config, framework: Path, run_id: str, run_dir: Path,
-              run_branch: str) -> Ctx:
+              run_branch: str, trees_root: Path | None = None) -> Ctx:
     spec = framework / cfg.spec_path
     exam = framework / cfg.grader
     runbook = framework / "protocol/RUNBOOK.md"
@@ -1073,9 +1092,11 @@ def build_ctx(cfg: Config, framework: Path, run_id: str, run_dir: Path,
         framework=framework,
         run_id=run_id,
         run_dir=run_dir,
-        run_tree=run_dir / "tree",
+        # Under the neutral trees root, so the path the agent is told to work
+        # in carries no hint of which arm it belongs to.
+        run_tree=(trees_root or run_dir) / "tree",
         run_branch=run_branch,
-        workers_dir=run_dir / "workers",
+        workers_dir=(trees_root or run_dir) / "workers",
         worker_branch_prefix=f"{run_branch}-wp-",
         guard=framework / "standup/guard.sh",
         crystal_script=framework / "crystal/crystal-check.sh",
@@ -1146,9 +1167,13 @@ def filter_runbook(runbook: str, toggles: dict[str, bool]) -> tuple[str, list[st
                 removed.append(heading)
                 out.append(f"## {heading}")
                 out.append("")
-                out.append(f"**REMOVED for this run — `{gate}` is OFF.** This "
-                           "arm of the benchmark does not run this step. Do "
-                           "not perform it and do not produce its artifacts.")
+                # Deliberately does NOT name the mechanism. Saying "`crystal`
+                # is OFF" puts the word in the prompt of the arm defined by
+                # not having it -- the contamination an ablation cannot
+                # tolerate. The instruction is identical without the name.
+                out.append("**This step is not part of this run.** Skip it "
+                           "entirely: do not perform it and do not produce "
+                           "its artifacts.")
                 out.append("")
                 continue
             skipping = None
@@ -1158,19 +1183,44 @@ def filter_runbook(runbook: str, toggles: dict[str, bool]) -> tuple[str, list[st
     if runbook.endswith("\n"):
         text += "\n"          # splitlines() drops it; an all-on arm must get
                               # the document back byte-for-byte
+    # Sections that survive still mention the removed mechanisms in passing
+    # (§2's "standup heartbeat", §8's meta:product definition). Removing the
+    # section is not enough if the word survives elsewhere in the same
+    # document: the arm defined by lacking a mechanism must not read its name.
+    for key, tog in RUNBOOK_SECTION_GATES.items():
+        if toggles.get(tog, True):
+            continue
+        word = key.split(". ", 1)[-1].split()[0]      # "standup", "crystal"...
+        text = re.sub(rf"\b{re.escape(word)}\b", "[not used on this run]",
+                      text, flags=re.IGNORECASE)
+    if not toggles.get("crystal", True):
+        text = re.sub(r"\bcrystal\b", "[not used on this run]", text,
+                      flags=re.IGNORECASE)
     return text, removed
 
 
 def _toggle_summary(cfg: Config) -> str:
+    """List ONLY the mechanisms that are on.
+
+    Naming the off ones -- even as "OFF, do not use" -- puts the switched-off
+    mechanism's name in the prompt of the arm that is supposed to lack it,
+    which is the contamination an ablation cannot tolerate: r4's prompt must
+    not say "crystal" and r5's must not say "standup". A closed list plus
+    "anything not listed is not part of this run" is the same instruction
+    without the word.
+    """
     on = [k for k in TOGGLE_KEYS if cfg.toggles[k]]
-    off = [k for k in TOGGLE_KEYS if not cfg.toggles[k]]
     lines = ["| mechanism | state |", "|---|---|"]
-    for k in TOGGLE_KEYS:
-        lines.append(f"| `{k}` | {'ON' if cfg.toggles[k] else 'OFF'} |")
+    for k in on:
+        lines.append(f"| `{k}` | ON |")
+    if not on:
+        lines.append("| _(none)_ | |")
     lines.append("")
-    if off:
-        lines.append("Mechanisms that are **OFF** for this run — do not "
-                     "reintroduce them by hand: " + ", ".join(f"`{k}`" for k in off) + ".")
+    if len(on) < len(TOGGLE_KEYS):
+        lines.append("**That table is exhaustive.** Any mechanism, artifact "
+                     "or ceremony not listed above is not part of this run: "
+                     "do not perform it, do not produce its artifacts, and do "
+                     "not reintroduce it by hand.")
         lines.append("")
         # The runbook and the spec below describe the whole protocol,
         # including the parts this arm removes. They are shared inputs — every
@@ -1216,7 +1266,15 @@ def _worker_id_table(cfg: Config, ctx: Ctx) -> str:
 
 def compose_worker_brief(cfg: Config, ctx: Ctx) -> str:
     values = {
-        "DOCTRINE_QUOTED": "\n> ".join(ctx.doctrine_block.splitlines()),
+        # Follows cfg.doctrine like every other role prompt. Injecting it
+        # unconditionally handed the doctrine block to workers in an arm
+        # whose lead was deliberately denied it -- the contamination the
+        # control arms exist to avoid, one level down.
+        "DOCTRINE_QUOTED": ("\n> ".join(ctx.doctrine_block.splitlines())
+                            if cfg.doctrine else
+                            "You are building software. Work to the "
+                            "specification; there is no process doctrine on "
+                            "this run."),
         "WORKERS_DIR": str(ctx.workers_dir),
         "WORKER_BRANCH_PREFIX": ctx.worker_branch_prefix,
         "WORKER_CONTEXT_RULE": load_template(
@@ -1632,7 +1690,7 @@ def count_findings(findings: Iterable[dict]) -> dict[str, int]:
     return counts
 
 
-def parse_findings(text: str | None) -> Findings:
+def parse_findings(text: str | None, *, proc_ok: bool = True) -> Findings:
     """Pull the findings block out of a reviewer's reply.
 
     Candidates, in order of preference: every fenced block (last first,
@@ -1644,20 +1702,35 @@ def parse_findings(text: str | None) -> Findings:
     outcome and must be distinguishable from "could not parse", which returns
     ok=False and counts=None.
     """
+    if not proc_ok:
+        # A timed-out or crashed seat may have emitted a syntactically valid
+        # PREFIX of its findings. Parsing it produces a plausible, smaller
+        # number that is indistinguishable from a real result -- so the run
+        # is invalid for that seat, not quietly cheaper.
+        return Findings(False, [], None,
+                        "the seat's process failed or timed out; its partial "
+                        "output is not parsed", None)
     if text is None:
         return Findings(False, [], None, "no reviewer output at all", None)
     if not text.strip():
         return Findings(False, [], None, "reviewer produced empty output", None)
 
+    fences = [m.group(1) for m in FENCE_RE.finditer(text)]
     candidates: list[tuple[str, str]] = []
-    for m in FENCE_RE.finditer(text):
-        candidates.append(("fenced", m.group(1)))
-    candidates.reverse()                      # last fenced block first
-    candidates.append(("whole-reply", text))
-    # Last resort: the final bracketed span in the reply.
-    lb, rb = text.rfind("["), text.rfind("]")
-    if lb != -1 and rb > lb:
-        candidates.append(("bracket-span", text[lb:rb + 1]))
+    if fences:
+        # ONLY the last fenced block. The contract says nothing may follow the
+        # real one, so an earlier fence is an illustrative example -- and
+        # falling back to it when the last block is malformed let a
+        # demonstration `[]` become the recorded result: a silent clean
+        # verdict from a reviewer whose actual findings failed to parse.
+        # A malformed final block is a parse FAILURE, which is what it is.
+        candidates.append(("last-fence", fences[-1]))
+    else:
+        # No fence at all: the reviewer may still have emitted bare JSON.
+        candidates.append(("whole-reply", text))
+        lb, rb = text.rfind("["), text.rfind("]")
+        if lb != -1 and rb > lb:
+            candidates.append(("bracket-span", text[lb:rb + 1]))
 
     errors: list[str] = []
     for source, blob in candidates:
@@ -1944,10 +2017,19 @@ class Run:
 
         ts = stamp(self.started)
         self.run_id = args.run_id or f"{ts}-{cfg.regime}-{cfg.target}"
-        self.run_branch = f"bench-run/{cfg.regime}-{ts}"
+        # An OPAQUE slug for everything the agent can see: the branch it works
+        # on and the path it works in. Naming the arm in either -- a worktree
+        # at .../r5-orgs-no-crystal-no-standup/tree, a branch called
+        # bench-run/r4-orgs-no-crystal -- tells the build agent it is in an
+        # ablation and which mechanism it is missing. The operator's own
+        # directory keeps the readable name; the agent never sees it.
+        self.slug = "run" + hashlib.sha256(
+            f"{self.run_id}|{cfg.regime}".encode()).hexdigest()[:10]
+        self.run_branch = f"bench-run/{self.slug}"
         self.run_dir = Path(args.runs_root).resolve() / self.run_id
+        trees_root = Path(args.runs_root).resolve() / "trees" / self.slug
         self.ctx = build_ctx(cfg, self.framework, self.run_id, self.run_dir,
-                             self.run_branch)
+                             self.run_branch, trees_root=trees_root)
 
         self.failures: list[dict] = []
         self._failures_lock = threading.Lock()
@@ -1975,6 +2057,7 @@ class Run:
         self.seat_invocations = 0
         self.models_observed: dict[str, int] = {}
         self.review_tree: Path | None = None
+        self.pinned: dict = {}
         self._last_crystal_signature: tuple | None = None
 
     # -- bookkeeping -------------------------------------------------------
@@ -2029,6 +2112,55 @@ class Run:
         return p
 
     # -- isolation ---------------------------------------------------------
+
+    def _expected_hashes(self) -> dict | None:
+        raw = getattr(self.args, "expect_input_hashes", None)
+        if not raw:
+            return None
+        try:
+            if raw.startswith("@"):
+                raw = Path(raw[1:]).read_text(encoding="utf-8")
+            obj = json.loads(raw)
+        except (OSError, json.JSONDecodeError) as exc:
+            self.fail("preflight", "bad-expect-hashes", str(exc))
+            return {"__unparsable__": "yes"}      # forces the arm to refuse
+        return obj if isinstance(obj, dict) else {"__unparsable__": "yes"}
+
+    def preflight(self, expect_base: str | None,
+                  expect_hashes: dict | None) -> bool:
+        """Refuse to run an arm whose inputs differ from the study's.
+
+        Six arms are only comparable if they were built from the same base
+        commit against the same spec, exam, runbook and doctrine. Each arm
+        independently resolves `master` and re-reads those files, so a commit
+        or an edit between arms silently gives the later ones a different
+        target -- and nothing about the result would look wrong afterwards.
+        The driver passes the first arm's values to every subsequent arm.
+        """
+        rc, out, _ = git(["rev-parse", "refs/heads/master"], cwd=self.framework,
+                         timeout=self.cfg.timeouts["git_s"])
+        base = out.strip()
+        if rc != 0 or len(base) != 40:
+            self.fail("preflight", "base-unresolved",
+                      "could not resolve refs/heads/master")
+            return False
+        ok = True
+        if expect_base and base != expect_base:
+            self.fail("preflight", "base-sha-mismatch",
+                      f"this arm would build from {base[:12]} but the study "
+                      f"pinned {expect_base[:12]}; the arms would not share a "
+                      "target")
+            ok = False
+        if expect_hashes:
+            for name, want in expect_hashes.items():
+                got = self.ctx.input_hashes.get(name)
+                if want and got != want:
+                    self.fail("preflight", "input-hash-mismatch",
+                              f"{name} hashes {got} but the study pinned "
+                              f"{want}; this arm reads a different {name}")
+                    ok = False
+        self.pinned = {"base_sha": base, "input_hashes": dict(self.ctx.input_hashes)}
+        return ok
 
     def create_worktree(self) -> bool:
         """Fresh branch off master in a worktree of its very own.
@@ -2342,7 +2474,7 @@ class Run:
         empty: list[str] = []
         for seat_name in COUNCIL_SEATS:
             proc, reply = results.get(seat_name, (None, None))
-            fnd = parse_findings(reply)
+            fnd = parse_findings(reply, proc_ok=bool(proc and proc.ok))
             tok.append(estimated_tokens(prompt, reply or ""))
             seats[seat_name] = {"proc": proc.summary() if proc else None,
                                 **fnd.to_json()}
@@ -2873,10 +3005,23 @@ class Run:
     def phase_grade(self, tag: str) -> dict:
         """Run the frozen exam, from the pristine copy, under nix."""
         t0 = time.time()
-        server = self.ctx.run_tree / self.cfg.server_path
+        # Grade the frozen checkout, not the live tree. The sweep makes them
+        # equal in the normal case, but "normally equal" is not the same
+        # claim as "the bytes named by the sha", and RUNBOOK §6 asks for the
+        # latter. If the checkout is unavailable, that is recorded and the
+        # live tree is used with the caveat on the record.
+        sha = self.freeze_tree(f"grade-{tag}")
+        graded_tree = self.frozen_checkout(sha)
+        if graded_tree is None:
+            self.fail(f"grade:{tag}", "graded-live-tree",
+                      "the frozen checkout was unavailable, so the LIVE tree "
+                      f"was graded; it may not equal {sha[:12]}")
+            graded_tree = self.ctx.run_tree
+        server = graded_tree / self.cfg.server_path
         exam = self.frozen_exam or (self.framework / self.cfg.grader)
         result: dict[str, Any] = {
             "ran": False, "exam": str(exam), "server": str(server),
+            "graded_sha": sha, "graded_frozen_checkout": graded_tree != self.ctx.run_tree,
             "conformance_total": 0, "conformance_passed": 0,
             "passed_all": False, "exit_code": None, "timed_out": False,
             "trustworthy": False,
@@ -2892,7 +3037,7 @@ class Run:
         argv = ["nix", "develop", str(self.framework / "bench"), "--command",
                 "bash", str(exam), "python3", str(server)]
         self.log(f"  -> grading ({tag}) via the frozen exam under nix")
-        proc = run_capture(argv, cwd=self.ctx.run_tree,
+        proc = run_capture(argv, cwd=graded_tree,
                            timeout=self.cfg.timeouts["grade_s"],
                            stdout_path=out, stderr_path=err)
         # Kept apart on purpose. The exam prints its summary on STDOUT and its
@@ -2912,6 +3057,14 @@ class Run:
         # The exam emits this line last, immediately before exiting.
         matches = re.findall(r"^conformance:\s*(\d+)\s+passed,\s*(\d+)\s+failed\s*$",
                              out_text, re.MULTILINE)
+        # And it must be the LAST non-empty line of stdout. The exam emits it
+        # immediately before exiting, so a server that prints the same line at
+        # startup is followed by the exam's own -- but a server that prints it
+        # LAST would otherwise control the headline counts.
+        tail_lines = [ln for ln in out_text.splitlines() if ln.strip()]
+        line_is_last = bool(tail_lines) and bool(
+            re.fullmatch(r"conformance:\s*\d+\s+passed,\s*\d+\s+failed\s*",
+                         tail_lines[-1]))
         m = matches[-1] if matches else None
         if m:
             passed, failed = int(m[0]), int(m[1])
@@ -2928,8 +3081,15 @@ class Run:
             # status did not come from the exam.
             consistent = ((proc.returncode == 0 and failed == 0)
                           or (proc.returncode == 1 and failed > 0))
+            result["conformance_line_is_last"] = line_is_last
             result["trustworthy"] = (proc.returncode in (0, 1)
-                                     and not proc.timed_out and consistent)
+                                     and not proc.timed_out and consistent
+                                     and line_is_last)
+            if not line_is_last:
+                self.fail(f"grade:{tag}", "exam-line-not-final",
+                          "the conformance line is not the last line of the "
+                          "exam's stdout, so it may have come from the server "
+                          "rather than the exam")
             result["line_count"] = len(matches)
             if not result["trustworthy"]:
                 self.fail(f"grade:{tag}", "exam-result-inconsistent",
@@ -2997,7 +3157,7 @@ class Run:
                                     timeout=self.cfg.timeouts["review_s"],
                                     cwd=review_cwd)
             tok.append(res.tokens())
-            fnd = parse_findings(res.text)
+            fnd = parse_findings(res.text, proc_ok=proc.ok and res.ok)
             rec = {
                 "round": rnd, "model": model, "reviewed_sha": mat.review_sha,
                 # `source_complete` describes what was INLINED. A native /
@@ -3336,6 +3496,15 @@ class Run:
         esc = self.escaped or {}
         esc_count = esc.get("critical_important") if esc.get("complete") else None
 
+        spent = coordination["total_tokens"] + product["total_tokens"]
+        if self.cfg.budget_tokens and spent > int(self.cfg.budget_tokens):
+            # Recorded as a failure, not just a number. A `claude -p` run
+            # cannot be stopped mid-flight, so the budget is an accounting
+            # bound rather than a gate -- but an arm that blew through it is
+            # not silently comparable with one that stayed inside it.
+            self.fail("budget", "exceeded",
+                      f"{spent} tokens spent against a budget of "
+                      f"{self.cfg.budget_tokens}")
         man: dict[str, Any] = {
             "run_id": self.run_id,
             "started_at": iso(self.started),
@@ -3390,6 +3559,7 @@ class Run:
                 "reviews": "reviews/",
             },
             "budget_tokens": self.cfg.budget_tokens,
+            "study_pin": self.pinned,
             "budget_overrun": (
                 None if not self.cfg.budget_tokens else
                 max(0, coordination["total_tokens"] + product["total_tokens"]
@@ -3456,6 +3626,9 @@ class Run:
     def execute(self) -> int:
         ended: datetime | None = None
         try:
+            if not self.preflight(self.args.expect_base_sha,
+                                  self._expected_hashes()):
+                return 2
             if not self.create_worktree():
                 return 2
             self.phase_build()
@@ -3922,10 +4095,13 @@ def dry_run(cfg: Config, args: argparse.Namespace) -> int:
     started = utc_now()
     ts = stamp(started)
     run_id = args.run_id or f"dry-{ts}-{cfg.regime}-{cfg.target}"
-    run_branch = f"bench-run/{cfg.regime}-{ts}"
+    slug = "run" + hashlib.sha256(f"{run_id}|{cfg.regime}".encode()).hexdigest()[:10]
+    run_branch = f"bench-run/{slug}"
     run_dir = Path(args.runs_root).resolve() / run_id
+    trees_root = Path(args.runs_root).resolve() / "trees" / slug
     framework = Path(args.framework).resolve()
-    ctx = build_ctx(cfg, framework, run_id, run_dir, run_branch)
+    ctx = build_ctx(cfg, framework, run_id, run_dir, run_branch,
+                    trees_root=trees_root)
 
     prompts: dict[str, str] = {"build": compose_build_prompt(cfg, ctx)}
     for step in ("native", "lead", "cto"):
@@ -4091,6 +4267,16 @@ def build_parser() -> argparse.ArgumentParser:
                         "foreign council seats")
     p.add_argument("--run-id", default=None,
                    help="override the generated run id")
+    p.add_argument("--expect-base-sha", default=None,
+                   help="refuse to run unless refs/heads/master resolves to "
+                        "this sha. The study driver passes the FIRST arm's "
+                        "value to every later arm, so a commit between arms "
+                        "cannot silently give them different targets.")
+    p.add_argument("--expect-input-hashes", default=None,
+                   help="refuse to run unless the spec/exam/runbook/doctrine "
+                        "hash to these values (JSON object, or @path to a "
+                        "file of one). Emitted in every manifest under "
+                        "harness.input_hashes.")
     p.add_argument("--dry-run", action="store_true",
                    help="compose every prompt, check the toggle conformance, "
                         "print the plan — and launch nothing")

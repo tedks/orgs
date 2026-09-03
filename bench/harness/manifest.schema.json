@@ -455,6 +455,13 @@
       "items": {
         "type": "string"
       }
+    },
+    "study_pin": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "the base sha and input hashes this arm actually ran against, recorded so the six arms can be proved to share a target after the fact. The driver passes the first arm's values to every later arm via --expect-base-sha/--expect-input-hashes, and an arm whose inputs differ REFUSES to run rather than producing a result that is not comparable."
     }
   }
 }

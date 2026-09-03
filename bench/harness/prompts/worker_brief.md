@@ -16,7 +16,8 @@
 > - **End every commit message with the line `Bench-Agent: <tracking-id>`**,
 >   using the tracking id from the lead's table. That exact string is how the
 >   sprint tells your commits apart from every other commit in this
->   repository; a commit without it is invisible to the standup.
+>   repository; a commit without it is invisible to the harness that tracks
+>   this sprint's progress.
 >
 > **Intent:** <which spec goal / entity this package serves.>
 > **Instruction:** <what to build.>
