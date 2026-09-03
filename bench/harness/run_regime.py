@@ -1589,6 +1589,12 @@ class Run:
             self.failures.append(entry)
         print(f"  ! {phase}/{kind}: {detail}", file=sys.stderr, flush=True)
 
+    def _count_calls(self, n: int) -> None:
+        """Council and audit seats run in threads, so `+=` on a plain int
+        can lose an increment (load/add/store is not atomic). Locked."""
+        with self._failures_lock:
+            self.model_calls += n
+
     def log(self, msg: str) -> None:
         print(f"[{iso(utc_now())}] {msg}", flush=True)
 
@@ -1735,7 +1741,7 @@ class Run:
         if not res.ok:
             self.fail(name, "unparsable-result", res.error or "unknown")
         else:
-            self.model_calls += int(res.result_event.get("num_turns") or 0) or 1
+            self._count_calls(int(res.result_event.get("num_turns") or 0) or 1)
         return proc, res
 
     def seat(self, name: str, seat_name: str, prompt: str, *,
@@ -1755,7 +1761,7 @@ class Run:
         self.log(f"  -> ask-agent {seat_name} {name}  [timeout {int(timeout)}s]")
         proc = run_capture(argv, cwd=self.ctx.run_tree, timeout=timeout,
                            stdout_path=out, stderr_path=err)
-        self.model_calls += 1
+        self._count_calls(1)
         if proc.timed_out:
             self.fail(name, "timeout", f"{seat_name} exceeded {timeout}s and was killed")
         elif proc.spawn_error:
