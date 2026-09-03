@@ -197,6 +197,35 @@ def test_off_mechanisms_are_named_off_against_the_shared_runbook() -> None:
                   f"{path.name}: {mech} is off but the prompt never names it as OFF")
 
 
+def test_standup_bus_is_pinned_in_every_guard_invocation() -> None:
+    """bus.sh resolves its root as ${STANDUP_BUS:-$PWD/.standup/bus}, and
+    workers run in their OWN worktrees. An unpinned guard command therefore
+    reads an empty bus beside the worker rather than the run's, so every
+    redirect is queued forever and delivered to nobody — the standup mechanism
+    silently does nothing and its ablation measures nothing.
+
+    Every guard invocation in a composed prompt must carry STANDUP_BUS, and it
+    must be the same path the standup loop writes to."""
+    for path in all_configs():
+        cfg = rr.load_config(path)
+        if not cfg.toggles["standup"]:
+            continue
+        ctx = make_ctx(cfg)
+        build = rr.compose_build_prompt(cfg, ctx)
+        n = path.name
+        check_eq(str(ctx.bus_root), str(ctx.run_tree / ".standup/bus"),
+                 f"{n}: the bus root is not where the loop puts it")
+        guard = str(ctx.guard)
+        for line in build.splitlines():
+            if guard not in line:
+                continue
+            check("STANDUP_BUS=" in line,
+                  f"{n}: a guard invocation omits STANDUP_BUS: {line.strip()!r}")
+            check(str(ctx.bus_root) in line,
+                  f"{n}: a guard invocation points at the wrong bus: {line.strip()!r}")
+        check(guard in build, f"{n}: standup is on but no guard command is shown")
+
+
 def test_review_steps_gate_prompt_creation() -> None:
     """A review step that is off must produce no prompt at all -- the toggle
     governs spend, not just wording."""
@@ -922,7 +951,18 @@ def mutation_check() -> int:
     mutants.append(("the audit prompt varies by regime",
                     break_audit, lambda: setattr(rr, "compose_audit_prompt", orig_audit)))
 
-    # (5) The schema validator stops validating.
+    # (5) The standup bus stops being pinned in the guard commands -- the
+    # regression that makes redirects vanish silently.
+    orig_build2 = rr.compose_build_prompt
+
+    def break_bus() -> None:
+        rr.compose_build_prompt = lambda cfg, ctx: orig_build2(cfg, ctx).replace(
+            f"STANDUP_BUS={ctx.bus_root} ", "")
+
+    mutants.append(("guard invocations stop pinning STANDUP_BUS",
+                    break_bus, lambda: setattr(rr, "compose_build_prompt", orig_build2)))
+
+    # (6) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:

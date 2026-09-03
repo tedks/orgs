@@ -819,6 +819,18 @@ class Ctx:
     def solo_agent_id(self) -> str:
         return "implementer"
 
+    @property
+    def bus_root(self) -> Path:
+        """The ONE standup bus for this run.
+
+        bus.sh resolves its root as ${STANDUP_BUS:-$PWD/.standup/bus}, and
+        workers run in their own worktrees -- so an unpinned guard invocation
+        reads an empty bus beside the worker instead of the run's, and every
+        redirect is queued forever and delivered to nobody. Pinned here, in
+        the prompts, and in the loop's environment: all three must agree.
+        """
+        return self.run_tree / ".standup/bus"
+
 
 def build_ctx(cfg: Config, framework: Path, run_id: str, run_dir: Path,
               run_branch: str) -> Ctx:
@@ -909,7 +921,8 @@ def compose_worker_brief(cfg: Config, ctx: Ctx) -> str:
             "frag_firewall_on.md" if cfg.toggles["firewall"] else "frag_firewall_off.md"),
         "WORKER_STANDUP_RULE": (
             render(load_template("frag_standup_worker_rule.md"),
-                   {"GUARD": str(ctx.guard)}, where="frag_standup_worker_rule.md")
+                   {"GUARD": str(ctx.guard), "BUS_ROOT": str(ctx.bus_root)},
+                   where="frag_standup_worker_rule.md")
             if cfg.toggles["standup"] else ""),
     }
     return render(load_template("worker_brief.md"), values, where="worker_brief.md")
@@ -930,7 +943,8 @@ def compose_build_prompt(cfg: Config, ctx: Ctx) -> str:
         if cfg.toggles["standup"]:
             standup_section = render(
                 load_template("frag_standup_solo.md"),
-                {"GUARD": str(ctx.guard), "SOLO_AGENT_ID": ctx.solo_agent_id},
+                {"GUARD": str(ctx.guard), "BUS_ROOT": str(ctx.bus_root),
+                 "SOLO_AGENT_ID": ctx.solo_agent_id},
                 where="frag_standup_solo.md")
         return render(load_template("implementer_solo.md"), {
             "PROTOCOL_PREAMBLE": _protocol_preamble(cfg, ctx),
@@ -947,7 +961,8 @@ def compose_build_prompt(cfg: Config, ctx: Ctx) -> str:
     if cfg.toggles["standup"]:
         standup_section = render(
             load_template("frag_standup_lead.md"),
-            {"GUARD": str(ctx.guard), "LEAD_AGENT_ID": ctx.lead_agent_id},
+            {"GUARD": str(ctx.guard), "BUS_ROOT": str(ctx.bus_root),
+                 "LEAD_AGENT_ID": ctx.lead_agent_id},
             where="frag_standup_lead.md")
     crystal_section = ""
     if crystal_active(cfg):
@@ -1808,8 +1823,7 @@ class Run:
         environment checks on it.
         """
         self.standup_stats["ran"] = True
-        bus = self.ctx.run_tree / ".standup/bus"
-        env = {"STANDUP_BUS": str(bus),
+        env = {"STANDUP_BUS": str(self.ctx.bus_root),
                "STANDUP_STALL_MIN": str(self.cfg.standup["stall_min"])}
         agents = list(self.cfg.worker_ids) if self.cfg.toggles["decomposition"] else []
         agents.append(self.ctx.lead_agent_id if self.cfg.toggles["decomposition"]
@@ -2449,7 +2463,7 @@ def render_summary(run: "Run", man: dict) -> str:
     A(f"- **run id:** `{man['run_id']}`")
     A(f"- **started / ended:** {man['started_at']} → {man['ended_at']}")
     A(f"- **coarse regime:** `{man['regime']}`  ·  **ablation:** "
-      f"`{man['ablation']}`")
+      f"{('`' + man['ablation'] + '`') if man['ablation'] else 'none named (see toggles)'}")
     A(f"- **branch:** `{man['artifacts']['run_branch']}` "
       f"(base `{man['git_revision'][:12]}`, head `{man['artifacts']['head_sha'][:12]}`)")
     A(f"- **tree:** `{man['artifacts']['run_tree']}`")
