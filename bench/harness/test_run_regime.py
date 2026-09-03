@@ -1490,7 +1490,7 @@ def test_server_code_comes_from_the_frozen_checkout() -> None:
         tmp = Path(td)
         run = _fake_run("r3-orgs-full.json", tmp / "runs")
         # No checkout at all -> say so, do not silently inline nothing.
-        out, inlined = run.collect_server_code(None)
+        out, inlined, complete = run.collect_server_code(None)
         check(not inlined, "no checkout -> the entry point is not inlined")
         check("could not be checked out" in out,
               f"a missing checkout must be stated: {out[:80]}")
@@ -1504,7 +1504,7 @@ def test_server_code_comes_from_the_frozen_checkout() -> None:
         (srcdir / "__init__.py").write_text("")
         (srcdir / "__pycache__").mkdir()
         (srcdir / "__pycache__" / "junk.py").write_text("x = 1")
-        out, inlined = run.collect_server_code(tree)
+        out, inlined, complete = run.collect_server_code(tree)
         check(inlined, "the entry point body should be reported as inlined")
         check("import codec" in out, "the entry point was not inlined")
         check("FRAMES = []" in out, "a sibling module was not inlined")
@@ -1515,10 +1515,11 @@ def test_server_code_comes_from_the_frozen_checkout() -> None:
         check("budget" not in out,
               f"an empty module was reported as a budget problem: {out}")
         check("__init__.py" in out, "the empty module was dropped entirely")
+        check(complete, "a plain, wholly-inlined tree is complete")
 
         # The entry point missing while helpers survive is its own statement.
         (tree / run.cfg.server_path).unlink()
-        out, inlined = run.collect_server_code(tree)
+        out, inlined, complete = run.collect_server_code(tree)
         check(not inlined, "a missing entry point is not inlined")
         check("NO SERVER" in out,
               f"a missing entry point beside surviving helpers: {out[:120]}")
@@ -1582,10 +1583,13 @@ def test_oversized_source_is_truncated_not_dropped() -> None:
         srcdir = tree / Path(run.cfg.server_path).parent
         srcdir.mkdir(parents=True)
         (tree / run.cfg.server_path).write_text("A" * (rr.CODE_CAP + 50_000))
-        out, inlined = run.collect_server_code(tree)
+        out, inlined, complete = run.collect_server_code(tree)
         check(inlined,
               "an oversized entry point must still count as inlined — "
               "dropping it lets the audit score a server nobody saw")
+        check(not complete,
+              "a truncated entry point is not a COMPLETE review: the seats "
+              "saw a prefix and the round must be marked partial")
         check("truncated" in out, "the truncation is not disclosed")
         check("AAAA" in out, "no actual source was inlined")
         check(len(out) < rr.CODE_CAP + 5000, "the cap was not applied")
@@ -1606,15 +1610,18 @@ def test_symlinked_source_is_not_followed() -> None:
             (srcdir / "evil.py").symlink_to("/dev/zero")
         except OSError:
             return                       # no symlink support; nothing to test
-        out, inlined = run.collect_server_code(tree)
+        out, inlined, complete = run.collect_server_code(tree)
         check(inlined, "the real entry point should still be inlined")
+        check(not complete,
+              "a skipped symlinked helper is code Python still executes, so "
+              "the seats did not see everything that runs")
         check("not a regular file" in out,
               f"the symlink was followed rather than reported: {out[:200]}")
 
         # And a symlinked ENTRY POINT is reported, not resolved.
         (tree / run.cfg.server_path).unlink()
         (tree / run.cfg.server_path).symlink_to("/dev/zero")
-        out2, inlined2 = run.collect_server_code(tree)
+        out2, inlined2, complete2 = run.collect_server_code(tree)
         check(not inlined2, "a symlinked entry point must not count as inlined")
         check("not a regular file" in out2, "the symlinked entry point was followed")
 
@@ -1635,15 +1642,84 @@ def test_frozen_checkout_prunes_before_re_adding() -> None:
 
 def test_crystal_undelivered_is_counted_once_per_finding() -> None:
     """Counting it every loop iteration turned `undelivered` into a measure
-    of how long the build ran rather than of how much crystal could not
-    say."""
+    of how long the build ran rather than of how much crystal could not say.
+
+    Exercised by CALLING it, not by reading the source. The previous version
+    of this test only checked statement order, and a council seat proved it
+    vacuous by deleting the assignment it was meant to pin and watching the
+    suite stay green.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # no-standup.json is the config that actually reaches this path:
+        # crystal on, standup off, so nothing can be pushed to the lead.
+        run = _fake_run("no-standup.json", Path(td))
+        check(not run.cfg.toggles["standup"], "this config should have standup off")
+        stanzas = ["a@1 × b@2 — merge: CONFLICT (x.py)"]
+        for _ in range(5):
+            run._deliver_crystal(1, stanzas, [])
+        check_eq(run.crystal_stats["undelivered"], 1,
+                 "the same undeliverable finding must be counted once, not "
+                 "once per check — otherwise `undelivered` measures build "
+                 "length rather than lost information")
+        check_eq(run.crystal_stats["suppressed_repeats"], 4,
+                 "the repeats should be recorded as suppressed")
+        run._deliver_crystal(2, ["c@3 × d@4 — tests: FAIL"], [])
+        check_eq(run.crystal_stats["undelivered"], 2,
+                 "a DIFFERENT finding must still be counted")
+        check_eq(run.crystal_stats["delivered"], 0,
+                 "nothing can be delivered with no bus")
+
+
+def test_council_refuses_a_round_it_cannot_show_the_seats() -> None:
+    """The council prompt carries no diff, so a seat handed un-inlinable
+    source reviews nothing, answers [], and the round banks as clean —
+    deflating exactly the arm-vs-arm number the study turns on.
+
+    Exercised by CALLING _council_step with materials whose source could not
+    be inlined. A council seat proved the previous coverage vacuous by
+    deleting the guard and watching the suite stay green, so this drives the
+    real function; the guard returns before any seat is launched, so no agent
+    runs."""
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("r3-orgs-full.json", Path(td))
+        launched = []
+        run.seat = lambda *a, **k: launched.append(a) or (None, None)
+        run.collect_materials = lambda tag="review": rr.Materials(
+            diff="d", server_code="(no server was produced)",
+            review_sha="a" * 40, tree=None, server_inlined=False)
+        rec = run._council_step()
+        check_eq(launched, [],
+                 "a seat was launched on source it could not see")
+        check_eq(rec["ran"], False, "a step that never ran a round is not 'ran'")
+        check(rec["skipped_reason"], "the refusal must carry a reason")
+        check_eq(rec["totals"]["total"], 0, "no findings were collected")
+        check(any(f["kind"] == "nothing-to-review" for f in run.failures),
+              "the refusal must be recorded as a failure, not silently")
+        check("review:council" in run.phases,
+              "the phase must still be recorded so the manifest is complete")
+
+
+def test_council_mid_loop_abort_keeps_the_rounds_it_ran() -> None:
+    """The guard can fire at round 2, after round 1 ran seats, reported
+    findings and applied a fix. Returning there labelled a step that
+    demonstrably ran as not-run, and skipped the fix-seconds subtraction so
+    round 1's fix was billed twice in wall_clock_by_phase."""
     src = (HARNESS / "run_regime.py").read_text()
-    body = src[src.index("def _deliver_crystal"):src.index("def phase_grade")]
-    sig_idx = body.index("if signature == self._last_crystal_signature")
-    standup_idx = body.index('if not self.cfg.toggles["standup"]')
-    check(standup_idx > sig_idx,
-          "the standup-off branch still runs before the repeat check, so it "
-          "recounts the same undelivered finding on every check")
+    body = src[src.index("def _council_step"):src.index("def _apply_fix")]
+    guard = body[body.index("if not self._seats_can_see(mat):"):]
+    guard = guard[:guard.index("prompt = compose_council_prompt")]
+    stmts = [ln.strip() for ln in guard.splitlines()
+             if ln.strip() and not ln.strip().startswith("#")]
+    check("break" in stmts,
+          "the mid-loop abort must break, keeping the rounds already run")
+    check(not any(st.startswith("return") for st in stmts),
+          "the mid-loop abort still returns, which discards the rounds "
+          "already run and skips the fix-seconds subtraction")
+    check("fix_seconds" in body[body.index('self.phases["review:council"]') - 200:
+                                body.index('self.phases["review:council"]') + 100],
+          "the council phase must subtract fix_seconds on every exit path")
+    check('"ran": bool(rounds)' in body,
+          "a step that ran rounds must report ran=True even when it aborted")
 
 
 # ---------------------------------------------------------------------------
@@ -1942,16 +2018,36 @@ def mutation_check() -> int:
                     lambda: setattr(rr.Run, "collect_server_code",
                                     orig_audit_guard)))
 
-    # (21) The council runs a round on source that could not be inlined, so
-    # the seats see nothing, answer [], and it banks as a clean round.
-    orig_code = rr.Run.collect_server_code
+    # (21) The council's "nothing to review" guard is removed outright, so a
+    # round runs on source the seats cannot see and banks as clean. Patches
+    # Materials so `server_inlined` is always True, which is exactly what
+    # deleting the guard would achieve.
+    orig_guard = rr.Run._seats_can_see
 
     def break_council_guard() -> None:
-        rr.Run.collect_server_code = lambda self, tree: ("(nothing)", True)
+        rr.Run._seats_can_see = lambda self, mat: True
 
     mutants.append(("a round is scored on source the seats never saw",
                     break_council_guard,
-                    lambda: setattr(rr.Run, "collect_server_code", orig_code)))
+                    lambda: setattr(rr.Run, "_seats_can_see", orig_guard)))
+
+    # (21b) The crystal standup-off branch stops recording the signature, so
+    # the same undeliverable finding is recounted on every check.
+    orig_deliver = rr.Run._deliver_crystal
+
+    def break_crystal_count() -> None:
+        def mutant(self, check_n, stanzas, noisy):
+            if not stanzas and not noisy:
+                return
+            if not self.cfg.toggles["standup"]:
+                self.crystal_stats["undelivered"] += 1
+                return
+            return orig_deliver(self, check_n, stanzas, noisy)
+        rr.Run._deliver_crystal = mutant
+
+    mutants.append(("crystal recounts the same undeliverable finding",
+                    break_crystal_count,
+                    lambda: setattr(rr.Run, "_deliver_crystal", orig_deliver)))
 
     # (22) The schema validator stops validating.
     orig_val = rr.validate_schema

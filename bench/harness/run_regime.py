@@ -1452,6 +1452,11 @@ class Materials:
     # reviewing nothing -- and its empty reply would be banked as a clean
     # round. The callers refuse to run in that case.
     server_inlined: bool = False
+    # False when the seats saw only part of what runs -- a truncated file, a
+    # skipped symlinked helper, an unreadable module. The round still runs
+    # (a prefix carries real signal) but is recorded as partial, so it is not
+    # compared against an arm whose seats saw everything.
+    source_complete: bool = True
 
 
 DRY_MATERIALS = Materials(
@@ -2199,17 +2204,23 @@ class Run:
             diff += (f"\n\n[... diff truncated at {DIFF_CAP} characters; the "
                      f"full patch is at {out.name} ...]\n")
         tree = self.frozen_checkout(sha)
-        code, inlined = self.collect_server_code(tree)
+        code, inlined, complete = self.collect_server_code(tree)
         return Materials(diff=diff, server_code=code, review_sha=sha,
-                         tree=tree, server_inlined=inlined)
+                         tree=tree, server_inlined=inlined,
+                         source_complete=complete)
 
-    def collect_server_code(self, tree: Path | None) -> tuple[str, bool]:
+    def collect_server_code(self, tree: Path | None) -> tuple[str, bool, bool]:
         """Inline every Python file beside the server, from the frozen checkout.
 
-        Returns (text, entry_point_inlined). The flag is load-bearing: an
-        audit prompt whose source section is nothing but omission notes must
-        not be scored as "no defects found", so the callers refuse to run a
-        seat that would see nothing.
+        Returns (text, entry_point_inlined, complete).
+
+        Both flags are load-bearing and answer different questions.
+        `entry_point_inlined` gates whether a seat runs at all: a prompt whose
+        source section is only omission notes must not be scored as "no
+        defects found". `complete` says whether the seats saw ALL of it -- a
+        truncated file, a skipped symlinked helper, an unreadable module --
+        so a round that reviewed a prefix is recorded as partial instead of
+        as a clean look at the whole thing.
 
         Read from `tree` -- the clean detached checkout of the reviewed sha --
         so the inlined source cannot drift from the sha the seats are told
@@ -2224,63 +2235,94 @@ class Run:
         """
         if tree is None:
             return ("(the frozen revision could not be checked out, so no "
-                    "source could be inlined)", False)
+                    "source could be inlined)", False, False)
         server = tree / self.cfg.server_path
         srcdir = server.parent
         if server.is_symlink() or (server.exists() and not server.is_file()):
             return (f"(`{self.cfg.server_path}` is not a regular file in "
                     f"{self.head_sha[:12]} -- it is a symlink or a special "
-                    "file, and is not inlined)", False)
+                    "file, and is not inlined)", False, False)
         if not server.is_file():
             if srcdir.is_dir() and any(srcdir.rglob("*.py")):
                 return (f"(NO SERVER at {self.cfg.server_path} in "
                         f"{self.head_sha[:12]}, although other Python files "
                         "exist beside it -- the entry point the exam runs is "
-                        "missing)", False)
+                        "missing)", False, False)
             return (f"(no server was produced at {self.cfg.server_path} -- "
-                    "there is nothing to review)", False)
+                    "there is nothing to review)", False, False)
         files = sorted(f for f in srcdir.rglob("*.py")
                        if "__pycache__" not in f.parts)
         files.sort(key=lambda f: (f != server, str(f)))   # entry point first
         chunks: list[str] = []
         used = 0
         entry_inlined = False
+        complete = True
         for f in files:
             rel = f.relative_to(tree)
             if f.is_symlink() or not f.is_file():
                 chunks.append(f"### `{rel}`\n\n(not a regular file; not "
                               "inlined)\n")
+                # Python will still execute it. The seats will not see it, so
+                # this is not a complete review of what runs.
+                complete = False
                 continue
             try:
                 size = f.stat().st_size
             except OSError as exc:
                 chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
+                complete = False
                 continue
             budget = CODE_CAP - used
-            if budget <= 0:
+            if budget <= 0 and size > 0:
                 chunks.append(f"### `{rel}`\n\n[omitted: {size} bytes; the "
                               f"{CODE_CAP}-character inlining budget is "
                               "exhausted]\n")
+                complete = False
                 continue
             try:
                 with open(f, "r", encoding="utf-8", errors="replace") as fh:
-                    body = fh.read(budget)
+                    # One char past the budget: getting it back is an exact
+                    # test for truncation. Comparing st_size (BYTES) against
+                    # the budget (CHARACTERS) put a false "truncated" note on
+                    # any fully-inlined file with multibyte characters.
+                    body = fh.read(budget + 1)
             except OSError as exc:
                 chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
+                complete = False
                 continue
-            used += len(body)
-            # TRUNCATE, never drop. Dropping an over-budget entry point left
-            # the audit seats with nothing but a note while the file plainly
-            # existed, so the arm banked a real zero on the robustness metric
-            # for a server nobody had read.
             note = ""
-            if size > budget:
-                note = (f"\n\n[truncated: {size} bytes, inlined the first "
-                        f"{len(body)} characters]")
+            if len(body) > budget:
+                body = body[:budget]
+                note = (f"\n\n[truncated: {size} bytes on disk, inlined the "
+                        f"first {len(body)} characters]")
+                complete = False
+            used += len(body)
+            # TRUNCATE, never drop: dropping an over-budget entry point left
+            # the seats with nothing but a note while the file plainly
+            # existed. But a truncated file is not a fully reviewed one, so
+            # `complete` goes false and the callers mark the round partial
+            # rather than banking it as a clean look at the whole thing.
             chunks.append(f"### `{rel}`\n\n```python\n{body}\n```{note}\n")
-            if f == server and body.strip():
-                entry_inlined = True
-        return "\n".join(chunks), entry_inlined
+            if f == server:
+                entry_inlined = bool(body.strip())
+                if not entry_inlined:
+                    # An empty entry point is a catastrophic build, not a
+                    # server with no defects. Said out loud rather than left
+                    # as a silent null.
+                    chunks.append(f"\n(the entry point `{rel}` is EMPTY — "
+                                  "there is no server to review)\n")
+        return "\n".join(chunks), entry_inlined, complete
+
+    def _seats_can_see(self, mat: "Materials") -> bool:
+        """Would a foreign seat handed these materials actually see the code?
+
+        The council and audit prompts carry no diff -- only the inlined
+        source -- so a seat given un-inlinable material reviews nothing and
+        correctly answers `[]`, which then banks as a clean round. Named,
+        rather than inlined as `if not mat.server_inlined`, so the guard is
+        one thing that can be pointed at, tested, and mutated.
+        """
+        return mat.server_inlined
 
     def _tally_seats(self, seats: dict, results: dict, prompt: str,
                      tok: list, tag: str) -> tuple[dict, list[str], list[str]]:
@@ -2954,6 +2996,8 @@ class Run:
             fnd = parse_findings(res.text)
             rec = {
                 "round": rnd, "model": model, "reviewed_sha": mat.review_sha,
+                "source_complete": mat.source_complete,
+                "partial": not mat.source_complete,
                 "proc": proc.summary(), **fnd.to_json(),
             }
             rounds.append(rec)
@@ -2997,24 +3041,27 @@ class Run:
         t0 = time.time()
         fix_seconds = 0.0
         tok: list[dict] = []
+        skipped: str | None = None
         for rnd in range(1, self.cfg.max_rounds["council"] + 1):
             mat = self.collect_materials(f"council-round{rnd}")
-            if not mat.server_inlined:
+            if not self._seats_can_see(mat):
                 # The council prompt carries no diff, so a seat here would be
                 # reviewing nothing -- and would correctly answer `[]`, which
                 # banks as a clean round and deflates this arm's
-                # bugs-caught-by-council figure. Refuse the round instead.
+                # bugs-caught-by-council figure.
+                #
+                # BREAK, not return. This can fire at round 2, after round 1
+                # ran seats, reported findings and applied a fix: returning
+                # there labelled a step that demonstrably ran as not-run, and
+                # skipped the `- fix_seconds` subtraction below so round 1's
+                # fix was billed twice in wall_clock_by_phase.
                 self.fail(f"council-round{rnd}", "nothing-to-review",
                           "the server's source could not be inlined, so the "
-                          "seats would see nothing; the round is recorded as "
-                          "not run rather than as finding nothing")
-                self.phases["review:council"] = time.time() - t0
-                self.tokens["review:council"] = add_tokens(*tok)
-                return {"ran": False,
-                        "skipped_reason": "no source could be inlined for the "
-                                          "seats to review",
-                        "rounds": rounds, "totals": _sum_rounds(rounds),
-                        "fix_rounds_applied": fixes}
+                          "seats would see nothing; the round is not run "
+                          "rather than recorded as finding nothing")
+                skipped = ("no source could be inlined for the seats to review"
+                           if not rounds else None)
+                break
             prompt = compose_council_prompt(self.cfg, self.ctx, mat)
             seats = {}
             results: dict[str, tuple[Proc, str | None]] = {}
@@ -3047,7 +3094,9 @@ class Run:
                 # provider was rate-limited is not a clean round: its union
                 # is one seat's opinion wearing a two-seat label.
                 "parse_ok": len(filled) == len(COUNCIL_SEATS),
-                "partial": bool(filled) and len(filled) < len(COUNCIL_SEATS),
+                "partial": (bool(filled) and len(filled) < len(COUNCIL_SEATS)
+                            or not mat.source_complete),
+                "source_complete": mat.source_complete,
                 "counts": union if any_ok else None,
                 "union_note": "sum across seats; no cross-seat semantic "
                               "deduplication is attempted (A7)",
@@ -3081,7 +3130,7 @@ class Run:
                 break
         self.phases["review:council"] = max(0.0, (time.time() - t0) - fix_seconds)
         self.tokens["review:council"] = add_tokens(*tok)
-        return {"ran": True, "skipped_reason": None, "rounds": rounds,
+        return {"ran": bool(rounds), "skipped_reason": skipped, "rounds": rounds,
                 "totals": _sum_rounds(rounds), "fix_rounds_applied": fixes}
 
     def _apply_fix(self, tag: str, fnd: Findings,
@@ -3201,7 +3250,9 @@ class Run:
             # for the others. An overnight rate-limit on one provider would
             # otherwise silently halve one regime's escaped-defect count and
             # make it look like the most robust build of the six.
-            "complete": complete,
+            "complete": complete and mat.source_complete,
+            "seats_complete": complete,
+            "source_complete": mat.source_complete,
             "counts": union if any_ok else None,
             "critical_important": (union["critical"] + union["important"]) if any_ok else None,
             "union_note": "sum across seats; no cross-seat semantic "
@@ -3210,6 +3261,12 @@ class Run:
             "seats_filled": filled,
             "seats_empty": empty,
         }
+        if not mat.source_complete:
+            self.fail("audit", "source-incomplete",
+                      "the audited seats did not see all of the code that "
+                      "runs (a truncated, symlinked or unreadable module); "
+                      "this arm's robustness number is NOT comparable with "
+                      "one whose seats saw everything")
         if not complete:
             self.fail("audit", "yardstick-incomplete",
                       f"only {filled or 'no'} seat(s) answered the escaped-defect "
