@@ -2996,8 +2996,13 @@ class Run:
             fnd = parse_findings(res.text)
             rec = {
                 "round": rnd, "model": model, "reviewed_sha": mat.review_sha,
-                "source_complete": mat.source_complete,
-                "partial": not mat.source_complete,
+                # `source_complete` describes what was INLINED. A native /
+                # lead / CTO reviewer also gets the diff and stands in the
+                # frozen checkout, so it can read what the prompt truncated --
+                # marking its round partial would understate a review that
+                # did see everything. Recorded for context, not as partial.
+                "inlined_source_complete": mat.source_complete,
+                "partial": False,
                 "proc": proc.summary(), **fnd.to_json(),
             }
             rounds.append(rec)
@@ -3199,7 +3204,7 @@ class Run:
         # correctly answer [], and the arm that built nothing banks zero
         # escaped defects: the best possible score on the headline
         # robustness metric.
-        if not mat.server_inlined:
+        if not self._seats_can_see(mat):
             # Keyed on what the seats will actually SEE, not on the file
             # existing. An entry point that exists but could not be inlined
             # (over budget, a symlink, an unreadable file) leaves the seats
@@ -3598,7 +3603,11 @@ def _sum_rounds(rounds: list[dict]) -> dict:
             for b in SEVERITY_BUCKETS:
                 tot["first_round"][b] = int(counts.get(b, 0))
             tot["first_round"]["total"] = int(counts.get("total", 0))
-            tot["first_round"]["complete"] = bool(r.get("parse_ok"))
+            # `partial` now covers source-incompleteness as well as a
+            # missing seat, so a first round that parsed but reviewed only
+            # part of the code is not a complete look at it.
+            tot["first_round"]["complete"] = bool(r.get("parse_ok")) and \
+                not r.get("partial")
     return tot
 
 
@@ -3778,9 +3787,32 @@ def render_summary(run: "Run", man: dict) -> str:
     A("")
     if not run.escaped:
         A("The audit did not run.")
-    elif not run.escaped.get("parse_ok"):
-        A("Both audit seats failed to return a parsable findings block; the "
-          "count is **null**, not zero. See failures below.")
+    elif not run.escaped.get("ran"):
+        A(f"The audit did not run: {run.escaped.get('reason', 'no reason recorded')}")
+        A("")
+        A("The count is **null**, not zero.")
+    elif not run.escaped.get("complete"):
+        # Gated on the SAME composite the manifest uses. These were one
+        # boolean until `complete` grew to mean "every seat answered AND the
+        # seats saw all the code that runs"; the summary was left on the
+        # seats-only flag, so it could print a headline robustness figure for
+        # an arm whose grading.escaped_defects was null. Six SUMMARY files
+        # compared side by side is exactly how that number gets used.
+        c = run.escaped.get("counts") or {}
+        A("**This arm's escaped-defect count is NOT comparable with the "
+          "others, and `grading.escaped_defects` is null.**")
+        A("")
+        if not run.escaped.get("seats_complete", True):
+            A(f"- Seats: only {run.escaped.get('seats_filled') or 'none'} "
+              f"answered; {run.escaped.get('seats_empty')} did not.")
+        if not run.escaped.get("source_complete", True):
+            A("- Source: the seats did not see all of the code that runs "
+              "(a truncated, symlinked or unreadable module).")
+        A("")
+        if c:
+            A(f"For the record, and not for comparison: "
+              f"{c.get('critical', 0)} critical, {c.get('important', 0)} "
+              f"important, {c.get('minor', 0)} minor.")
     else:
         c = run.escaped["counts"]
         A(f"**{run.escaped['critical_important']}** Critical+Important survived "

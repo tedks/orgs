@@ -1565,8 +1565,9 @@ def test_audit_guard_tests_what_the_seats_are_shown() -> None:
     src = (HARNESS / "run_regime.py").read_text()
     body = src[src.index("def phase_audit"):src.index("def manifest")]
     guard = body[:body.index("prompt = compose_audit_prompt")]
-    check("mat.server_inlined" in guard,
-          "the audit guard does not test whether the seats will see the source")
+    check("_seats_can_see(mat)" in guard,
+          "the audit guard does not use the predicate that decides whether "
+          "the seats will see the source")
     check("self.ctx.run_tree / self.cfg.server_path" not in guard,
           "the audit guard still tests the live working tree")
 
@@ -1684,9 +1685,15 @@ def test_council_refuses_a_round_it_cannot_show_the_seats() -> None:
         run = _fake_run("r3-orgs-full.json", Path(td))
         launched = []
         run.seat = lambda *a, **k: launched.append(a) or (None, None)
+        # tree PRESENT and source_complete TRUE, so only `server_inlined`
+        # can explain a refusal. Setting all three together (as an earlier
+        # version did) let a guard keyed on the wrong field pass: a council
+        # seat verified that `mat.tree is not None` and
+        # `server_inlined and source_complete` both left the suite green.
         run.collect_materials = lambda tag="review": rr.Materials(
-            diff="d", server_code="(no server was produced)",
-            review_sha="a" * 40, tree=None, server_inlined=False)
+            diff="d", server_code="(NO SERVER at targets/resp/server.py)",
+            review_sha="a" * 40, tree=Path(td), server_inlined=False,
+            source_complete=True)
         rec = run._council_step()
         check_eq(launched, [],
                  "a seat was launched on source it could not see")
@@ -1697,6 +1704,91 @@ def test_council_refuses_a_round_it_cannot_show_the_seats() -> None:
               "the refusal must be recorded as a failure, not silently")
         check("review:council" in run.phases,
               "the phase must still be recorded so the manifest is complete")
+
+
+def test_seats_can_see_keys_on_the_right_field() -> None:
+    """The predicate must key on `server_inlined` alone.
+
+    Keyed on `tree` it is the pre-round-5 bug (the checkout succeeds, the
+    server is missing, and the seats review a "(NO SERVER)" string). Keyed on
+    `server_inlined and source_complete` it refuses rounds on merely
+    truncated source, deflating the councilled arm's findings — the opposite
+    error. Each field is varied on its own so neither substitution passes.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("r3-orgs-full.json", Path(td))
+        tree = Path(td)
+
+        def mat(**kw):
+            base = dict(diff="d", server_code="x", review_sha="a" * 40,
+                        tree=tree, server_inlined=True, source_complete=True)
+            base.update(kw)
+            return rr.Materials(**base)
+
+        check(run._seats_can_see(mat()),
+              "wholly inlined source must be shown to the seats")
+        check(not run._seats_can_see(mat(server_inlined=False)),
+              "source that could not be inlined must NOT be shown")
+        check(run._seats_can_see(mat(source_complete=False)),
+              "TRUNCATED source still carries real signal — refusing the "
+              "round would deflate the councilled arm's findings; the round "
+              "runs and is marked partial instead")
+        check(run._seats_can_see(mat(tree=None)) is False
+              or run._seats_can_see(mat(tree=None, server_inlined=True)),
+              "the predicate must not key on the checkout path itself")
+        # The decisive pair: tree present, only server_inlined differs.
+        check(run._seats_can_see(mat(tree=tree, server_inlined=True))
+              and not run._seats_can_see(mat(tree=tree, server_inlined=False)),
+              "the predicate does not key on server_inlined")
+
+
+def test_summary_and_manifest_agree_on_the_yardstick() -> None:
+    """These were one boolean until `complete` grew to mean "every seat
+    answered AND the seats saw all the code". The summary was left on the
+    seats-only flag, so it could print a headline robustness figure for an
+    arm whose grading.escaped_defects was null — and six SUMMARY files
+    compared side by side is exactly how that number gets used."""
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("r3-orgs-full.json", Path(td))
+        counts = {"critical": 3, "important": 1, "minor": 2, "unknown": 0,
+                  "total": 6}
+        base = {"ran": True, "audited_sha": "a" * 40, "seats": {},
+                "counts": counts, "critical_important": 4,
+                "seats_filled": ["codex", "agy"], "seats_empty": [],
+                "seats_expected": ["codex", "agy"], "union_note": "sum"}
+
+        # Complete: the manifest publishes it and the summary states it.
+        run.escaped = dict(base, parse_ok=True, complete=True,
+                           seats_complete=True, source_complete=True)
+        man = run.manifest(rr.utc_now())
+        text = rr.render_summary(run, man)
+        check_eq(man["grading"]["escaped_defects"], 4, "complete -> published")
+        check("survived to the final server" in text,
+              "a complete audit should state its figure")
+        check("NOT comparable" not in text, "a complete audit is comparable")
+
+        # Source incomplete: both must refuse to present it as the figure.
+        run.escaped = dict(base, parse_ok=True, complete=False,
+                           seats_complete=True, source_complete=False)
+        man = run.manifest(rr.utc_now())
+        text = rr.render_summary(run, man)
+        check_eq(man["grading"]["escaped_defects"], None,
+                 "incomplete source -> null in the manifest")
+        check("NOT comparable" in text,
+              "the summary still presents an incomparable count as the "
+              "robustness figure while the manifest nulls it")
+        check("survived to the final server" not in text,
+              "the summary must not use the headline phrasing for a count "
+              "the manifest refused to publish")
+
+        # One seat missing: same treatment.
+        run.escaped = dict(base, parse_ok=False, complete=False,
+                           seats_complete=False, source_complete=True,
+                           seats_filled=["codex"], seats_empty=["agy"])
+        man = run.manifest(rr.utc_now())
+        text = rr.render_summary(run, man)
+        check_eq(man["grading"]["escaped_defects"], None, "one seat -> null")
+        check("NOT comparable" in text, "a one-seat audit is not comparable")
 
 
 def test_council_mid_loop_abort_keeps_the_rounds_it_ran() -> None:
@@ -2011,7 +2103,11 @@ def mutation_check() -> int:
     orig_audit_guard = rr.Run.collect_server_code
 
     def break_audit_guard() -> None:
-        rr.Run.collect_server_code = lambda self, tree: "(no server was produced)"
+        # Three-tuple, matching the real signature. Returning a bare string
+        # made this mutant "caught" by a ValueError in tests that unpack the
+        # return value -- proving nothing about the guard it names.
+        rr.Run.collect_server_code = lambda self, tree: (
+            "(no server was produced)", True, True)
 
     mutants.append(("the inlined source claims no server while the guard passes",
                     break_audit_guard,
@@ -2049,7 +2145,38 @@ def mutation_check() -> int:
                     break_crystal_count,
                     lambda: setattr(rr.Run, "_deliver_crystal", orig_deliver)))
 
-    # (22) The schema validator stops validating.
+    # (22) The summary drifts back onto the seats-only flag, so it presents
+    # a figure the manifest refused to publish.
+    orig_summary = rr.render_summary
+
+    def break_summary_gate() -> None:
+        def mutant(run, man):
+            esc = run.escaped
+            if esc and not esc.get("complete"):
+                run.escaped = dict(esc, complete=True)
+                try:
+                    return orig_summary(run, man)
+                finally:
+                    run.escaped = esc
+            return orig_summary(run, man)
+        rr.render_summary = mutant
+
+    mutants.append(("the summary presents a figure the manifest nulled",
+                    break_summary_gate,
+                    lambda: setattr(rr, "render_summary", orig_summary)))
+
+    # (23) The seats-can-see predicate keys on the checkout path instead of
+    # whether the source was actually inlined -- the pre-round-5 bug.
+    orig_can_see = rr.Run._seats_can_see
+
+    def break_predicate() -> None:
+        rr.Run._seats_can_see = lambda self, mat: mat.tree is not None
+
+    mutants.append(("the seats-can-see predicate keys on the wrong field",
+                    break_predicate,
+                    lambda: setattr(rr.Run, "_seats_can_see", orig_can_see)))
+
+    # (24) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:
