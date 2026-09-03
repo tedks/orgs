@@ -1490,7 +1490,8 @@ def test_server_code_comes_from_the_frozen_checkout() -> None:
         tmp = Path(td)
         run = _fake_run("r3-orgs-full.json", tmp / "runs")
         # No checkout at all -> say so, do not silently inline nothing.
-        out = run.collect_server_code(None)
+        out, inlined = run.collect_server_code(None)
+        check(not inlined, "no checkout -> the entry point is not inlined")
         check("could not be checked out" in out,
               f"a missing checkout must be stated: {out[:80]}")
 
@@ -1503,7 +1504,8 @@ def test_server_code_comes_from_the_frozen_checkout() -> None:
         (srcdir / "__init__.py").write_text("")
         (srcdir / "__pycache__").mkdir()
         (srcdir / "__pycache__" / "junk.py").write_text("x = 1")
-        out = run.collect_server_code(tree)
+        out, inlined = run.collect_server_code(tree)
+        check(inlined, "the entry point body should be reported as inlined")
         check("import codec" in out, "the entry point was not inlined")
         check("FRAMES = []" in out, "a sibling module was not inlined")
         check("junk" not in out, "__pycache__ was inlined")
@@ -1516,7 +1518,8 @@ def test_server_code_comes_from_the_frozen_checkout() -> None:
 
         # The entry point missing while helpers survive is its own statement.
         (tree / run.cfg.server_path).unlink()
-        out = run.collect_server_code(tree)
+        out, inlined = run.collect_server_code(tree)
+        check(not inlined, "a missing entry point is not inlined")
         check("NO SERVER" in out,
               f"a missing entry point beside surviving helpers: {out[:120]}")
 
@@ -1538,10 +1541,17 @@ def test_crystal_signature_is_recorded_only_on_success() -> None:
     turning a per-check hiccup into permanent silence."""
     src = (HARNESS / "run_regime.py").read_text()
     body = src[src.index("def _deliver_crystal"):src.index("def phase_grade")]
-    assign = body.index("self._last_crystal_signature = signature")
     dispatch = body.index("run_capture(")
-    check(assign > dispatch,
-          "the signature is still recorded before the delivery is attempted")
+    after = body[dispatch:]
+    check("self._last_crystal_signature = signature" in after,
+          "the signature is never recorded after a successful delivery")
+    before = body[:dispatch]
+    # One assignment before the dispatch is legitimate: the standup-off
+    # branch, which returns without attempting anything.
+    check(before.count("self._last_crystal_signature = signature") <= 1,
+          "the signature is recorded before the delivery is attempted")
+    check('if not self.cfg.toggles["standup"]' in before,
+          "the standup-off branch should be the only pre-dispatch record")
     check(body.count('if not self.cfg.toggles["standup"]') == 1,
           "the standup guard is duplicated; one copy is unreachable")
 
@@ -1554,10 +1564,86 @@ def test_audit_guard_tests_what_the_seats_are_shown() -> None:
     src = (HARNESS / "run_regime.py").read_text()
     body = src[src.index("def phase_audit"):src.index("def manifest")]
     guard = body[:body.index("prompt = compose_audit_prompt")]
-    check("mat.tree" in guard,
-          "the audit guard does not test the checkout the seats are shown")
+    check("mat.server_inlined" in guard,
+          "the audit guard does not test whether the seats will see the source")
     check("self.ctx.run_tree / self.cfg.server_path" not in guard,
           "the audit guard still tests the live working tree")
+
+
+def test_oversized_source_is_truncated_not_dropped() -> None:
+    """Dropping an over-budget entry point left the audit seats — whose
+    prompt carries no diff — with nothing but an omission note, while the
+    file plainly existed. The arm then banked a real zero on the robustness
+    metric for a server nobody had read."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        run = _fake_run("r1-goal-native-review.json", tmp / "runs")
+        tree = tmp / "tree"
+        srcdir = tree / Path(run.cfg.server_path).parent
+        srcdir.mkdir(parents=True)
+        (tree / run.cfg.server_path).write_text("A" * (rr.CODE_CAP + 50_000))
+        out, inlined = run.collect_server_code(tree)
+        check(inlined,
+              "an oversized entry point must still count as inlined — "
+              "dropping it lets the audit score a server nobody saw")
+        check("truncated" in out, "the truncation is not disclosed")
+        check("AAAA" in out, "no actual source was inlined")
+        check(len(out) < rr.CODE_CAP + 5000, "the cap was not applied")
+
+
+def test_symlinked_source_is_not_followed() -> None:
+    """`st_size` of a symlink to a special file reports 0, walking straight
+    past the stat-before-read bound — a link to /dev/zero would exhaust
+    memory and a FIFO would hang the run."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        run = _fake_run("r1-goal-native-review.json", tmp / "runs")
+        tree = tmp / "tree"
+        srcdir = tree / Path(run.cfg.server_path).parent
+        srcdir.mkdir(parents=True)
+        (tree / run.cfg.server_path).write_text("PORT = 1\n")
+        try:
+            (srcdir / "evil.py").symlink_to("/dev/zero")
+        except OSError:
+            return                       # no symlink support; nothing to test
+        out, inlined = run.collect_server_code(tree)
+        check(inlined, "the real entry point should still be inlined")
+        check("not a regular file" in out,
+              f"the symlink was followed rather than reported: {out[:200]}")
+
+        # And a symlinked ENTRY POINT is reported, not resolved.
+        (tree / run.cfg.server_path).unlink()
+        (tree / run.cfg.server_path).symlink_to("/dev/zero")
+        out2, inlined2 = run.collect_server_code(tree)
+        check(not inlined2, "a symlinked entry point must not count as inlined")
+        check("not a regular file" in out2, "the symlinked entry point was followed")
+
+
+def test_frozen_checkout_prunes_before_re_adding() -> None:
+    """A reset failure leaves the path REGISTERED while review_tree is None,
+    so the add would fail 'already exists' for the rest of the run — turning
+    one transient error into permanent loss of inlined source and a nulled
+    audit blaming a server the arm did build."""
+    src = (HARNESS / "run_regime.py").read_text()
+    body = src[src.index("def frozen_checkout"):src.index("def seat_scratch")]
+    add_idx = body.index('"worktree", "add"')
+    check('"worktree", "prune"' in body[:add_idx],
+          "frozen_checkout does not prune a stale registration before adding")
+    check('"worktree", "remove"' in body[:add_idx],
+          "frozen_checkout does not remove a leftover directory before adding")
+
+
+def test_crystal_undelivered_is_counted_once_per_finding() -> None:
+    """Counting it every loop iteration turned `undelivered` into a measure
+    of how long the build ran rather than of how much crystal could not
+    say."""
+    src = (HARNESS / "run_regime.py").read_text()
+    body = src[src.index("def _deliver_crystal"):src.index("def phase_grade")]
+    sig_idx = body.index("if signature == self._last_crystal_signature")
+    standup_idx = body.index('if not self.cfg.toggles["standup"]')
+    check(standup_idx > sig_idx,
+          "the standup-off branch still runs before the repeat check, so it "
+          "recounts the same undelivered finding on every check")
 
 
 # ---------------------------------------------------------------------------
@@ -1844,11 +1930,7 @@ def mutation_check() -> int:
                     break_missing,
                     lambda: setattr(rr, "_models_missing", orig_missing)))
 
-    # (20) The crystal delivery marks a conflict "said" before it lands, so
-    # one transient failure silences it permanently.
-    src_now = (HARNESS / "run_regime.py").read_text()
-
-    # (21) The audit's no-server guard goes back to testing the working tree
+    # (20) The audit's no-server guard goes back to testing the working tree
     # rather than what the seats are actually shown.
     orig_audit_guard = rr.Run.collect_server_code
 
@@ -1859,6 +1941,17 @@ def mutation_check() -> int:
                     break_audit_guard,
                     lambda: setattr(rr.Run, "collect_server_code",
                                     orig_audit_guard)))
+
+    # (21) The council runs a round on source that could not be inlined, so
+    # the seats see nothing, answer [], and it banks as a clean round.
+    orig_code = rr.Run.collect_server_code
+
+    def break_council_guard() -> None:
+        rr.Run.collect_server_code = lambda self, tree: ("(nothing)", True)
+
+    mutants.append(("a round is scored on source the seats never saw",
+                    break_council_guard,
+                    lambda: setattr(rr.Run, "collect_server_code", orig_code)))
 
     # (22) The schema validator stops validating.
     orig_val = rr.validate_schema

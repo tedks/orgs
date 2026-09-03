@@ -1447,6 +1447,11 @@ class Materials:
     findings_json: str = "[]"
     findings_prose: str = ""
     tree: Path | None = None
+    # True only when the ENTRY POINT's actual body was inlined. The council
+    # and audit prompts carry no diff, so a seat with this false would be
+    # reviewing nothing -- and its empty reply would be banked as a clean
+    # round. The callers refuse to run in that case.
+    server_inlined: bool = False
 
 
 DRY_MATERIALS = Materials(
@@ -1455,6 +1460,7 @@ DRY_MATERIALS = Materials(
     review_sha="<<DRY RUN: the frozen commit sha goes here>>",
     findings_json='[{"severity": "Critical", "claim": "<<DRY RUN: a finding>>"}]',
     findings_prose="<<DRY RUN: the reviewer's prose goes here>>",
+    server_inlined=True,
 )
 
 
@@ -2193,80 +2199,88 @@ class Run:
             diff += (f"\n\n[... diff truncated at {DIFF_CAP} characters; the "
                      f"full patch is at {out.name} ...]\n")
         tree = self.frozen_checkout(sha)
-        code = self.collect_server_code(tree)
+        code, inlined = self.collect_server_code(tree)
         return Materials(diff=diff, server_code=code, review_sha=sha,
-                         tree=tree)
+                         tree=tree, server_inlined=inlined)
 
-    def collect_server_code(self, tree: Path | None) -> str:
-        """Every Python file beside the server, inlined with headers.
+    def collect_server_code(self, tree: Path | None) -> tuple[str, bool]:
+        """Inline every Python file beside the server, from the frozen checkout.
 
-        Read from `tree`: the clean detached checkout of the frozen revision
-        that the reviewers stand in. That checkout is what makes this both
-        correct and simple --
+        Returns (text, entry_point_inlined). The flag is load-bearing: an
+        audit prompt whose source section is nothing but omission notes must
+        not be scored as "no defects found", so the callers refuse to run a
+        seat that would see nothing.
 
-          * it IS the revision, so the inlined source cannot drift from the
-            sha the seats are told they are reviewing;
-          * it is freshly checked out and cleaned, so a venv, a build
-            artefact or an agent's scratch file cannot eat the inlining
-            budget and push the real server out of the prompt;
-          * it is ordinary files, so a symlinked server reads the way
-            `python3` will read it when the exam runs, and a stat-before-read
-            bounds an oversized file with no subprocess, no temp file and no
-            path-length limit in the way.
+        Read from `tree` -- the clean detached checkout of the reviewed sha --
+        so the inlined source cannot drift from the sha the seats are told
+        they are reviewing, and so a venv or build artefact in the live tree
+        cannot eat the budget and push the real server out of the prompt.
 
-        An earlier version did this with `git ls-tree` plus a `git show` per
-        file. It was correct about the revision and wrong about almost
-        everything else; this is the same idea with the plumbing removed.
-
-        Inlined rather than referenced because a foreign council seat may not
-        be able to read a filesystem at all.
+        Only REGULAR files are inlined. A symlink is not followed: `st_size`
+        of a link to a special file reports 0, which walks straight past the
+        stat-before-read bound and lets a read of /dev/zero exhaust memory or
+        a FIFO hang the run. A benchmark server has no business being a
+        symlink, so one is reported rather than resolved.
         """
         if tree is None:
             return ("(the frozen revision could not be checked out, so no "
-                    "source is inlined; review the diff above)")
+                    "source could be inlined)", False)
         server = tree / self.cfg.server_path
         srcdir = server.parent
+        if server.is_symlink() or (server.exists() and not server.is_file()):
+            return (f"(`{self.cfg.server_path}` is not a regular file in "
+                    f"{self.head_sha[:12]} -- it is a symlink or a special "
+                    "file, and is not inlined)", False)
         if not server.is_file():
-            # Named specifically. Helpers can survive while the entry point
-            # does not, and "there are some .py files here" is not the same
-            # claim as "the server exists".
             if srcdir.is_dir() and any(srcdir.rglob("*.py")):
                 return (f"(NO SERVER at {self.cfg.server_path} in "
                         f"{self.head_sha[:12]}, although other Python files "
                         "exist beside it -- the entry point the exam runs is "
-                        "missing)")
+                        "missing)", False)
             return (f"(no server was produced at {self.cfg.server_path} -- "
-                    "there is nothing to review)")
-        files = sorted(p for p in srcdir.rglob("*.py")
-                       if "__pycache__" not in p.parts)
-        files.sort(key=lambda p: (p != server, str(p)))   # entry point first
+                    "there is nothing to review)", False)
+        files = sorted(f for f in srcdir.rglob("*.py")
+                       if "__pycache__" not in f.parts)
+        files.sort(key=lambda f: (f != server, str(f)))   # entry point first
         chunks: list[str] = []
         used = 0
+        entry_inlined = False
         for f in files:
             rel = f.relative_to(tree)
-            # stat BEFORE read: the file is agent-controlled, and reading a
-            # committed multi-gigabyte .py only to discard it for exceeding
-            # the cap would exhaust memory before the cap applied.
+            if f.is_symlink() or not f.is_file():
+                chunks.append(f"### `{rel}`\n\n(not a regular file; not "
+                              "inlined)\n")
+                continue
             try:
                 size = f.stat().st_size
             except OSError as exc:
                 chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
                 continue
-            if used + size > CODE_CAP:
+            budget = CODE_CAP - used
+            if budget <= 0:
                 chunks.append(f"### `{rel}`\n\n[omitted: {size} bytes; the "
-                              f"{CODE_CAP}-character inlining budget "
-                              "does not cover it]\n")
+                              f"{CODE_CAP}-character inlining budget is "
+                              "exhausted]\n")
                 continue
             try:
-                body = f.read_text(encoding="utf-8", errors="replace")
+                with open(f, "r", encoding="utf-8", errors="replace") as fh:
+                    body = fh.read(budget)
             except OSError as exc:
                 chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
                 continue
             used += len(body)
-            # An EMPTY file inlines as an empty block. Reporting it as
-            # "budget exhausted" would be a lie about a real, if boring, file.
-            chunks.append(f"### `{rel}`\n\n```python\n{body}\n```\n")
-        return "\n".join(chunks)
+            # TRUNCATE, never drop. Dropping an over-budget entry point left
+            # the audit seats with nothing but a note while the file plainly
+            # existed, so the arm banked a real zero on the robustness metric
+            # for a server nobody had read.
+            note = ""
+            if size > budget:
+                note = (f"\n\n[truncated: {size} bytes, inlined the first "
+                        f"{len(body)} characters]")
+            chunks.append(f"### `{rel}`\n\n```python\n{body}\n```{note}\n")
+            if f == server and body.strip():
+                entry_inlined = True
+        return "\n".join(chunks), entry_inlined
 
     def _tally_seats(self, seats: dict, results: dict, prompt: str,
                      tok: list, tag: str) -> tuple[dict, list[str], list[str]]:
@@ -2322,6 +2336,16 @@ class Run:
         """
         wt = self.run_dir / "review-tree"
         if self.review_tree is None:
+            # Prune first. A previous reset failure leaves the path REGISTERED
+            # while `self.review_tree` is None, so the add below would fail
+            # "already exists" for the rest of the run -- turning one
+            # transient error into permanent loss of inlined source and a
+            # nulled audit that blames a server the arm did build.
+            if wt.exists():
+                git(["worktree", "remove", "--force", str(wt)],
+                    cwd=self.framework, timeout=self.cfg.timeouts["git_s"])
+            git(["worktree", "prune"], cwd=self.framework,
+                timeout=self.cfg.timeouts["git_s"])
             rc, _o, err = git(["worktree", "add", "--detach", str(wt), sha],
                               cwd=self.framework, timeout=self.cfg.timeouts["git_s"])
             if rc != 0:
@@ -2744,11 +2768,6 @@ class Run:
         """
         if not stanzas and not noisy:
             return
-        if not self.cfg.toggles["standup"]:
-            # No bus, so nothing can be pushed to the lead. The prompt tells
-            # it to run the check itself in that case.
-            self.crystal_stats["undelivered"] += 1
-            return
         # Say a thing once. The loop runs every few minutes for the whole
         # build, so a worker branch that stays un-compilable would otherwise
         # inject the same message dozens of times into the lead's context --
@@ -2757,6 +2776,14 @@ class Run:
         signature = (tuple(stanzas), tuple(noisy))
         if signature == self._last_crystal_signature:
             self.crystal_stats["suppressed_repeats"] += 1
+            return
+        if not self.cfg.toggles["standup"]:
+            # No bus, so nothing can be pushed to the lead; the prompt tells
+            # it to run the check itself. Recorded once per distinct finding,
+            # AFTER the repeat check -- counting it every loop iteration
+            # inflated `undelivered` into a measure of how long the build ran.
+            self.crystal_stats["undelivered"] += 1
+            self._last_crystal_signature = signature
             return
         if stanzas:
             body = ("Standup — Crystal speculative merge check #%d found a "
@@ -2972,6 +2999,22 @@ class Run:
         tok: list[dict] = []
         for rnd in range(1, self.cfg.max_rounds["council"] + 1):
             mat = self.collect_materials(f"council-round{rnd}")
+            if not mat.server_inlined:
+                # The council prompt carries no diff, so a seat here would be
+                # reviewing nothing -- and would correctly answer `[]`, which
+                # banks as a clean round and deflates this arm's
+                # bugs-caught-by-council figure. Refuse the round instead.
+                self.fail(f"council-round{rnd}", "nothing-to-review",
+                          "the server's source could not be inlined, so the "
+                          "seats would see nothing; the round is recorded as "
+                          "not run rather than as finding nothing")
+                self.phases["review:council"] = time.time() - t0
+                self.tokens["review:council"] = add_tokens(*tok)
+                return {"ran": False,
+                        "skipped_reason": "no source could be inlined for the "
+                                          "seats to review",
+                        "rounds": rounds, "totals": _sum_rounds(rounds),
+                        "fix_rounds_applied": fixes}
             prompt = compose_council_prompt(self.cfg, self.ctx, mat)
             seats = {}
             results: dict[str, tuple[Proc, str | None]] = {}
@@ -3107,10 +3150,17 @@ class Run:
         # correctly answer [], and the arm that built nothing banks zero
         # escaped defects: the best possible score on the headline
         # robustness metric.
-        if mat.tree is None or not (mat.tree / self.cfg.server_path).is_file():
-            reason = (f"no server at {self.cfg.server_path} in the audited "
-                      f"revision {mat.review_sha[:12]}; there is nothing to "
-                      "audit, so escaped_defects is null rather than zero")
+        if not mat.server_inlined:
+            # Keyed on what the seats will actually SEE, not on the file
+            # existing. An entry point that exists but could not be inlined
+            # (over budget, a symlink, an unreadable file) leaves the seats
+            # with omission notes; both answer `[]` and the arm banks zero
+            # escaped defects -- the best possible score on the headline
+            # robustness metric -- for a server nobody read.
+            reason = (f"the server at {self.cfg.server_path} could not be "
+                      f"inlined for the audited revision {mat.review_sha[:12]}, "
+                      "so the seats would see nothing; escaped_defects is null "
+                      "rather than zero")
             self.escaped = {"ran": False, "reason": reason, "parse_ok": False,
                             "complete": False, "counts": None,
                             "critical_important": None, "seats": {},
