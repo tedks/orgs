@@ -121,3 +121,41 @@
 - **Reconsider when:** binding claims are generated from or checked against
   machine-readable tool schemas, so a false capability claim fails
   mechanically rather than needing a human/agent to notice.
+
+## 2026-09-03 — Delta-only fixpoint goes blind to the code it stops re-reading
+
+- **What happened:** the bench orchestrator was councilled to fixpoint over
+  nine rounds by three provider seats. Round 1 reviewed the whole program;
+  every round after reviewed **only the previous round's fix delta** (the
+  documented convergence-pass rule — scope to the delta so the loop does not
+  re-litigate settled findings). Findings per round fell 30, 14, 6, 4, 4, 3,
+  5, 2, 0, and round 9 returned CLEAN from two seats with the third's single
+  finding disproved by experiment.
+  Then a **fresh full review** by a different reviewer found a Critical that
+  all nine rounds had walked past: the findings parser, on failing to parse
+  the required final fenced block, fell back to *earlier* fenced blocks — so
+  a reviewer that showed the format as an example and then emitted a
+  malformed real block had its illustrative `[]` recorded as the result. A
+  silent clean verdict from a review that actually failed. The parser was
+  written in round 1 and touched by no delta after it, so from round 2 on it
+  was never in anyone's scope again.
+- **Evidence:** `bench/harness/run_regime.py` `parse_findings` (the
+  `candidates.reverse()` fallback chain); CTO council round 1, codex #2;
+  reproduced before fixing, and now pinned by
+  `test_findings_parser_never_falls_back_to_an_earlier_fence` plus a mutant.
+- **Applies when:** running any review loop to fixpoint on deltas. The delta
+  scope is right — it is what makes convergence affordable and what catches
+  fix-introduced regressions, which rounds 2-8 did every single time. But it
+  has a blind spot with a precise shape: **code that stops changing stops
+  being read**, and a defect in a stable region is invisible to every
+  subsequent round no matter how many you run. A converged delta loop is
+  evidence that the *changes* are clean, not that the *program* is. Pair it
+  with a periodic full re-review — cheapest at the end, by a seat that has
+  not been following the deltas — before treating a fixpoint as a go.
+  The corollary bites hardest where it matters most: the longer the loop
+  runs, the more of the program is stable, so the blind region *grows* with
+  the number of rounds.
+- **Reconsider when:** a review round can cheaply be scoped to "the delta
+  plus everything the delta's blast radius touches" with the radius computed
+  mechanically (call graph, data flow into the changed values), so stable
+  code that the delta can still reach stays in scope automatically.

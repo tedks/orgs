@@ -3583,6 +3583,39 @@ class Run:
                     "product = build + fix rounds; the escaped-defect audit is "
                     "the measuring instrument and is excluded from both "
                     "(RUNBOOK §8, assumption A9)"),
+                "accepted_limitations": [
+                    {"id": "cost-estimation-asymmetry",
+                     "decided_by": "CTO, 2026-09-03",
+                     "limitation": (
+                         "coordination_tokens sums a MEASURED `claude -p` "
+                         "figure with an ESTIMATED ask-agent one (characters/4; "
+                         "ask-agent emits no usage at all), so arms whose "
+                         "review ladders use different seat types -- r1 "
+                         "(native) vs r2 (council) -- are NOT comparable on "
+                         "cost."),
+                     "disposition": (
+                         "ACCEPTED as a documented limitation. The study's "
+                         "primary answers are correctness and "
+                         "bugs-caught-per-review-step, neither of which "
+                         "depends on token estimation. `cost_provenance` "
+                         "splits every bucket into measured vs estimated and "
+                         "sets comparable_across_arms=false wherever an "
+                         "estimate is present. No precision is faked.")},
+                    {"id": "shared-spec-vocabulary",
+                     "decided_by": "CTO, 2026-09-03",
+                     "limitation": (
+                         "the spec is shared by every arm and uses protocol "
+                         "vocabulary for mechanisms some arms lack -- it lists "
+                         "producing protocol artifacts among its goals."),
+                     "disposition": (
+                         "ACCEPTED. The identical-target invariant beats "
+                         "perfect vocabulary: editing the spec per arm would "
+                         "be a worse contamination than a documented note. "
+                         "Goal-directed arms get a scope note telling them "
+                         "the process half of the spec is not their task, and "
+                         "--dry-run prints a SHARED-INPUT NOTE naming which "
+                         "terms reach which arm.")},
+                ],
                 "token_sources": (
                     "claude -p: summed modelUsage (the per-session aggregate); "
                     "foreign seats: estimated at characters/4 and flagged"),

@@ -366,7 +366,7 @@
         "object",
         "null"
       ],
-      "description": "how the measurement itself was made: the script, the pristine framework worktree, sha256 of every pinned input (spec, exam, runbook, doctrine), whether the run tree's copy of the exam was modified, and the stated cost-bucketing and token-source rules"
+      "description": "how the measurement itself was made: the script, the pristine framework worktree, sha256 of every pinned input (spec, exam, runbook, doctrine), whether the run tree's copy of the exam was modified, and the stated cost-bucketing and token-source rules. `accepted_limitations` records the study limitations the CTO reviewed and accepted, each with its disposition \u2014 they ride in every manifest so a reader of one run's results cannot miss them."
     },
     "meta_product_ratio": {
       "type": [
