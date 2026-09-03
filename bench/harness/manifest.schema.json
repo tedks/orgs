@@ -444,6 +444,16 @@
       "items": {
         "type": "string"
       }
+    },
+    "models_missing": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "configured models for the build roles that never appear in modelUsage. models_honoured can only see a model from OUTSIDE the configured set, so a lead that upgrades its haiku workers to the sonnet it also uses itself passes it; this catches that from the other side.",
+      "items": {
+        "type": "string"
+      }
     }
   }
 }

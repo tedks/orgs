@@ -742,8 +742,8 @@ def test_manifest_validates_against_the_schema() -> None:
                 s: {"ran": True, "skipped_reason": None, "rounds": [],
                     "totals": rr._empty_totals(), "fix_rounds_applied": 0}
                 for s in rr.REVIEW_STEP_ORDER}
-            run.escaped = {"ran": True, "parse_ok": True, "audited_sha": "abc",
-                           "critical_important": 4,
+            run.escaped = {"ran": True, "parse_ok": True, "complete": True,
+                           "audited_sha": "abc", "critical_important": 4,
                            "counts": {"critical": 3, "important": 1, "minor": 2,
                                       "unknown": 0, "total": 6},
                            "seats": {}, "seats_filled": ["codex"],
@@ -758,6 +758,19 @@ def test_manifest_validates_against_the_schema() -> None:
                      f"{name}: grading mirrors the FINAL stage, not the first")
             check_eq(man["grading"]["escaped_defects"], 4,
                      f"{name}: escaped defects mirrored into grading")
+            # An incomplete audit must NOT fill the headline field: a one-seat
+            # number sitting where a two-seat number belongs makes the arm
+            # that lost a provider look like the most robust of the six.
+            run.escaped = dict(run.escaped, complete=False, parse_ok=False,
+                               seats_filled=["codex"], seats_empty=["agy"])
+            partial = run.manifest(rr.utc_now())
+            check_eq(partial["grading"]["escaped_defects"], None,
+                     f"{name}: an incomplete audit must not fill the headline "
+                     "robustness field")
+            check_eq(partial["escaped_defects"]["critical_important"], 4,
+                     f"{name}: the partial count is still kept in the detail")
+            check(not rr.validate_schema(partial, schema),
+                  f"{name}: the partial-audit manifest violates the schema")
 
             # The summary must render without raising on any of these shapes.
             text = rr.render_summary(run, man)
@@ -1024,11 +1037,20 @@ def test_agent_env_is_scrubbed() -> None:
     context. Passing this session's own CLAUDE_* variables through makes that
     false and can let a "fresh" reviewer resume back into the context it is
     supposed to lack."""
-    for leaky in ("CLAUDE_CODE_SESSION", "CLAUDECODE", "CODEX_HOME",
-                  "CLAUDE_SESSION_ID", "GEMINI_API_KEY"):
+    for leaky in ("CLAUDE_CODE_SESSION", "CLAUDECODE", "CLAUDE_SESSION_ID",
+                  "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_ENTRYPOINT",
+                  "CODEX_THREAD_ID", "GEMINI_CONVERSATION"):
         check(rr._is_agent_env(leaky), f"{leaky} should be scrubbed")
-    for keep in ("PATH", "HOME", "TMPDIR", "ANTHROPIC_API_KEY", "LANG"):
-        check(not rr._is_agent_env(keep), f"{keep} must NOT be scrubbed")
+    # Scrubbing a provider's CREDENTIALS would not corrupt the study -- it
+    # would make that seat fail, silently turning a councilled arm into an
+    # un-councilled one, which is worse.
+    for keep in ("PATH", "HOME", "TMPDIR", "LANG",
+                 "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL",
+                 "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR",
+                 "CODEX_HOME", "CODEX_API_KEY", "GEMINI_API_KEY",
+                 "GOOGLE_API_KEY", "ANTIGRAVITY_HOME"):
+        check(not rr._is_agent_env(keep),
+              f"{keep} must NOT be scrubbed — the seat needs it to run")
 
 
 def test_conformance_line_is_anchored() -> None:
@@ -1097,11 +1119,27 @@ def test_seat_tally_is_strict_about_missing_seats() -> None:
                     "total": 1}},
     ]
     t = rr._sum_rounds(rounds)
-    check_eq(t["rounds_unparsed"], 2,
-             "a partial round must not be counted as fully parsed")
+    check_eq(t["rounds_unparsed"], 1,
+             "only the round with NO usable counts is unparsed")
+    check_eq(t["rounds_partial"], 1,
+             "a round where some seats answered is partial, not discarded")
+    check_eq(t["critical"], 3,
+             "a partial round's real findings must still be counted — "
+             "discarding them loses genuine findings from the primary total")
     check_eq(t["first_round"]["critical"], 2,
              "first_round is the comparable per-step figure")
     check_eq(t["first_round"]["total"], 3, "first_round total")
+    check(t["first_round"]["complete"], "round 1 here was complete")
+
+    # A round 1 that produced nothing readable must NOT read as "found
+    # nothing" in the field designated as the cross-arm comparable figure.
+    unparsed_first = [{"round": 1, "parse_ok": False, "counts": None},
+                      {"round": 2, "parse_ok": True,
+                       "counts": {"critical": 5, "important": 0, "minor": 0,
+                                  "unknown": 0, "total": 5}}]
+    t2 = rr._sum_rounds(unparsed_first)
+    check_eq(t2["first_round"], None,
+             "an unparsed round 1 must null first_round, never report zeros")
 
 
 def test_first_round_is_independent_of_round_count() -> None:
@@ -1226,6 +1264,153 @@ def test_nested_config_blocks_are_validated() -> None:
               f"the config loader accepted {label} without complaint")
     check(load(lambda c: c.update({"standup": {"stall_min": 30}})) is None,
           "a well-formed nested override should still load")
+
+
+# ---------------------------------------------------------------------------
+# 10. Convergence round: defects the ROUND-1 FIXES introduced
+# ---------------------------------------------------------------------------
+
+def test_fix_regressions_ignores_the_observed_value() -> None:
+    """The exam prints `FAIL: <name> — expected [X] got [Y]`. Set-differencing
+    whole lines meant a fix that changed a still-failing assertion's wrong
+    answer produced a new key and read as a fresh regression — inflating the
+    number in proportion to how many fix rounds an arm ran, i.e. against the
+    arms that review most."""
+    check_eq(rr._assertion_name("PING — expected [PONG] got [nil]"), "PING",
+             "the observed value must not be part of the assertion key")
+    stages = {
+        "after_build": {"ran": True, "conformance_passed": 15,
+                        "conformance_total": 16,
+                        "failures": ["PING — expected [PONG] got [nil]"]},
+        "final": {"ran": True, "conformance_passed": 15, "conformance_total": 16,
+                  "failures": ["PING — expected [PONG] got [ERR]"]},
+    }
+    check_eq(rr._fix_regressions(stages), 0,
+             "the same assertion still failing differently is not a NEW "
+             "regression")
+    swapped = {
+        "after_build": {"ran": True, "conformance_passed": 15,
+                        "conformance_total": 16,
+                        "failures": ["PING — expected [PONG] got [nil]"]},
+        "final": {"ran": True, "conformance_passed": 15, "conformance_total": 16,
+                  "failures": ["ECHO hello — expected [hello] got [nil]"]},
+    }
+    check_eq(rr._fix_regressions(swapped), 1,
+             "a genuinely different assertion failing IS a regression")
+
+
+def test_nested_config_does_not_clobber_the_minutes_form() -> None:
+    """The helper written to stop a setting silently not taking effect did
+    exactly that: it returned a defaults-filled dict, so `.update()` wrote the
+    DEFAULT interval back over the value derived from *_interval_min."""
+    base = json.loads((CONFIG_DIR / "r3-orgs-full.json").read_text())
+    base["crystal_interval_min"] = 5
+    base["crystal"] = {"test_cmd": "pytest -q"}
+    base["standup_interval_min"] = 7
+    base["standup"] = {"stall_min": 20}
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump(base, fh)
+        p = Path(fh.name)
+    try:
+        cfg = rr.load_config(p)
+        check_eq(cfg.crystal["interval_s"], 300.0,
+                 "crystal_interval_min was clobbered by the nested block's default")
+        check_eq(cfg.crystal["test_cmd"], "pytest -q", "the nested override applied")
+        check_eq(cfg.standup["interval_s"], 420.0,
+                 "standup_interval_min was clobbered by the nested block's default")
+        check_eq(cfg.standup["stall_min"], 20, "the nested override applied")
+        check_eq(cfg.standup["redirect_cooldown_s"],
+                 rr.DEFAULT_STANDUP["redirect_cooldown_s"],
+                 "an unmentioned key keeps its default")
+    finally:
+        p.unlink(missing_ok=True)
+
+
+def test_falsey_nested_blocks_are_still_validated() -> None:
+    """`if raw.get("standup")` let an empty list, "", 0 or false skip
+    validation and silently take defaults."""
+    base = json.loads((CONFIG_DIR / "protocol-full.json").read_text())
+    for bad in ([], "", 0, False):
+        cfg = copy.deepcopy(base)
+        cfg["standup"] = bad
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            json.dump(cfg, fh)
+            p = Path(fh.name)
+        try:
+            rr.load_config(p)
+            FAILURES.append(f"a falsey standup block ({bad!r}) bypassed validation")
+        except rr.ConfigError:
+            pass
+        finally:
+            p.unlink(missing_ok=True)
+
+
+def test_crystal_keeps_textual_conflicts_from_red_branches() -> None:
+    """A textual conflict is a `git merge-tree` result and has nothing to do
+    with the boundary test, so a branch that is red on its own must not have
+    its genuine textual conflicts suppressed as noise."""
+    base = "bench-run/x"
+    report = (
+        "# Crystal report\nbase: bench-run/x@aaa\n\n"
+        "## bench-run/x@aaa \u00d7 wp-codec@bbb\nmerge: clean\ntests: FAIL\n\n"
+        "## wp-codec@bbb \u00d7 wp-server@ddd\n"
+        "merge: CONFLICT (targets/resp/server.py)\n\n"
+        "## wp-codec@bbb \u00d7 wp-engine@ccc\nmerge: clean\ntests: FAIL\n")
+    real, noisy = rr._classify_conflicts(report, base)
+    check_eq(noisy, ["wp-codec"], "wp-codec is red against the base")
+    joined = " | ".join(real)
+    check("CONFLICT" in joined,
+          f"a textual conflict from a red-alone branch was suppressed: {real}")
+    check("wp-codec@bbb × wp-engine@ccc" not in joined,
+          "a semantic pairing of a red-alone branch is noise and must be dropped")
+    check_eq(len(real), 1, f"exactly the textual conflict should survive: {real}")
+
+
+def test_review_prompt_names_the_directory_the_reviewer_is_in() -> None:
+    """The reviewer runs in a detached checkout so it cannot edit what it
+    judges. Telling it the writable product tree is 'your working directory'
+    both misdirects it and invites the write the detached tree prevents."""
+    cfg = rr.load_config(CONFIG_DIR / "r1-goal-native-review.json")
+    ctx = make_ctx(cfg)
+    elsewhere = Path("/tmp/review-tree-xyz")
+    p = rr.compose_review_prompt(cfg, ctx, "native", rr.DRY_MATERIALS,
+                                 review_cwd=elsewhere)
+    check(str(elsewhere) in p, "the prompt does not name the reviewer's own cwd")
+    check(str(ctx.run_tree) not in p,
+          "the prompt still points the reviewer at the writable product tree")
+
+
+def test_provenance_flags_incomplete_sources() -> None:
+    """'unavailable' and the last-turn-only fallback are not estimates, but
+    they are not full measurements either — banking them as measured labels an
+    undercounted arm comparable."""
+    no_mu = {k: v for k, v in RESULT_EVENT.items() if k != "modelUsage"}
+    fallback = rr.tokens_from_result(no_mu)
+    prov = rr._split_provenance([fallback])
+    check(prov["incomplete_sources"], "the last-turn-only fallback is not complete")
+    check(not prov["comparable_across_arms"],
+          "an incomplete source must not be labelled comparable")
+    prov2 = rr._split_provenance([rr.zero_tokens("unavailable: no result")])
+    check(prov2["incomplete_sources"], "'unavailable' is not a measurement")
+    good = rr._split_provenance([rr.tokens_from_result(RESULT_EVENT)])
+    check(good["comparable_across_arms"], "a real modelUsage figure IS comparable")
+
+
+def test_models_missing_catches_a_within_set_upgrade() -> None:
+    """_models_honoured only sees a model from OUTSIDE the configured set, so
+    a lead that upgrades its haiku workers to the sonnet it also uses itself
+    passes it. This catches that from the other side."""
+    cfg = {"lead": "sonnet", "worker": "haiku"}
+    seen_both = {"claude-sonnet-4-5": 100, "claude-haiku-4-5": 50}
+    check_eq(rr._models_missing(cfg, seen_both, ("lead", "worker")), [],
+             "both configured tiers appeared")
+    only_sonnet = {"claude-sonnet-4-5": 100}
+    check_eq(rr._models_missing(cfg, only_sonnet, ("lead", "worker")), ["haiku"],
+             "the worker tier never ran, which _models_honoured cannot see")
+    check(rr._models_honoured(cfg, only_sonnet) is True,
+          "the honoured check alone would have passed this")
+    check_eq(rr._models_missing(cfg, {}, ("lead", "worker")), [],
+             "nothing observed -> no claim either way")
 
 
 # ---------------------------------------------------------------------------
@@ -1427,7 +1612,57 @@ def mutation_check() -> int:
     mutants.append(("the parent session's agent env leaks into fresh agents",
                     break_env, lambda: setattr(rr, "_is_agent_env", orig_isenv)))
 
-    # (13) The schema validator stops validating.
+    # (13) fix-regressions goes back to keying on the whole FAIL line, so a
+    # changed observed value reads as a new regression.
+    orig_name = rr._assertion_name
+
+    def break_name() -> None:
+        rr._assertion_name = lambda line: line
+
+    mutants.append(("fix-regressions keys on the observed value, not the assertion",
+                    break_name, lambda: setattr(rr, "_assertion_name", orig_name)))
+
+    # (14) The crystal noise filter swallows textual conflicts again.
+    orig_classify2 = rr._classify_conflicts
+
+    def break_textual() -> None:
+        def drop_all_from_noisy(report, base):
+            real, noisy = orig_classify2(report, base)
+            return ([r for r in real
+                     if not any(n in r for n in noisy)], noisy)
+        rr._classify_conflicts = drop_all_from_noisy
+
+    mutants.append(("a red-alone branch's TEXTUAL conflicts are suppressed",
+                    break_textual,
+                    lambda: setattr(rr, "_classify_conflicts", orig_classify2)))
+
+    # (15) An incomplete audit fills the headline robustness field again.
+    orig_manifest2 = rr.Run.manifest
+
+    def break_headline() -> None:
+        def mutant(self, ended):
+            man = orig_manifest2(self, ended)
+            esc = self.escaped or {}
+            if esc.get("critical_important") is not None:
+                man["grading"]["escaped_defects"] = esc["critical_important"]
+            return man
+        rr.Run.manifest = mutant
+
+    mutants.append(("an incomplete audit fills the headline robustness field",
+                    break_headline,
+                    lambda: setattr(rr.Run, "manifest", orig_manifest2)))
+
+    # (16) A provider's credentials get scrubbed along with its session state,
+    # silently turning a councilled arm into an un-councilled one.
+    orig_keep = rr.AGENT_ENV_KEEP
+
+    def break_keep() -> None:
+        rr.AGENT_ENV_KEEP = ()
+
+    mutants.append(("provider credentials are scrubbed with the session state",
+                    break_keep, lambda: setattr(rr, "AGENT_ENV_KEEP", orig_keep)))
+
+    # (17) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:

@@ -331,7 +331,21 @@ def _kill_group(pgid: int, *, term_grace: float = 10.0,
 # or message its way back into the context it is supposed to lack.
 AGENT_ENV_PREFIXES = ("CLAUDE", "ANTHROPIC_SESSION", "CLAUDECODE",
                       "CODEX", "GEMINI", "ANTIGRAVITY", "AGY")
-AGENT_ENV_KEEP = ("ANTHROPIC_API_KEY", "CLAUDE_CONFIG_DIR")
+# Credentials and configuration the seats need in order to run at all. The
+# prefixes above are deliberately broad, and a broad scrub that took a
+# provider's API key with it would not corrupt the study -- it would simply
+# make that seat fail, silently converting a councilled arm into an
+# un-councilled one. Everything a CLI authenticates or configures itself with
+# is named here explicitly.
+AGENT_ENV_KEEP = (
+    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN",
+    "CODEX_HOME", "CODEX_API_KEY",
+    "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS",
+    "ANTIGRAVITY_HOME",
+)
 
 
 def _is_agent_env(key: str) -> bool:
@@ -708,10 +722,19 @@ def load_config(path: Path) -> Config:
     # not, and a wrongly-typed one is a TypeError hours into an unattended
     # run rather than a message before it starts.
     def _nested(name: str, defaults: dict, numeric: tuple[str, ...]) -> dict:
-        out = dict(defaults)
+        """Return ONLY the keys the config actually set.
+
+        Returning a defaults-filled dict and then `.update()`-ing it over the
+        target wrote the DEFAULT interval back over the value already derived
+        from `standup_interval_min` -- so the helper written to stop a setting
+        silently not taking effect did exactly that.
+        """
+        out: dict[str, Any] = {}
         block = raw.get(name)
         if block is None:
             return out
+        # `is None` above, not truthiness: an empty list, "", 0 or false are
+        # malformed blocks, and treating them as absent skipped validation.
         if not isinstance(block, dict):
             raise ConfigError(f"{where}: '{name}' must be an object")
         unknown = set(block) - set(defaults)
@@ -731,17 +754,15 @@ def load_config(path: Path) -> Config:
                                           "standup_interval_min") * 60
     standup.update(_nested("standup", DEFAULT_STANDUP,
                            ("interval_s", "stall_min", "redirect_cooldown_s",
-                            "startup_grace_s"))
-                   if raw.get("standup") else {})
+                            "startup_grace_s")))
     crystal = dict(DEFAULT_CRYSTAL)
     if "crystal_interval_min" in raw:
         crystal["interval_s"] = _positive(raw["crystal_interval_min"],
                                           "crystal_interval_min") * 60
-    if raw.get("crystal"):
-        block = _nested("crystal", DEFAULT_CRYSTAL, ("interval_s", "timeout_s"))
-        if block.get("test_cmd") is not None and not isinstance(block["test_cmd"], str):
-            raise ConfigError(f"{where}: crystal.test_cmd must be a string")
-        crystal.update(block)
+    block = _nested("crystal", DEFAULT_CRYSTAL, ("interval_s", "timeout_s"))
+    if block.get("test_cmd") is not None and not isinstance(block["test_cmd"], str):
+        raise ConfigError(f"{where}: crystal.test_cmd must be a string")
+    crystal.update(block)
 
     # Review steps. `review` in the toggle surface is the internal review
     # ladder (RUNBOOK §6 steps 1-3 minus the council seat); it turns on both
@@ -1320,7 +1341,16 @@ REVIEW_ROLE_TEXT = {
 }
 
 
-def compose_review_prompt(cfg: Config, ctx: Ctx, step: str, mat: "Materials") -> str:
+def compose_review_prompt(cfg: Config, ctx: Ctx, step: str, mat: "Materials",
+                          review_cwd: Path | None = None) -> str:
+    """`review_cwd` is where the reviewer will actually stand.
+
+    It is NOT the product tree: reviewers run in a detached checkout of the
+    frozen sha so they cannot edit what they judge. Telling them the product
+    tree is "your working directory" -- which the prompt did while the process
+    ran somewhere else -- both misdirects them and invites the write the
+    detached worktree exists to prevent.
+    """
     title, stance = REVIEW_ROLE_TEXT[step]
     return render(load_template("review_claude.md"), {
         "PROTOCOL_PREAMBLE": _protocol_preamble(cfg, ctx),
@@ -1328,7 +1358,7 @@ def compose_review_prompt(cfg: Config, ctx: Ctx, step: str, mat: "Materials") ->
         "ROLE_STANCE": stance,
         "REVIEW_SHA": mat.review_sha,
         "RUN_BRANCH": ctx.run_branch,
-        "RUN_TREE": str(ctx.run_tree),
+        "RUN_TREE": str(review_cwd or ctx.run_tree),
         "SERVER_PATH": cfg.server_path,
         "DIFF": mat.diff,
         "SERVER_CODE": mat.server_code,
@@ -1871,10 +1901,10 @@ class Run:
         self.standup_stats = {"ran": False, "observes": 0, "redirects": 0,
                               "stalls_seen": 0, "stalls_in_grace": 0,
                               "errors": 0, "agents": []}
-        self.crystal_stats = {"ran": False, "checks": 0, "conflicts": 0,
-                              "real_conflicts": 0, "delivered": 0,
-                              "undelivered": 0, "noisy_branches": [],
-                              "errors": 0, "reports": []}
+        self.crystal_stats = {"ran": False, "checks": 0, "attempts": 0,
+                              "conflicts": 0, "real_conflicts": 0,
+                              "delivered": 0, "undelivered": 0,
+                              "noisy_branches": [], "errors": 0, "reports": []}
         self.worktree_created = False
         self.base_sha = "unknown"
         self.head_sha = "unknown"
@@ -2048,13 +2078,35 @@ class Run:
         sweep is deterministic and identical in every arm, and it is recorded.
         The prompts tell the agent this happens.
         """
-        rc, out, _ = git(["status", "--porcelain"], cwd=self.ctx.run_tree,
-                         timeout=self.cfg.timeouts["git_s"])
-        if rc != 0 or not out.strip():
+        # Bounded, and to a file: the path list is agent-controlled, so a run
+        # that creates enough paths could exhaust memory here.
+        status_out = self.path("logs", f"status-{tag}.txt")
+        rc, out, truncated = git_to_file(
+            ["status", "--porcelain"], cwd=self.ctx.run_tree,
+            timeout=self.cfg.timeouts["git_s"], out=status_out, cap=1_000_000)
+        if rc != 0:
+            # NOT the same as clean. Treating a git failure as "nothing to
+            # commit" leaves dirty bytes reviewed and graded under a sha that
+            # does not contain them -- silently, which is the worst version.
+            self.fail("materials", "status-failed",
+                      f"git status exited {rc} at '{tag}'; cannot tell whether "
+                      "the tree is clean, so the frozen sha may not name what "
+                      "is graded")
+            self.refresh_head()
+            return self.head_sha
+        if not out.strip():
             self.refresh_head()
             return self.head_sha
         n = len(out.strip().splitlines())
-        rc_a, _o, err_a = git(["add", "-A"], cwd=self.ctx.run_tree,
+        if truncated:
+            n = f"{n}+"
+        # `:(exclude).standup` keeps the standup bus out of the commit. It sits
+        # inside the run tree and is in no .gitignore, so `add -A` swept every
+        # seed, redirect and crystal message into the diff -- the diff handed
+        # to the reviewer AND to the escaped-defect audit, giving standup-ON
+        # arms a different yardstick input from standup-OFF arms.
+        rc_a, _o, err_a = git(["add", "-A", "--", ".", ":(exclude).standup"],
+                              cwd=self.ctx.run_tree,
                               timeout=self.cfg.timeouts["git_s"])
         rc_c, _o2, err_c = git(
             ["-c", "user.name=bench-harness",
@@ -2086,10 +2138,13 @@ class Run:
         elif truncated:
             diff += (f"\n\n[... diff truncated at {DIFF_CAP} characters; the "
                      f"full patch is at {out.name} ...]\n")
-        code = self.collect_server_code(sha)
+        # Read from the working tree, which freeze_tree just made
+        # identical to `sha` -- the sweep is what makes the frozen
+        # revision and the inlined source the same bytes.
+        code = self.collect_server_code()
         return Materials(diff=diff, server_code=code, review_sha=sha)
 
-    def collect_server_code(self, sha: str | None = None) -> str:
+    def collect_server_code(self) -> str:
         """Every Python file beside the server, inlined with headers.
 
         Inlined rather than referenced because a foreign council seat may not
@@ -2188,10 +2243,16 @@ class Run:
             rc, _o, err = git(["worktree", "add", "--detach", str(wt), sha],
                               cwd=self.framework, timeout=self.cfg.timeouts["git_s"])
             if rc != 0:
+                # Falling back to the product tree would re-open the exact
+                # leak this worktree exists to close: a reviewer running with
+                # permissions skipped, able to edit the artefact it is
+                # judging. An empty scratch dir is the safe fallback -- the
+                # diff and the source are inlined in the prompt anyway.
                 self.fail("review", "review-worktree-failed",
-                          f"{err.strip() or rc}; reviewers will run in the "
-                          "product tree, which they can write to")
-                return self.ctx.run_tree
+                          f"{err.strip() or rc}; the reviewer will run in an "
+                          "empty scratch directory and review only the inlined "
+                          "diff and source")
+                return self.seat_scratch("review-fallback")
             self.review_tree = wt
         else:
             # Re-point it at this round's revision and discard whatever a
@@ -2202,8 +2263,9 @@ class Run:
                                 timeout=self.cfg.timeouts["git_s"])
             if rc != 0 or rc2 != 0:
                 self.fail("review", "review-worktree-reset-failed",
-                          err.strip() or f"checkout rc={rc} clean rc={rc2}")
-                return self.ctx.run_tree
+                          (err.strip() or f"checkout rc={rc} clean rc={rc2}")
+                          + "; falling back to an empty scratch directory")
+                return self.seat_scratch("review-fallback")
         return wt
 
     def seat_scratch(self, name: str) -> Path:
@@ -2358,13 +2420,26 @@ class Run:
                           "observes errored; treat this arm as standup-OFF")
         if crystal_active(self.cfg):
             cr = self.crystal_stats
+            # The loop waits one interval before its first attempt and skips
+            # attempts with no worker branches yet, so zero checks is only
+            # evidence of a dead mechanism if the build outlasted an interval
+            # AND branches existed to check. Otherwise it just means the
+            # sprint was short or the lead fanned out late.
+            build_s = self.phases.get("build", 0.0)
+            had_time = build_s > float(self.cfg.crystal["interval_s"])
             if not cr["ran"]:
                 self.fail("crystal", "mechanism-dead",
                           "crystal is ON but its loop never started")
-            elif cr["checks"] == 0:
+            elif cr["checks"] == 0 and had_time and cr["attempts"] > 0:
                 self.fail("crystal", "mechanism-dead",
-                          "crystal is ON but completed zero checks; this arm "
-                          "did not actually receive the mechanism")
+                          f"crystal is ON but ran zero checks in {build_s:.0f}s "
+                          f"across {cr['attempts']} attempts; this arm did not "
+                          "actually receive the mechanism")
+            elif cr["checks"] == 0:
+                self.crystal_stats["inactive_reason"] = (
+                    f"no check ran: build was {build_s:.0f}s, interval "
+                    f"{self.cfg.crystal['interval_s']:.0f}s, "
+                    f"{cr['attempts']} attempt(s) found worker branches")
             elif cr["errors"] >= cr["checks"]:
                 self.fail("crystal", "mechanism-dead",
                           f"crystal is ON but every one of its {cr['checks']} "
@@ -2493,6 +2568,8 @@ class Run:
                               f"refs/heads/{self.ctx.worker_branch_prefix}*"],
                              cwd=self.ctx.run_tree, timeout=self.cfg.timeouts["git_s"])
             branches = [b.strip() for b in out.splitlines() if b.strip()]
+            if branches:
+                self.crystal_stats["attempts"] += 1
             if rc != 0 or len(branches) < 1:
                 with open(log, "a", encoding="utf-8") as fh:
                     fh.write(f"\n===== check #{n} @ {iso(utc_now())}: "
@@ -2548,20 +2625,34 @@ class Run:
         prompt says so in that case, and the harness records that the report
         could not be delivered rather than pretending it was.
         """
+        if not stanzas and not noisy:
+            return
         if not stanzas:
-            return                       # nothing but single-branch noise
+            # Only single-branch noise -- but which branch is red on its own
+            # is the actionable fact, so it still gets said rather than
+            # computed and discarded.
+            if not self.cfg.toggles["standup"]:
+                self.crystal_stats["undelivered"] += 1
+                return
+            stanzas = []
         if not self.cfg.toggles["standup"]:
             self.crystal_stats["undelivered"] += 1
             return
-        body = ("Standup — Crystal speculative merge check #%d found a conflict "
-                "between branches that are each green alone:\n  - %s\n"
-                "Adjudicate now, before it is merged: contract changed -> the "
-                "provider migrates its callers; assumption was invalid -> the "
-                "consumer fixes it; disputed -> you decide. Whoever merges "
-                "second cleans up." % (check, "\n  - ".join(stanzas[:8])))
+        if stanzas:
+            body = ("Standup — Crystal speculative merge check #%d found a "
+                    "conflict between branches that are each green alone:\n"
+                    "  - %s\n"
+                    "Adjudicate now, before it is merged: contract changed -> "
+                    "the provider migrates its callers; assumption was invalid "
+                    "-> the consumer fixes it; disputed -> you decide. Whoever "
+                    "merges second cleans up." % (check, "\n  - ".join(stanzas[:8])))
+        else:
+            body = ("Standup — Crystal speculative merge check #%d found no "
+                    "cross-branch conflict." % check)
         if noisy:
-            body += ("\nNote: %s failed the boundary test on its own, so its "
-                     "pairings are noise, not cross-branch conflicts."
+            body += ("\nNote: %s fail the boundary test on their OWN, before "
+                     "any merge. That is not a cross-branch conflict, but it "
+                     "does mean those branches are currently broken."
                      % ", ".join(noisy))
         env = {"STANDUP_BUS": str(self.ctx.bus_root)}
         r = run_capture([str(self.ctx.standup_script), "redirect",
@@ -2605,9 +2696,13 @@ class Run:
         proc = run_capture(argv, cwd=self.ctx.run_tree,
                            timeout=self.cfg.timeouts["grade_s"],
                            stdout_path=out, stderr_path=err)
-        text = ((out.read_text(encoding="utf-8", errors="replace") if out.exists() else "")
-                + "\n"
-                + (err.read_text(encoding="utf-8", errors="replace") if err.exists() else ""))
+        # Kept apart on purpose. The exam prints its summary on STDOUT and its
+        # FAIL lines on STDERR; concatenating them and taking the last match
+        # let a line on stderr override the real score. The score is scraped
+        # from stdout only.
+        out_text = out.read_text(encoding="utf-8", errors="replace") if out.exists() else ""
+        err_text = err.read_text(encoding="utf-8", errors="replace") if err.exists() else ""
+        text = out_text + "\n" + err_text
         result["ran"] = True
         result["exit_code"] = proc.returncode
         result["timed_out"] = proc.timed_out
@@ -2617,7 +2712,7 @@ class Run:
         # scrape a "conformance: 16 passed, 0 failed" that the SERVER printed.
         # The exam emits this line last, immediately before exiting.
         matches = re.findall(r"^conformance:\s*(\d+)\s+passed,\s*(\d+)\s+failed\s*$",
-                             text, re.MULTILINE)
+                             out_text, re.MULTILINE)
         m = matches[-1] if matches else None
         if m:
             passed, failed = int(m[0]), int(m[1])
@@ -2693,11 +2788,13 @@ class Run:
         tok = []
         for rnd in range(1, self.cfg.max_rounds[step] + 1):
             mat = self.collect_materials(f"{step}-round{rnd}")
-            prompt = compose_review_prompt(self.cfg, self.ctx, step, mat)
+            review_cwd = self.review_worktree(mat.review_sha)
+            prompt = compose_review_prompt(self.cfg, self.ctx, step, mat,
+                                           review_cwd=review_cwd)
             name = f"review-{step}-round{rnd}"
             proc, res = self.claude(name, prompt, model=model,
                                     timeout=self.cfg.timeouts["review_s"],
-                                    cwd=self.review_worktree(mat.review_sha))
+                                    cwd=review_cwd)
             tok.append(res.tokens())
             fnd = parse_findings(res.text)
             rec = {
@@ -2746,7 +2843,7 @@ class Run:
         fix_seconds = 0.0
         tok: list[dict] = []
         for rnd in range(1, self.cfg.max_rounds["council"] + 1):
-            mat = self.collect_materials()
+            mat = self.collect_materials(f"council-round{rnd}")
             prompt = compose_council_prompt(self.cfg, self.ctx, mat)
             seats = {}
             results: dict[str, tuple[Proc, str | None]] = {}
@@ -2849,11 +2946,19 @@ class Run:
         self.freeze_tree(f"fix-{tag}")
         self.check_exam_tamper()
         changed = self.head_sha != before
-        if res.ok and not changed:
+        if not changed:
             self.fail(f"fix-{tag}", "fix-changed-nothing",
                       "the fix agent finished without moving the revision; "
                       "the findings were disputed or ignored")
-        return (res.ok and changed), proc.duration_s
+        elif not res.ok:
+            # It committed real changes and then errored (max turns, API
+            # failure). Those changes exist and must be re-reviewed; treating
+            # the round as un-applied would end convergence over code nobody
+            # looked at again.
+            self.fail(f"fix-{tag}", "fix-applied-then-errored",
+                      "the fix agent changed the code and then failed; the "
+                      "changes stand and the next round reviews them")
+        return changed, proc.duration_s
 
     # -- the yardstick -----------------------------------------------------
 
@@ -2969,7 +3074,12 @@ class Run:
         }
         wall = (ended - self.started).total_seconds() if ended else \
             (utc_now() - self.started).total_seconds()
-        esc_count = (self.escaped or {}).get("critical_important")
+        # Only a COMPLETE audit fills the headline robustness field. A
+        # one-seat audit's number sitting in the same field as a two-seat
+        # one's makes the arm that lost a provider look like the most robust
+        # build of the six. The partial count is still in `escaped_defects`.
+        esc = self.escaped or {}
+        esc_count = esc.get("critical_important") if esc.get("complete") else None
 
         man: dict[str, Any] = {
             "run_id": self.run_id,
@@ -3031,6 +3141,10 @@ class Run:
                     - int(self.cfg.budget_tokens))),
             "models_observed": dict(self.models_observed),
             "models_honoured": _models_honoured(self.cfg.models, self.models_observed),
+            "models_missing": _models_missing(
+                self.cfg.models, self.models_observed,
+                ("lead", "worker") if self.cfg.toggles["decomposition"]
+                else ("implementer",)),
             "swept_commits": self.swept,
             "harness": {
                 "script": str(Path(__file__).resolve()),
@@ -3131,14 +3245,23 @@ def _split_provenance(parts: list[dict]) -> dict:
     measured = {"input": 0, "output": 0, "cache_read": 0,
                 "cache_creation": 0, "total_tokens": 0}
     estimated = dict(measured)
+    incomplete = False
     for part in parts:
         if not part:
             continue
         target = estimated if part.get("estimated") else measured
         for k in measured:
             target[k] += int(part.get(k) or 0)
+        source = str(part.get("source") or "")
+        # "unavailable" and the last-turn-only `usage` fallback are not
+        # estimates, but they are not full measurements either: banking them
+        # as measured would label an undercounted arm comparable.
+        if source.startswith("unavailable") or "last turn" in source:
+            incomplete = True
     return {"measured": measured, "estimated": estimated,
-            "comparable_across_arms": estimated["total_tokens"] == 0}
+            "incomplete_sources": incomplete,
+            "comparable_across_arms": (estimated["total_tokens"] == 0
+                                       and not incomplete)}
 
 
 def _models_honoured(configured: dict, observed: dict) -> bool | None:
@@ -3160,6 +3283,23 @@ def _models_honoured(configured: dict, observed: dict) -> bool | None:
         if not any(alias in low for alias in want):
             return False
     return True
+
+
+def _models_missing(configured: dict, observed: dict, roles: tuple) -> list[str]:
+    """Configured models for the named roles that never appear in modelUsage.
+
+    `_models_honoured` can only see a model from OUTSIDE the configured set,
+    so a lead that upgrades its haiku workers to the sonnet it also uses
+    itself passes it. This catches that from the other side: if `worker` is
+    haiku and no haiku appears anywhere in the session, the workers did not
+    run at the tier the config asked for -- which is the variable `tiering`
+    exists to isolate.
+    """
+    if not observed:
+        return []
+    seen = " ".join(observed).lower()
+    return sorted({configured[r].lower() for r in roles
+                   if r in configured and configured[r].lower() not in seen})
 
 
 def _empty_totals() -> dict:
@@ -3196,19 +3336,35 @@ def _sum_rounds(rounds: list[dict]) -> dict:
     for r in rounds:
         tot["rounds"] += 1
         counts = r.get("counts")
-        if not r.get("parse_ok") or not isinstance(counts, dict):
+        # Usability is about the COUNTS, not about parse_ok. A partial council
+        # round has parse_ok False (not every seat answered) but real findings
+        # from the seat that did; discarding them lost genuine findings from
+        # the primary per-step total.
+        if not isinstance(counts, dict):
             tot["rounds_unparsed"] += 1
+            if r.get("round") == 1:
+                # Round 1 produced nothing readable. `first_round` is the
+                # comparable "bugs caught by this step" figure, so leaving it
+                # at zero would read as "the reviewer found nothing" -- the
+                # exact A8 conflation this harness refuses everywhere else.
+                tot["first_round"] = None
             continue
-        if r.get("partial"):
+        if r.get("partial") or not r.get("parse_ok"):
             tot["rounds_partial"] += 1
         for b in SEVERITY_BUCKETS:
             tot[b] += int(counts.get(b, 0))
         tot["total"] += int(counts.get("total", 0))
-        if r.get("round") == 1:
+        if r.get("round") == 1 and tot["first_round"] is not None:
             for b in SEVERITY_BUCKETS:
                 tot["first_round"][b] = int(counts.get(b, 0))
             tot["first_round"]["total"] = int(counts.get("total", 0))
+            tot["first_round"]["complete"] = bool(r.get("parse_ok"))
     return tot
+
+
+def _assertion_name(fail_line: str) -> str:
+    """`<name> — expected [X] got [Y]` -> `<name>`."""
+    return fail_line.split(" — expected", 1)[0].strip()
 
 
 def _fix_regressions(stages: dict) -> int | None:
@@ -3230,8 +3386,14 @@ def _fix_regressions(stages: dict) -> int | None:
         return None
     before, after = a.get("failures"), b.get("failures")
     if isinstance(before, list) and isinstance(after, list):
-        # Names present in the final failures that were not failing before.
-        return len(set(after) - set(before))
+        # Compare assertion NAMES only. The exam prints
+        # `FAIL: <name> — expected [X] got [Y]`, so the observed value is part
+        # of the line: a fix that changes a still-failing assertion's wrong
+        # answer would otherwise produce a new string and read as a fresh
+        # regression -- inflating the number in proportion to how many fix
+        # rounds an arm ran, i.e. against the arms that review most.
+        return len({_assertion_name(x) for x in after}
+                   - {_assertion_name(x) for x in before})
     lost = a["conformance_passed"] - b["conformance_passed"]
     return lost if lost > 0 else 0
 
@@ -3294,8 +3456,16 @@ def _classify_conflicts(report: str, base: str | None) -> tuple[list[str], list[
                 noisy.append(bare(right))
     real: list[str] = []
     for left, right, verdict in stanzas:
-        if bare(left) in noisy or bare(right) in noisy:
-            continue                                # a red-alone branch's pairing
+        # Only SEMANTIC verdicts can be noise from a red-alone branch. A
+        # textual conflict is a `git merge-tree` result and has nothing to do
+        # with the boundary test, so suppressing it would hide a genuine
+        # cross-branch conflict and bias the crystal arm toward "found
+        # nothing".
+        if verdict.startswith("tests: FAIL") and (bare(left) in noisy
+                                                  or bare(right) in noisy):
+            continue
+        if base and bare(left) == base and verdict.startswith("tests: FAIL"):
+            continue                                # the red-alone finding itself
         real.append(f"{left} × {right} — {verdict}")
     return real, sorted(set(noisy))
 
