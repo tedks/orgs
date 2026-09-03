@@ -121,3 +121,24 @@
 - **Reconsider when:** binding claims are generated from or checked against
   machine-readable tool schemas, so a false capability claim fails
   mechanically rather than needing a human/agent to notice.
+
+## 2026-09-03 — The cross-provider council is the keystone; the hierarchy is optional at small scale
+
+- **What happened:** a 5-regime ablation study on the RESP tracer (raw /
+  no-council / no-decomposition / full / no-standup). Both regimes WITHOUT
+  cross-provider council-to-fixpoint (raw, no-council) shipped ~6 Critical/High
+  crash-or-DoS defects; both regimes WITH it (no-decomposition, full) reached a
+  clean shippable bar — and the FLAT build + council reached the same bar as the
+  full hierarchy + council. All five pass 12/12 conformance (conformance
+  saturates). The hierarchy cost ~10× and its distinctive payoff (defect-class
+  propagation) was a partial head-start, not the source of robustness.
+- **Evidence:** docs/bench/ablation-study-5regime.md; bench/study/<regime>/.
+- **Applies when:** deciding where to invest in an agent-org protocol. The
+  load-bearing, low-cost mechanism is cross-provider review-to-fixpoint (same-
+  provider review has correlated blind spots — no-council's lead review missed
+  the nil class recurring in storage that the council caught). The expensive
+  decomposition hierarchy must justify itself on larger, multi-team targets; at
+  3-entity scale it did not pay for its ~10× cost in measurable robustness.
+- **Reconsider when:** a larger multi-team target, real replication, or a
+  standup-triggering scenario (parallel workers / planted rabbit-hole) is run —
+  the standup, the most novel bet, was NOT exercised here (no trigger fired).
