@@ -142,3 +142,30 @@
 - **Reconsider when:** a larger multi-team target, real replication, or a
   standup-triggering scenario (parallel workers / planted rabbit-hole) is run —
   the standup, the most novel bet, was NOT exercised here (no trigger fired).
+
+## 2026-09-03 — The lead's own tracer-bullet code is not exempt from review
+
+- **What happened:** on the `r4-orgs-no-crystal` bench run's RESP sprint, the
+  lead hand-built the M1 tracer bullet (`codec.py`, `server.py`) and it stayed
+  essentially unmodified through fan-out — two of the three haiku workers
+  reported "no changes needed, contract already satisfied." Both real bugs the
+  eventual council round found (a one-packet remote crash from an uncaught
+  `UnicodeDecodeError` in `_parse_line`; a silent argument-shift from filtering
+  rather than rejecting malformed command-array elements) were in that
+  lead-authored code, present since M1, and invisible through 33-then-36
+  green unit tests and a 12/12 frozen-exam pass the entire time. Only a
+  cross-provider council round with a live repro (one reviewer actually ran
+  the crash) surfaced either.
+- **Evidence:** `events/resp-r4/lead.md` lead:11 (review-seat-outcome),
+  lead:12 (takeover fix), lead:14 (convergence CLEAN) — bench run
+  `2026-09-03T1148Z-r4-orgs-no-crystal-resp`.
+- **Applies when:** sizing a review round's scope. "Review the workers' diffs"
+  undercounts the surface — a tracer bullet the lead writes and workers build
+  on top of is exactly as unreviewed as anything else until a round actually
+  looks at it, and it sits earlier in the pipeline (the codec bug was more
+  exposed to raw attacker bytes than anything the workers touched). Scope
+  council/lead review to the *state at the review point* (base..HEAD against
+  the pre-sprint tree), not just "what the fanned-out packages changed."
+- **Reconsider when:** the protocol adds a distinct review gate for the
+  tracer bullet itself at M1, before fan-out — at which point this class of
+  bug would be caught earlier, not just eventually.

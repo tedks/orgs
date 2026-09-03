@@ -294,3 +294,141 @@ sprint's merge, each logged here rather than silently dropped
   bytes to land in the exact same `recv()` chunk); not exam-tested.
   Rollback if this reading is wrong: reopen as Critical and block next
   time it's raised.
+
+## lead:14 · 2026-09-03T13:45:00Z · review-clean
+- actor: lead (sonnet), scribe for external seats
+- based_on: 98a735e
+- refs: lead:11, lead:12, lead:13
+Convergence round (scope: fix delta 7d5e198..98a735e only, per
+doctrine "repeat on the fix delta to fixpoint"). All three seats
+answered CLEAN: claude (native, independently re-derived and
+re-ran both mutation checks itself rather than trusting the commit
+message — confirmed identical results), codex (CLEAN, zero
+Critical/Important/Nits), agy (CLEAN, one word). Zero new findings.
+Fixpoint reached in 2 rounds. Full suite 36/36, frozen exam 12/12
+(re-verified by the lead directly before this entry; claude's own
+seat could not run redis-cli in its sandbox and said so rather than
+guessing — noted, not a gap, since the lead's own run is
+authoritative and matches).
+
+## lead:15 · 2026-09-03T13:45:30Z · state-change
+- actor: lead (sonnet)
+- based_on: 98a735e
+- refs: lead:14
+work-package:wp-codec REVIEW→ACCEPTED→INTEGRATED;
+work-package:wp-engine REVIEW→ACCEPTED→INTEGRATED;
+work-package:wp-server REVIEW→ACCEPTED→INTEGRATED. Evidence: lead:14
+(council round CLEAN + this lead-review event); already merged onto
+`bench-run/r4-orgs-no-crystal-2026-09-03T1148Z` at 98a735e (integration
+is continuous per RUNBOOK §8, done at merge time — this entry records
+the gate closing after review, not a separate merge step).
+sprint:resp-r4 EXECUTING→INTEGRATING: main (this branch) green on all
+boundary tests (36/36 unit, 12/12 frozen exam) and no open Crystal
+conflicts (crystal is OFF this run — n/a by construction, not
+silently skipped).
+
+## lead:16 · 2026-09-03T13:46:00Z · deviation-adjudicated
+- actor: lead (sonnet), self-adjudicating as the sprint's sole
+  standup/escalation authority (org/ROSTER.md — single-lead sprint)
+- based_on: 98a735e
+- refs: lead:2, lead:3, lead:4, lead:10, lead:12
+All logged deviations adjudicated justified, one line each:
+- lead:2 (provider-owned boundary tests, not strictly consumer-driven):
+  justified — firewall+parallel regime made the alternative (shared
+  test file across 3 workers, or widening server's context pack)
+  strictly worse, and review caught what weak self-tests would have
+  missed regardless of who wrote them.
+- lead:3 (docs bug filed, not followed — targets/resp/ path):
+  justified — n/a rollback (read-only finding); the graded path
+  (work order + frozen exam usage comment) is unambiguous and was
+  followed correctly; confirmed correct in retrospect since the exam
+  ran successfully against `targets/resp/server.py` all sprint.
+- lead:4 (CTO hat collapsed to lead): justified — no CTO-distinct
+  work materialized (spec pre-merged, no amendment needed), and the
+  review ladder that did run (2 rounds, 3 seats, fixpoint) exceeded
+  what a nominal CTO rubber-stamp would have added.
+- lead:10 (one combined review round instead of 3 per-package rounds):
+  justified — findings attributed cleanly per file in both rounds
+  (see lead:11), no cross-package entanglement occurred; the
+  efficiency assumption held.
+- lead:12 (lead takeover on wp-codec/wp-server for 2 small fixes):
+  justified — both fixes were single-function, contained, and
+  correctly scoped; no rework churn resulted (convergence round was
+  CLEAN on the first try).
+
+## lead:17 · 2026-09-03T13:48:00Z · lesson
+- actor: lead (sonnet)
+- based_on: 98a735e
+- refs: lead:11, lead:12, lead:14
+**meta:product, v0 operational definition, this sprint.** Bucketed
+from each invocation's reported `subagent_tokens` where the harness
+exposed it; where it didn't (agy, both rounds — ask-agent's plain-text
+output carries no token count), substituted output word count per the
+manifest convention and say so here explicitly.
+
+Coordination bucket (necessity-challenge + review-seat invocations):
+- necessity-challenge (haiku): 39,542 tokens
+- review round 1 — claude (native): 86,785 tokens
+- review round 1 — codex (ask-agent): 23,828 tokens (self-reported)
+- review round 1 — agy (ask-agent): no token count exposed; 386
+  words substituted
+- review round 2 (convergence) — claude (native): 69,401 tokens
+- review round 2 (convergence) — codex (ask-agent): 16,900 tokens
+- review round 2 (convergence) — agy (ask-agent): no token count
+  exposed; 1 word substituted
+- Measurable coordination total: **236,456 tokens** (+ ~387 words
+  from the two agy seats, not unit-comparable to the token figures —
+  reported separately rather than force-summed)
+
+Product bucket (implementer work-package invocations; takeovers count
+as product):
+- wp-codec (haiku): 39,341 tokens
+- wp-engine (haiku): 40,258 tokens
+- wp-server (haiku): 52,090 tokens
+- Measurable product total: **131,689 tokens**
+- **Caveat, stated per the manifest convention rather than omitted:**
+  the lead's own tokens — authoring contracts/work-packages/roster
+  (coordination-shaped) and the two direct takeover fixes in lead:12
+  (product-shaped, explicitly "takeovers count as product" per the
+  operational definition) — are not separately bucketed by this
+  harness; the lead's session usage has no per-task breakdown to cite.
+  Both the coordination and product totals above are therefore
+  **undercounts**, and the true product bucket is undercounted more
+  (the takeover fixes are real, uncounted product work), meaning the
+  true ratio is very likely *more* coordination-heavy than the number
+  below, not less.
+
+**Ratio (measurable subset only, explicit undercount both directions,
+net skew toward overstating product's share): 236,456 : 131,689 ≈
+1.8 : 1** coordination-to-product. Two review rounds (necessity
+challenge + 2×3-seat council) cost more measurable tokens than all
+three implementer work packages combined. Directionally consistent
+with `docs/bench/resp-v0-comparison.md` / the ablation study's framing
+of council review as the hypothesized-keystone, highest-cost
+mechanism — this sprint's number is a single data point for that
+comparison, not a new claim.
+
+**Applies when:** comparing this run's cost against other regime arms
+in the ablation study (r1-r3, and any other no-crystal/etc. runs).
+**Reconsider when:** the harness exposes per-invocation token counts
+for ask-agent-routed seats (agy in particular), which would let the
+word-count substitution be replaced with a real number and tighten
+this estimate.
+
+## lead:18 · 2026-09-03T13:50:00Z · state-change
+- actor: lead (sonnet)
+- based_on: 98a735e
+- refs: lead:15, lead:16, lead:17
+sprint:resp-r4 INTEGRATING→RETRO→CLOSED. Evidence: main
+(`bench-run/r4-orgs-no-crystal-2026-09-03T1148Z`) green on all
+boundary tests (36/36 unit, 12/12 frozen exam via real redis-cli
+under the bench devshell); no open Crystal conflicts (mechanism OFF
+this run); lessons filed (LESSONS.md "The lead's own tracer-bullet
+code is not exempt from review"); meta:product recorded (lead:17,
+~1.8:1 coordination:product on the measurable subset, explicit
+undercount both ways, stated); all logged deviations adjudicated
+(lead:16, all justified). Cold-start audit not run — the work order
+for this sprint scopes "Done means" to exam-green + all accepted
+worker branches merged + tree committed, and does not list a
+cold-start-audit gate for this bench arm; noted here rather than
+silently assumed satisfied.
