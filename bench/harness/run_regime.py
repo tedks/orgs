@@ -3892,13 +3892,23 @@ def render_summary(run: "Run", man: dict) -> str:
     A("")
     A("## Cleaning up")
     A("")
-    A("This run left a git worktree and a branch behind on purpose — they are "
+    A("This run left git worktrees and a branch behind on purpose — they are "
       "the evidence. When you are finished with them:")
     A("")
     A("```bash")
-    A(f"git -C {man['harness']['framework']} worktree remove --force "
-      f"{man['artifacts']['run_tree']}")
-    A(f"git -C {man['harness']['framework']} branch -D {man['artifacts']['run_branch']}")
+    fw = man["harness"]["framework"]
+    A(f"git -C {fw} worktree remove --force {man['artifacts']['run_tree']}")
+    # The review checkout and the worker trees are worktrees too, and a
+    # registration left behind makes a LATER run's `worktree add` at the same
+    # path fail. `prune` catches any whose directory is already gone.
+    A(f"git -C {fw} worktree remove --force {man['artifacts']['run_dir']}/review-tree "
+      "2>/dev/null || true")
+    A(f"for w in {man['artifacts']['run_dir']}/workers/*/; do "
+      f'git -C {fw} worktree remove --force "$w" 2>/dev/null || true; done')
+    A(f"git -C {fw} worktree prune")
+    A(f"git -C {fw} branch -D {man['artifacts']['run_branch']}")
+    A(f"git -C {fw} branch -D $(git -C {fw} for-each-ref --format='%(refname:short)' "
+      f"'refs/heads/{man['artifacts']['run_branch']}-wp-*') 2>/dev/null || true")
     A("```")
     A("")
     return "\n".join(L)

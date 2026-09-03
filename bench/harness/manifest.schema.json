@@ -260,7 +260,8 @@
             ]
           },
           "rounds": {
-            "type": "array"
+            "type": "array",
+            "description": "one entry per review round, in order. Deliberately unconstrained: the per-round detail is descriptive and differs by step, while the step's `totals` are the contract. A claude round carries round, model, reviewed_sha, had_checkout, inlined_source_complete, partial, proc, parse_ok, parse_error, counts, findings; a council round carries round, reviewed_sha, seats, parse_ok, partial, source_complete, counts, seats_expected/filled/empty, union_note. `partial` means the reviewer saw less than the build: for a council seat that is a missing seat or incomplete inlined source, for a claude reviewer it is a missing checkout (it can read past a truncated inlining, a council seat cannot)."
           },
           "totals": {
             "type": "object"
