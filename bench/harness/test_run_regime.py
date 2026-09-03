@@ -1409,8 +1409,93 @@ def test_models_missing_catches_a_within_set_upgrade() -> None:
              "the worker tier never ran, which _models_honoured cannot see")
     check(rr._models_honoured(cfg, only_sonnet) is True,
           "the honoured check alone would have passed this")
-    check_eq(rr._models_missing(cfg, {}, ("lead", "worker")), [],
-             "nothing observed -> no claim either way")
+    check_eq(rr._models_missing(cfg, {}, ("lead", "worker")), None,
+             "nothing observed -> null, not an empty list; [] would read as "
+             "'every configured tier ran', a claim about an unobserved build")
+
+
+# ---------------------------------------------------------------------------
+# 11. Second convergence round: defects the ROUND-2 fixes introduced
+# ---------------------------------------------------------------------------
+
+def test_sweep_dirtiness_test_matches_the_sweep_itself() -> None:
+    """The bus lives in the run tree and is in no .gitignore. Asking whether
+    the tree is dirty WITHOUT the exclusion the commit uses meant a standup
+    arm always looked dirty, staged nothing, and recorded a false
+    'sweep failed' at every freeze point — in the standup arms only."""
+    src = (HARNESS / "run_regime.py").read_text()
+    status_call = [ln for ln in src.splitlines() if '"status", "--porcelain"' in ln]
+    check(status_call, "the status call could not be found")
+    check(any("SWEEP_EXCLUDE" in ln for ln in status_call),
+          "git status does not use the same exclusion as git add")
+    add_call = [ln for ln in src.splitlines() if '"add", "-A"' in ln]
+    check(add_call and all("SWEEP_EXCLUDE" in ln for ln in add_call),
+          "git add does not use the shared exclusion constant")
+    check_eq(rr.SWEEP_EXCLUDE, ":(exclude).standup", "the exclusion pathspec")
+
+
+def test_token_quality_flags_survive_aggregation() -> None:
+    """Every coordination bucket is an add_tokens() aggregate. The
+    incompleteness check read `source`, which add_tokens dropped — so the
+    flag worked for `product` and was permanently dead for `coordination`,
+    the bucket the review-ladder ablation is compared on."""
+    no_mu = {k: v for k, v in RESULT_EVENT.items() if k != "modelUsage"}
+    fallback = rr.tokens_from_result(no_mu)
+    check(rr._is_incomplete(fallback), "the raw fallback is incomplete")
+    agg = rr.add_tokens(fallback, rr.tokens_from_result(RESULT_EVENT))
+    check(agg.get("incomplete"),
+          "add_tokens dropped the incompleteness flag on aggregation")
+    prov = rr._split_provenance([agg])
+    check(not prov["comparable_across_arms"],
+          "an aggregate containing an incomplete source must not be comparable")
+    good = rr.add_tokens(rr.tokens_from_result(RESULT_EVENT))
+    check(not good.get("incomplete"), "a clean aggregate is not incomplete")
+    check(rr._split_provenance([good])["comparable_across_arms"],
+          "a clean aggregate stays comparable")
+    est = rr.add_tokens(rr.estimated_tokens("a", "b"))
+    check(est["estimated"], "add_tokens must still carry `estimated` forward")
+
+
+def test_crystal_health_guard_is_reachable() -> None:
+    """Round 2 replaced a working guard with one that could never fire:
+    build_s was read before it was assigned, and `attempts` was incremented
+    only on the path that also incremented `checks`."""
+    src = (HARNESS / "run_regime.py").read_text()
+    build_idx = src.index('self.phases["build"] = time.time() - t0')
+    health_idx = src.index("self._check_mechanism_health()")
+    check(build_idx < health_idx,
+          "phases['build'] is still assigned after the health check reads it")
+    loop = src[src.index("def _crystal_loop"):src.index("def phase_grade")]
+    a_idx = loop.index('self.crystal_stats["attempts"] += 1')
+    guard_idx = loop.index("if not branches:")
+    check(a_idx < guard_idx,
+          "attempts is still counted only on the path that also runs a check, "
+          "making 'checks == 0 and attempts > 0' unreachable")
+
+
+def test_server_code_comes_from_the_frozen_revision() -> None:
+    """Reading the directory picked up whatever happened to be sitting there
+    — a venv, a build artefact — none of which is in the frozen sha, and any
+    of which could exhaust the budget and push the real server out of the
+    reviewer's prompt."""
+    src = (HARNESS / "run_regime.py").read_text()
+    body = src[src.index("def collect_server_code"):src.index("def review_worktree")]
+    check("ls-tree" in body and "git show" in body.replace('"show"', "git show"),
+          "collect_server_code no longer reads from the revision")
+    check(".rglob(" not in body,
+          "collect_server_code still walks the working directory")
+    check("sha" in body.split("\n")[0], "it should take the sha it reads at")
+
+
+def test_seat_scratch_is_emptied_between_uses() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("r3-orgs-full.json", Path(td))
+        d = run.seat_scratch("review-fallback")
+        (d / "leftover.py").write_text("previous reviewer was here")
+        again = run.seat_scratch("review-fallback")
+        check_eq(again, d, "the same name should give the same path")
+        check(not (again / "leftover.py").exists(),
+              "a reused scratch dir still holds the previous seat's files")
 
 
 # ---------------------------------------------------------------------------
@@ -1662,7 +1747,42 @@ def mutation_check() -> int:
     mutants.append(("provider credentials are scrubbed with the session state",
                     break_keep, lambda: setattr(rr, "AGENT_ENV_KEEP", orig_keep)))
 
-    # (17) The schema validator stops validating.
+    # (17) The token quality flags stop surviving aggregation, so the
+    # coordination bucket is labelled comparable when it is not.
+    orig_add = rr.add_tokens
+
+    def break_flags() -> None:
+        def drop_incomplete(*buckets):
+            out = orig_add(*buckets)
+            out["incomplete"] = False
+            return out
+        rr.add_tokens = drop_incomplete
+
+    mutants.append(("token incompleteness is dropped on aggregation",
+                    break_flags, lambda: setattr(rr, "add_tokens", orig_add)))
+
+    # (18) The sweep's dirtiness test stops matching the sweep itself.
+    orig_excl = rr.SWEEP_EXCLUDE
+
+    def break_exclude() -> None:
+        rr.SWEEP_EXCLUDE = ":(exclude)nothing-at-all"
+
+    mutants.append(("the sweep exclusion pathspec stops naming the bus",
+                    break_exclude, lambda: setattr(rr, "SWEEP_EXCLUDE", orig_excl)))
+
+    # (19) _models_missing goes back to claiming compliance for a build it
+    # observed nothing of.
+    orig_missing = rr._models_missing
+
+    def break_missing() -> None:
+        rr._models_missing = lambda cfg, obs, roles: (orig_missing(cfg, obs, roles)
+                                                      or [])
+
+    mutants.append(("models_missing claims compliance for an unobserved build",
+                    break_missing,
+                    lambda: setattr(rr, "_models_missing", orig_missing)))
+
+    # (20) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:

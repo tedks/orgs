@@ -11,10 +11,12 @@ Read every line of the change. Not a skim.
 
 ## The target under review
 
-A frozen revision: `{{REVIEW_SHA}}` on branch `{{RUN_BRANCH}}`, checked out at
-`{{RUN_TREE}}` (your working directory). You may read anything in that tree,
-but review **exactly that revision** — do not review, and do not edit, the
-working tree if it has moved.
+A frozen revision: `{{REVIEW_SHA}}` on branch `{{RUN_BRANCH}}`.
+
+Your working directory is `{{RUN_TREE}}`. {{TREE_NOTE}}
+
+You are reviewing a revision, not a working tree, and you are not here to
+change anything: make no edits.
 
 The graded server is `{{SERVER_PATH}}`.
 

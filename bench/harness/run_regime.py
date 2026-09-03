@@ -175,6 +175,14 @@ REVIEW_STEP_ORDER = ("native", "council", "lead", "cto")
 # arms is not one.
 COUNCIL_SEATS = ("codex", "agy")
 
+# The standup bus lives inside the run tree and is in no .gitignore. It must
+# stay out of BOTH the dirtiness test and the sweep commit: out of the commit
+# because otherwise every seed, redirect and crystal message enters the diff
+# handed to the reviewer and the audit (giving standup-ON arms a different
+# yardstick input), and out of the test because a tree that is dirty only
+# there would stage nothing and fail the commit.
+SWEEP_EXCLUDE = ":(exclude).standup"
+
 DEFAULT_MAX_ROUNDS = {"native": 2, "council": 2, "lead": 1, "cto": 1}
 
 # What each target is, where its product lands, and how it decomposes. A
@@ -1342,7 +1350,8 @@ REVIEW_ROLE_TEXT = {
 
 
 def compose_review_prompt(cfg: Config, ctx: Ctx, step: str, mat: "Materials",
-                          review_cwd: Path | None = None) -> str:
+                          review_cwd: Path | None = None,
+                          have_no_tree: bool = False) -> str:
     """`review_cwd` is where the reviewer will actually stand.
 
     It is NOT the product tree: reviewers run in a detached checkout of the
@@ -1359,6 +1368,14 @@ def compose_review_prompt(cfg: Config, ctx: Ctx, step: str, mat: "Materials",
         "REVIEW_SHA": mat.review_sha,
         "RUN_BRANCH": ctx.run_branch,
         "RUN_TREE": str(review_cwd or ctx.run_tree),
+        "TREE_NOTE": (
+            "Your working directory is a checkout of exactly that revision. "
+            "You may read anything in it, but review that revision — not "
+            "whatever the tree may hold later."
+            if not have_no_tree else
+            "**You have no checkout this round** — your working directory is "
+            "empty. Review the diff and the source inlined below and nothing "
+            "else; do not go looking for files."),
         "SERVER_PATH": cfg.server_path,
         "DIFF": mat.diff,
         "SERVER_CODE": mat.server_code,
@@ -1727,7 +1744,8 @@ def tokens_from_result(ev: dict | None) -> dict:
     alongside the total so nobody has to trust the addition.
     """
     empty = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0,
-             "total_tokens": 0, "source": "unavailable", "estimated": False}
+             "total_tokens": 0, "source": "unavailable", "estimated": False,
+             "incomplete": True}
     if not isinstance(ev, dict):
         return empty
     mu = ev.get("modelUsage")
@@ -1756,6 +1774,7 @@ def tokens_from_result(ev: dict | None) -> dict:
     out["total_tokens"] = sum(tot.values())
     out["source"] = source
     out["estimated"] = False
+    out["incomplete"] = source.startswith("usage")
     out["cost_usd"] = ev.get("total_cost_usd")
     out["num_turns"] = ev.get("num_turns")
     return out
@@ -1776,21 +1795,41 @@ def estimated_tokens(prompt: str, reply: str) -> dict:
 
 def zero_tokens(reason: str) -> dict:
     return {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0,
-            "total_tokens": 0, "source": reason, "estimated": False}
+            "total_tokens": 0, "source": reason, "estimated": False,
+            "incomplete": True}
 
 
 def add_tokens(*buckets: dict) -> dict:
+    """Sum token buckets, carrying the QUALITY flags forward.
+
+    `estimated` and `incomplete` must survive aggregation. They did not:
+    every coordination bucket is an add_tokens() aggregate, and the
+    incompleteness check downstream read `source`, which was dropped here --
+    so the check worked for `product` (raw dicts) and was permanently dead
+    for `coordination`, the bucket the review-ladder ablation is compared on.
+    """
     out = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0,
            "total_tokens": 0}
     estimated = False
+    incomplete = False
     for b in buckets:
         if not b:
             continue
         for k in ("input", "output", "cache_read", "cache_creation", "total_tokens"):
             out[k] += int(b.get(k) or 0)
         estimated = estimated or bool(b.get("estimated"))
+        incomplete = incomplete or _is_incomplete(b)
     out["estimated"] = estimated
+    out["incomplete"] = incomplete
     return out
+
+
+def _is_incomplete(bucket: dict) -> bool:
+    """A figure that is neither a full measurement nor an honest estimate."""
+    if bucket.get("incomplete"):
+        return True
+    source = str(bucket.get("source") or "")
+    return source.startswith("unavailable") or "last turn" in source
 
 
 # --------------------------------------------------------------------------
@@ -1904,7 +1943,9 @@ class Run:
         self.crystal_stats = {"ran": False, "checks": 0, "attempts": 0,
                               "conflicts": 0, "real_conflicts": 0,
                               "delivered": 0, "undelivered": 0,
-                              "noisy_branches": [], "errors": 0, "reports": []}
+                              "noisy_branches": [], "errors": 0, "reports": [],
+                              "branchless_attempts": 0,
+                              "suppressed_repeats": 0}
         self.worktree_created = False
         self.base_sha = "unknown"
         self.head_sha = "unknown"
@@ -1914,6 +1955,7 @@ class Run:
         self.seat_invocations = 0
         self.models_observed: dict[str, int] = {}
         self.review_tree: Path | None = None
+        self._last_crystal_signature: tuple | None = None
 
     # -- bookkeeping -------------------------------------------------------
 
@@ -2081,8 +2123,14 @@ class Run:
         # Bounded, and to a file: the path list is agent-controlled, so a run
         # that creates enough paths could exhaust memory here.
         status_out = self.path("logs", f"status-{tag}.txt")
+        # The SAME exclusion the `add` below uses. Asking whether the tree is
+        # dirty without it meant a standup arm -- whose .standup/ bus is
+        #untracked and in no .gitignore -- always looked dirty, staged
+        # nothing, and recorded a false "sweep failed: the frozen sha may not
+        # name what is graded" at every freeze point, in the standup arms only.
         rc, out, truncated = git_to_file(
-            ["status", "--porcelain"], cwd=self.ctx.run_tree,
+            ["status", "--porcelain", "--", ".", SWEEP_EXCLUDE],
+            cwd=self.ctx.run_tree,
             timeout=self.cfg.timeouts["git_s"], out=status_out, cap=1_000_000)
         if rc != 0:
             # NOT the same as clean. Treating a git failure as "nothing to
@@ -2105,7 +2153,7 @@ class Run:
         # seed, redirect and crystal message into the diff -- the diff handed
         # to the reviewer AND to the escaped-defect audit, giving standup-ON
         # arms a different yardstick input from standup-OFF arms.
-        rc_a, _o, err_a = git(["add", "-A", "--", ".", ":(exclude).standup"],
+        rc_a, _o, err_a = git(["add", "-A", "--", ".", SWEEP_EXCLUDE],
                               cwd=self.ctx.run_tree,
                               timeout=self.cfg.timeouts["git_s"])
         rc_c, _o2, err_c = git(
@@ -2138,13 +2186,10 @@ class Run:
         elif truncated:
             diff += (f"\n\n[... diff truncated at {DIFF_CAP} characters; the "
                      f"full patch is at {out.name} ...]\n")
-        # Read from the working tree, which freeze_tree just made
-        # identical to `sha` -- the sweep is what makes the frozen
-        # revision and the inlined source the same bytes.
-        code = self.collect_server_code()
+        code = self.collect_server_code(sha)
         return Materials(diff=diff, server_code=code, review_sha=sha)
 
-    def collect_server_code(self) -> str:
+    def collect_server_code(self, sha: str) -> str:
         """Every Python file beside the server, inlined with headers.
 
         Inlined rather than referenced because a foreign council seat may not
@@ -2152,42 +2197,44 @@ class Run:
         because a review of a named revision should not depend on what the
         working tree happens to hold when the seat gets around to looking.
         """
-        server = self.ctx.run_tree / self.cfg.server_path
-        if not server.is_file():
-            return ("(no server was produced at "
-                    f"{self.cfg.server_path} -- there is nothing to review)")
-        srcdir = server.parent
-        files = sorted(p for p in srcdir.rglob("*.py")
-                       if "__pycache__" not in p.parts)
-        # Put the entry point first; a reviewer reads it as the way in.
-        files.sort(key=lambda p: (p != server, str(p)))
+        srcdir = str(Path(self.cfg.server_path).parent) or "."
+        # From the REVISION, not the working tree. Reading the directory
+        # picked up whatever happened to be sitting there -- a venv, a build
+        # artefact, an agent's scratch file -- none of which is in the frozen
+        # sha, and any of which could exhaust the inlining budget and push the
+        # actual server out of the reviewer's prompt.
+        rc, listing, err = git(["ls-tree", "-r", "--name-only", sha, "--", srcdir],
+                               cwd=self.ctx.run_tree,
+                               timeout=self.cfg.timeouts["git_s"])
+        if rc != 0:
+            self.fail("materials", "ls-tree-failed", err.strip() or f"rc={rc}")
+            return f"(could not list {srcdir} at {sha})"
+        paths = [ln.strip() for ln in listing.splitlines()
+                 if ln.strip().endswith(".py") and "__pycache__" not in ln]
+        if not paths:
+            return (f"(no server was produced at {self.cfg.server_path} in "
+                    f"{sha} -- there is nothing to review)")
+        # Entry point first; a reviewer reads it as the way in.
+        paths.sort(key=lambda x: (x != self.cfg.server_path, x))
         chunks: list[str] = []
         used = 0
-        for p in files:
-            rel = p.relative_to(self.ctx.run_tree)
-            # stat BEFORE read: an agent controls these files, and reading a
-            # committed multi-gigabyte .py to then discard it for exceeding the
-            # cap would exhaust memory before the cap ever applied.
-            try:
-                size = p.stat().st_size
-            except OSError as exc:
-                chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
+        for rel in paths:
+            out = self.path("logs", "src", f"{rel.replace('/', '_')}.{sha[:8]}")
+            rc, body, truncated = git_to_file(
+                ["show", f"{sha}:{rel}"], cwd=self.ctx.run_tree,
+                timeout=self.cfg.timeouts["git_s"], out=out,
+                cap=max(0, CODE_CAP - used))
+            if rc != 0:
+                chunks.append(f"### `{rel}`\n\n(unreadable at {sha})\n")
                 continue
-            if size > CODE_CAP or used + size > CODE_CAP:
-                chunks.append(f"### `{rel}`\n\n[omitted: {size} bytes; the "
-                              f"{CODE_CAP}-character inlining budget "
-                              "does not cover it]\n")
-                continue
-            try:
-                with open(p, "r", encoding="utf-8", errors="replace") as fh:
-                    body = fh.read(CODE_CAP - used)
-            except OSError as exc:
-                chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
-                continue
+            if truncated or not body:
+                chunks.append(f"### `{rel}`\n\n[omitted or truncated: the "
+                              f"{CODE_CAP}-character inlining budget is "
+                              "exhausted]\n")
+                if not body:
+                    continue
             used += len(body)
             chunks.append(f"### `{rel}`\n\n```python\n{body}\n```\n")
-        if not chunks:
-            return f"(no Python sources found under {srcdir})"
         return "\n".join(chunks)
 
     def _tally_seats(self, seats: dict, results: dict, prompt: str,
@@ -2280,6 +2327,12 @@ class Run:
         inlined in the prompt precisely so they need no filesystem.
         """
         d = self.run_dir / "seat-scratch" / name
+        if d.exists():
+            # Emptied on every handout. Reusing it let one seat's leftovers
+            # contaminate a later, supposedly fresh one -- which for the
+            # review fallback means a reviewer finding the previous
+            # reviewer's files in its "empty" directory.
+            shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -2381,10 +2434,14 @@ class Run:
                     self.fail("build", "loop-hung",
                               f"the {th.name} loop did not stop within "
                               f"{join_s:.0f}s; it may still be running")
+            # Recorded BEFORE the health check, which reads it. Setting it
+            # after the finally block left build_s at 0.0, so `had_time` was
+            # always False and the dead-crystal guard could never fire.
+            self.phases["build"] = time.time() - t0
             self._check_mechanism_health()
         self.tokens["build"] = res.tokens()
         self._note_models(res.result_event)
-        self.phases["build"] = time.time() - t0
+        self.phases.setdefault("build", time.time() - t0)
         self.path("logs", "build.result.json").write_text(
             json.dumps({"proc": proc.summary(), "parsed_ok": res.ok,
                         "error": res.error, "shape": res.shape,
@@ -2430,6 +2487,16 @@ class Run:
             if not cr["ran"]:
                 self.fail("crystal", "mechanism-dead",
                           "crystal is ON but its loop never started")
+            elif cr["checks"] == 0 and had_time and \
+                    cr["branchless_attempts"] == cr["attempts"] and cr["attempts"]:
+                # It looked, every time, and never found a worker branch under
+                # the expected prefix. Either the lead never fanned out or it
+                # ignored the branch names it was given -- both mean this arm
+                # ran without the mechanism whatever the manifest says.
+                self.fail("crystal", "mechanism-dead",
+                          f"crystal is ON but found no worker branch under "
+                          f"{self.ctx.worker_branch_prefix!r} in any of "
+                          f"{cr['attempts']} attempts over {build_s:.0f}s")
             elif cr["checks"] == 0 and had_time and cr["attempts"] > 0:
                 self.fail("crystal", "mechanism-dead",
                           f"crystal is ON but ran zero checks in {build_s:.0f}s "
@@ -2568,8 +2635,13 @@ class Run:
                               f"refs/heads/{self.ctx.worker_branch_prefix}*"],
                              cwd=self.ctx.run_tree, timeout=self.cfg.timeouts["git_s"])
             branches = [b.strip() for b in out.splitlines() if b.strip()]
-            if branches:
-                self.crystal_stats["attempts"] += 1
+            # Every iteration is an attempt, branches or not. Counting only
+            # the iterations that went on to run a check made
+            # "checks == 0 and attempts > 0" logically impossible, which is
+            # the condition the dead-mechanism guard tests.
+            self.crystal_stats["attempts"] += 1
+            if not branches:
+                self.crystal_stats["branchless_attempts"] += 1
             if rc != 0 or len(branches) < 1:
                 with open(log, "a", encoding="utf-8") as fh:
                     fh.write(f"\n===== check #{n} @ {iso(utc_now())}: "
@@ -2627,14 +2699,19 @@ class Run:
         """
         if not stanzas and not noisy:
             return
-        if not stanzas:
-            # Only single-branch noise -- but which branch is red on its own
-            # is the actionable fact, so it still gets said rather than
-            # computed and discarded.
-            if not self.cfg.toggles["standup"]:
-                self.crystal_stats["undelivered"] += 1
-                return
-            stanzas = []
+        if not self.cfg.toggles["standup"]:
+            self.crystal_stats["undelivered"] += 1
+            return
+        # Say a thing once. The loop runs every few minutes for the whole
+        # build, so a worker branch that stays un-compilable would otherwise
+        # inject the same message dozens of times into the lead's context --
+        # and this path has none of the per-agent cooldown _standup_loop
+        # applies. Re-notify only when what there is to say has changed.
+        signature = (tuple(stanzas), tuple(noisy))
+        if signature == self._last_crystal_signature:
+            self.crystal_stats["suppressed_repeats"] += 1
+            return
+        self._last_crystal_signature = signature
         if not self.cfg.toggles["standup"]:
             self.crystal_stats["undelivered"] += 1
             return
@@ -2789,8 +2866,9 @@ class Run:
         for rnd in range(1, self.cfg.max_rounds[step] + 1):
             mat = self.collect_materials(f"{step}-round{rnd}")
             review_cwd = self.review_worktree(mat.review_sha)
-            prompt = compose_review_prompt(self.cfg, self.ctx, step, mat,
-                                           review_cwd=review_cwd)
+            prompt = compose_review_prompt(
+                self.cfg, self.ctx, step, mat, review_cwd=review_cwd,
+                have_no_tree=review_cwd != self.review_tree)
             name = f"review-{step}-round{rnd}"
             proc, res = self.claude(name, prompt, model=model,
                                     timeout=self.cfg.timeouts["review_s"],
@@ -3252,11 +3330,10 @@ def _split_provenance(parts: list[dict]) -> dict:
         target = estimated if part.get("estimated") else measured
         for k in measured:
             target[k] += int(part.get(k) or 0)
-        source = str(part.get("source") or "")
         # "unavailable" and the last-turn-only `usage` fallback are not
         # estimates, but they are not full measurements either: banking them
         # as measured would label an undercounted arm comparable.
-        if source.startswith("unavailable") or "last turn" in source:
+        if _is_incomplete(part):
             incomplete = True
     return {"measured": measured, "estimated": estimated,
             "incomplete_sources": incomplete,
@@ -3285,7 +3362,8 @@ def _models_honoured(configured: dict, observed: dict) -> bool | None:
     return True
 
 
-def _models_missing(configured: dict, observed: dict, roles: tuple) -> list[str]:
+def _models_missing(configured: dict, observed: dict,
+                    roles: tuple) -> list[str] | None:
     """Configured models for the named roles that never appear in modelUsage.
 
     `_models_honoured` can only see a model from OUTSIDE the configured set,
@@ -3296,7 +3374,9 @@ def _models_missing(configured: dict, observed: dict, roles: tuple) -> list[str]
     exists to isolate.
     """
     if not observed:
-        return []
+        # Null, not an empty list. An empty list reads as "every configured
+        # tier ran", which is a claim about a build nothing was observed of.
+        return None
     seen = " ".join(observed).lower()
     return sorted({configured[r].lower() for r in roles
                    if r in configured and configured[r].lower() not in seen})
