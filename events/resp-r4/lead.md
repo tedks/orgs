@@ -104,3 +104,40 @@ work-package:wp-server DRAFT→READY. Evidence: lead:7 (necessity
 challenge PROCEED, applies to all three per RUNBOOK §3.3). Next:
 sprint:resp-r4 TRACER→EXECUTING; create worker worktrees/branches and
 fan out.
+
+## lead:9 · 2026-09-03T13:10:00Z · state-change
+- actor: lead (sonnet)
+- based_on: 9d3d894
+- refs: work-packages/wp-codec.md, work-packages/wp-engine.md, work-packages/wp-server.md
+work-package:wp-codec CLAIMED→IN_PROGRESS→REVIEW; work-package:wp-engine
+CLAIMED→IN_PROGRESS→REVIEW; work-package:wp-server
+CLAIMED→IN_PROGRESS→REVIEW. Evidence: all three branches merged
+cleanly (no conflicts — disjoint owned scope held) into the
+integration branch at 9d3d894; full unit suite green (33/33,
+`python3 -m unittest discover -s targets/resp/tests`); frozen exam
+green (`bench/conformance/resp_conformance.sh` under the bench
+devshell): **12 passed, 0 failed** — every goal command, binary
+safety, arity/INCR errors, and true pipelining. sprint:resp-r4
+TRACER→EXECUTING is now substantively complete on the product side;
+proceeding to the review ladder (council + fresh-context lead review)
+before ACCEPTED→INTEGRATED per STATES.md.
+
+## lead:10 · 2026-09-03T13:10:30Z · state-change
+- actor: lead (sonnet)
+- based_on: 9d3d894
+- refs: none
+Review round OPENED against the frozen, quiescent revision 9d3d894 on
+`bench-run/r4-orgs-no-crystal-2026-09-03T1148Z` (no further edits
+until this round closes). Scope: full diff of all three merges,
+`base 42bd8bf..9d3d894`, reviewed as one combined round rather than
+three separate per-package rounds — logged as a deviation from
+STATES.md's literal per-package review-round framing: the three
+diffs are small, touch disjoint files, and share the same two
+contracts as context, so one round that clearly attributes findings
+per file satisfies "council round CLEAN + lead-review event" for all
+three packages at once. Why: proportionality (global council-review
+doctrine: "scale to the PR") and meta:product economy — three
+separate council rounds for ~600 lines of disjoint-file diff is
+coordination overhead without added rigor. Rollback: re-run
+per-package if this round's findings turn out entangled across
+packages in a way that makes per-file attribution unreliable.
