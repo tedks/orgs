@@ -19,7 +19,9 @@ frozen conformance exam, merged onto `{{RUN_BRANCH}}` and committed.
   accept `--port` (and/or read `$PORT`) and listen on that TCP port.
 - Python 3, standard library only.
 - Everything must be **merged into `{{RUN_BRANCH}}`** before you finish. Work
-  left on a worker branch is not graded.
+  left on a worker branch is not graded. Anything left uncommitted on
+  `{{RUN_BRANCH}}` when you stop is swept into a final commit by the harness
+  and IS graded, so do not stop mid-edit.
 
 ## Run the runbook
 
@@ -58,13 +60,18 @@ index because two agents shared one working tree.
   ```
 
   where `<id>` is that worker's short id.
-- **The worker ids for this sprint are exactly: {{WORKER_IDS}}.** Use these
-  ids verbatim — for the branch name, the worktree directory, the status file
-  `status/<id>.md`, and (where it applies below) the standup agent id. The
-  measurement harness watches these names; a worker under a different name is
-  invisible to it.
-- **Spawn the workers with your `Agent` tool, all in ONE message**, so they
-  run concurrently rather than one after another. {{PARALLEL_NOTE}}
+- **The worker ids for this sprint are exactly the ones in this table.** Use
+  them verbatim. The measurement harness watches these names, and a worker
+  under a different name is invisible to it.
+
+{{WORKER_ID_TABLE}}
+
+  The two columns are not interchangeable. The **short id** names the branch,
+  the worktree directory and the status file. The **tracking id** is what each
+  worker must put in every commit message — it is unique to this run, which is
+  what lets the harness tell your workers' commits apart from the thousands of
+  other commits in this repository.
+- {{PARALLEL_NOTE}}
 - **Worker model: `{{WORKER_MODEL}}`.** Pass `model: "{{WORKER_MODEL}}"` on
   every worker `Agent` call. Do not upgrade a worker to a stronger model
   because the task looks hard; the model mix is the variable under test.

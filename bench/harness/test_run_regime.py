@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 import sys
 import tempfile
 import traceback
@@ -395,8 +396,40 @@ def test_coarse_regime_and_ablation() -> None:
     check_eq(rr.ablation_of(t(firewall=False)), "firewall", "firewall ablation")
     check_eq(rr.ablation_of(t(crystal=False, standup=False)), None,
              "two mechanisms off -> no single ablation name")
-    check_eq(rr.ablation_of(rr.load_config(CONFIG_DIR / "r4-orgs-no-crystal.json").toggles),
-             "crystal", "r4 is the crystal ablation of r3")
+    check_eq(rr.ablation_keys(t(crystal=False, standup=False), "split"),
+             ["crystal", "standup"],
+             "ablation_set stays lossless where the single name cannot")
+    # All three rungs off is ONE ablation (`review`), not three.
+    check_eq(rr.ablation_of(t(review_native=False, review_lead=False,
+                              review_cto=False)), "senior_review",
+             "every review rung off is the single review ablation")
+
+    # A legacy config has never heard of the CTO rung, so review_cto=False
+    # there means "not in this vocabulary", not "ablated". Reading it as an
+    # ablation made protocol-full -- everything-on by definition -- report
+    # itself as the review_cto ablation.
+    full = rr.load_config(CONFIG_DIR / "protocol-full.json")
+    check_eq(full.vocabulary, "legacy", "protocol-full uses the legacy vocabulary")
+    check_eq(rr.ablation_of(full.toggles, full.vocabulary), None,
+             "protocol-full has everything on and must name no ablation")
+    nc = rr.load_config(CONFIG_DIR / "no-council.json")
+    check_eq(rr.ablation_of(nc.toggles, nc.vocabulary), "council",
+             "no-council.json is the council ablation")
+    nr = rr.load_config(CONFIG_DIR / "no-review.json")
+    check_eq(rr.ablation_of(nr.toggles, nr.vocabulary), "senior_review",
+             "no-review.json is the review ablation")
+
+    # r3 and r4 both leave review_native off, so neither has a SINGLE
+    # ablation; the set is what distinguishes them.
+    r3 = rr.load_config(CONFIG_DIR / "r3-orgs-full.json")
+    r4 = rr.load_config(CONFIG_DIR / "r4-orgs-no-crystal.json")
+    check_eq(rr.ablation_keys(r3.toggles, r3.vocabulary), ["review_native"],
+             "r3 ablation set")
+    check_eq(rr.ablation_keys(r4.toggles, r4.vocabulary),
+             ["crystal", "review_native"], "r4 ablation set")
+    check_eq(sorted(set(rr.ablation_keys(r4.toggles, r4.vocabulary))
+                    - set(rr.ablation_keys(r3.toggles, r3.vocabulary))),
+             ["crystal"], "r4 differs from r3 by crystal alone")
 
 
 def test_doctrine_split_matches_the_study() -> None:
@@ -898,6 +931,304 @@ def test_doctrine_extraction() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 9. Council-round findings: the fairness and isolation invariants
+# ---------------------------------------------------------------------------
+
+def test_runbook_is_ablated_with_its_mechanism() -> None:
+    """The runbook is the lead's PROCESS document, so for a process ablation
+    it is not a shared input like the spec -- it IS the treatment. Leaving §7
+    in an arm with crystal off means that arm was still instructed to run
+    speculative merge checks, and r3-vs-r4 then measures a background loop
+    rather than the mechanism."""
+    runbook = (FRAMEWORK / "protocol/RUNBOOK.md").read_text()
+    all_on = {k: True for k in rr.CANONICAL_TOGGLES}
+    all_on["review"] = True
+    kept, removed = rr.filter_runbook(runbook, all_on)
+    check_eq(removed, [], "nothing should be removed when every mechanism is on")
+    check_eq(kept, runbook, "an all-on arm gets the runbook verbatim")
+
+    for mech, marker in (("standup", "5. Standup"),
+                         ("crystal", "7. Speculative merge check")):
+        off = dict(all_on, **{mech: False})
+        kept, removed = rr.filter_runbook(runbook, off)
+        check(any(marker in r for r in removed),
+              f"{mech} off: section '{marker}' should have been removed")
+        check("REMOVED for this run" in kept,
+              f"{mech} off: the removed section leaves no explanatory stub")
+        check(len(kept) < len(runbook),
+              f"{mech} off: the runbook did not actually get shorter")
+
+    # And end to end, in the composed prompt for the real study configs.
+    for name in ("r4-orgs-no-crystal.json", "r5-orgs-no-crystal-no-standup.json"):
+        cfg = rr.load_config(CONFIG_DIR / name)
+        build = rr.compose_build_prompt(cfg, make_ctx(cfg))
+        check("At standup cadence: attempt merges" not in build,
+              f"{name}: crystal is off but the runbook still instructs it")
+        if not cfg.toggles["standup"]:
+            check("Convened on triggers (budget tripwire" not in build,
+                  f"{name}: standup is off but the runbook still instructs it")
+
+
+def test_parallel_instruction_has_exactly_one_voice() -> None:
+    """The bullet used to say "all in ONE message, so they run concurrently"
+    unconditionally, with only the note after it flipping -- so the sequential
+    arm was told both things and could honour either."""
+    for path in all_configs():
+        cfg = rr.load_config(path)
+        if not cfg.toggles["decomposition"]:
+            continue
+        build = rr.compose_build_prompt(cfg, make_ctx(cfg))
+        if cfg.toggles["parallel"]:
+            check("all in ONE message" in build,
+                  f"{path.name}: parallel on but the prompt does not say so")
+            check("SEQUENTIAL by configuration" not in build,
+                  f"{path.name}: parallel on but the prompt also says sequential")
+        else:
+            check("SEQUENTIAL by configuration" in build,
+                  f"{path.name}: parallel off but the prompt does not say so")
+            check("all in ONE message" not in build,
+                  f"{path.name}: parallel off but the prompt still says to "
+                  "spawn every worker in one message")
+
+
+def test_standup_agent_ids_are_run_unique() -> None:
+    """standup.sh finds an agent's activity with `git log --all --grep=<id>`,
+    and --all in this bare-repo layout is every ref in the project. Generic
+    ids like `codec` or `server` match unrelated history, so every agent reads
+    as stalled from the first observe and the standup-ON arms get a stream of
+    fabricated redirects the standup-OFF arms never see."""
+    cfg = rr.load_config(CONFIG_DIR / "r3-orgs-full.json")
+    a = make_ctx(cfg, run_id="run-A")
+    b = make_ctx(cfg, run_id="run-B")
+    check(a.agent_token != b.agent_token,
+          "two runs produced the same agent token")
+    for short in cfg.worker_ids + ["lead"]:
+        ida = a.standup_id(short)
+        check(ida.startswith(a.agent_token),
+              f"{short}: the standup id is not run-scoped")
+        check(ida != b.standup_id(short),
+              f"{short}: two runs share a standup id, so their commits collide")
+        check(len(ida) > 8, f"{short}: the standup id is implausibly short")
+    check(a.lead_agent_id.startswith(a.agent_token), "lead id is not run-scoped")
+    check(a.solo_agent_id.startswith(a.agent_token), "solo id is not run-scoped")
+
+    # The composed prompt must carry the tracking ids, not the bare ones.
+    build = rr.compose_build_prompt(cfg, a)
+    for short in cfg.worker_ids:
+        check(a.standup_id(short) in build,
+              f"{short}: the build prompt never gives the worker its tracking id")
+
+
+def test_agent_env_is_scrubbed() -> None:
+    """Each regime is supposed to be a fresh process with no inherited
+    context. Passing this session's own CLAUDE_* variables through makes that
+    false and can let a "fresh" reviewer resume back into the context it is
+    supposed to lack."""
+    for leaky in ("CLAUDE_CODE_SESSION", "CLAUDECODE", "CODEX_HOME",
+                  "CLAUDE_SESSION_ID", "GEMINI_API_KEY"):
+        check(rr._is_agent_env(leaky), f"{leaky} should be scrubbed")
+    for keep in ("PATH", "HOME", "TMPDIR", "ANTHROPIC_API_KEY", "LANG"):
+        check(not rr._is_agent_env(keep), f"{keep} must NOT be scrubbed")
+
+
+def test_conformance_line_is_anchored() -> None:
+    """The exam runs the server as a child, so the server's stdout is
+    interleaved with the exam's. An unanchored search would scrape a
+    conformance line the SERVER printed."""
+    check(re.search(r"\^conformance", rr.__dict__.get("__file__", "") or "") is None,
+          "placeholder")  # keeps the import of re honest if unused elsewhere
+    pat = re.compile(r"^conformance:\s*(\d+)\s+passed,\s*(\d+)\s+failed\s*$",
+                     re.MULTILINE)
+    forged = "server log: conformance: 16 passed, 0 failed (nice try)\n"
+    check(not pat.findall(forged),
+          "a conformance line embedded in another line was accepted")
+    real = "some output\nconformance: 12 passed, 0 failed\n"
+    check_eq(pat.findall(real), [("12", "0")], "the real line must still parse")
+    both = forged + real
+    check_eq(pat.findall(both)[-1], ("12", "0"),
+             "with a forged line present the real one must win")
+
+
+def test_crystal_noise_is_separated_from_real_conflicts() -> None:
+    """crystal-check.sh's own header: "a branch red on its own makes every one
+    of its pairings FAIL, which is noise". Counting those inflates the crystal
+    metric with the one thing crystal is not for."""
+    base = "bench-run/x"
+    report = """# Crystal report
+base: bench-run/x@aaa
+
+## bench-run/x@aaa \u00d7 wp-codec@bbb
+merge: clean
+tests: pass
+
+## bench-run/x@aaa \u00d7 wp-engine@ccc
+merge: clean
+tests: FAIL
+
+## wp-codec@bbb \u00d7 wp-engine@ccc
+merge: clean
+tests: FAIL
+
+## wp-codec@bbb \u00d7 wp-server@ddd
+merge: CONFLICT (targets/resp/server.py)
+"""
+    real, noisy = rr._classify_conflicts(report, base)
+    check_eq(noisy, ["wp-engine"],
+             "the branch that fails against the base is the red-alone one")
+    check_eq(len(real), 1,
+             f"only the genuine cross-branch conflict should survive, got {real}")
+    check("CONFLICT" in real[0], "the surviving stanza should be the textual one")
+    # With no base given, nothing can be classified as noise.
+    real2, noisy2 = rr._classify_conflicts(report, None)
+    check_eq(noisy2, [], "no base -> no noise classification")
+    check_eq(len(real2), 3, "no base -> every conflicting stanza is reported")
+
+
+def test_seat_tally_is_strict_about_missing_seats() -> None:
+    """A round where one provider was rate-limited is not a clean round: its
+    union is one seat's opinion wearing a two-seat label."""
+    rounds = [
+        {"round": 1, "parse_ok": True, "partial": False,
+         "counts": {"critical": 2, "important": 1, "minor": 0, "unknown": 0,
+                    "total": 3}},
+        {"round": 2, "parse_ok": False, "partial": False, "counts": None},
+        {"round": 3, "parse_ok": False, "partial": True,
+         "counts": {"critical": 1, "important": 0, "minor": 0, "unknown": 0,
+                    "total": 1}},
+    ]
+    t = rr._sum_rounds(rounds)
+    check_eq(t["rounds_unparsed"], 2,
+             "a partial round must not be counted as fully parsed")
+    check_eq(t["first_round"]["critical"], 2,
+             "first_round is the comparable per-step figure")
+    check_eq(t["first_round"]["total"], 3, "first_round total")
+
+
+def test_first_round_is_independent_of_round_count() -> None:
+    """The summed buckets grow with how many rounds an arm was configured
+    for; first_round does not, which is why it is the comparable one."""
+    one = [{"round": 1, "parse_ok": True,
+            "counts": {"critical": 3, "important": 0, "minor": 0, "unknown": 0,
+                       "total": 3}}]
+    two = one + [{"round": 2, "parse_ok": True,
+                  "counts": {"critical": 3, "important": 0, "minor": 0,
+                             "unknown": 0, "total": 3}}]
+    check_eq(rr._sum_rounds(one)["first_round"],
+             rr._sum_rounds(two)["first_round"],
+             "first_round must not depend on the configured round count")
+    check(rr._sum_rounds(two)["critical"] > rr._sum_rounds(one)["critical"],
+          "the summed bucket should grow with rounds (that is why it is not "
+          "the headline)")
+
+
+def test_fix_regressions_uses_assertion_names() -> None:
+    """A fix round that repairs one assertion while breaking another leaves
+    the pass COUNT identical -- and the count-based version reported zero
+    regressions for exactly the case this metric exists to find."""
+    stages = {
+        "after_build": {"ran": True, "conformance_passed": 15,
+                        "conformance_total": 16, "failures": ["PING"]},
+        "final": {"ran": True, "conformance_passed": 15,
+                  "conformance_total": 16, "failures": ["ECHO hello"]},
+    }
+    check_eq(rr._fix_regressions(stages), 1,
+             "a swapped failure is a fix-introduced regression, not a wash")
+    clean = {
+        "after_build": {"ran": True, "conformance_passed": 15,
+                        "conformance_total": 16, "failures": ["PING"]},
+        "final": {"ran": True, "conformance_passed": 16,
+                  "conformance_total": 16, "failures": []},
+    }
+    check_eq(rr._fix_regressions(clean), 0, "a genuine repair is not a regression")
+
+
+def test_cost_provenance_flags_incomparable_arms() -> None:
+    """Summing a measured `claude -p` figure with an estimated ask-agent one
+    makes an arm reviewed by a council look an order of magnitude cheaper
+    than an arm reviewed natively -- an artefact of HOW they were counted."""
+    measured = rr.tokens_from_result(RESULT_EVENT)
+    estimate = rr.estimated_tokens("p" * 4000, "r" * 400)
+    both = rr._split_provenance([measured, estimate])
+    check(both["measured"]["total_tokens"] > 0, "the measured half is populated")
+    check(both["estimated"]["total_tokens"] > 0, "the estimated half is populated")
+    check(not both["comparable_across_arms"],
+          "a bucket containing an estimate must be flagged incomparable")
+    only_measured = rr._split_provenance([measured])
+    check(only_measured["comparable_across_arms"],
+          "a purely measured bucket is comparable")
+    check_eq(only_measured["estimated"]["total_tokens"], 0, "no estimate leaked in")
+
+
+def test_models_honoured_check() -> None:
+    """A lead that quietly upgrades its workers changes the variable `tiering`
+    exists to isolate, while the manifest goes on claiming the configured mix."""
+    cfg = {"lead": "sonnet", "worker": "haiku"}
+    check(rr._models_honoured(cfg, {"claude-sonnet-4-5": 10,
+                                    "claude-haiku-4-5": 20}) is True,
+          "the configured mix should read as honoured")
+    check(rr._models_honoured(cfg, {"claude-opus-4-1": 10}) is False,
+          "a model the config never named must be flagged")
+    check(rr._models_honoured(cfg, {}) is None,
+          "nothing observed -> null, not a false claim of compliance")
+
+
+def test_review_steps_override_is_written_back_to_toggles() -> None:
+    """`review_steps` used to be able to switch a rung on or off while
+    `toggles` -- what the manifest, coarse regime and ablation are computed
+    from -- still described the other arrangement."""
+    base = json.loads((CONFIG_DIR / "r3-orgs-full.json").read_text())
+    base["review_steps"] = {"native": True, "cto": False}
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump(base, fh)
+        p = Path(fh.name)
+    try:
+        cfg = rr.load_config(p)
+        check_eq(cfg.steps["native"], True, "the override took effect")
+        check_eq(cfg.toggles["review_native"], True,
+                 "the toggle vector must agree with the ladder that runs")
+        check_eq(cfg.steps["cto"], False, "the cto override took effect")
+        check_eq(cfg.toggles["review_cto"], False,
+                 "the toggle vector must agree with the ladder that runs")
+    finally:
+        p.unlink(missing_ok=True)
+
+
+def test_nested_config_blocks_are_validated() -> None:
+    base = json.loads((CONFIG_DIR / "protocol-full.json").read_text())
+
+    def load(mutate):
+        cfg = copy.deepcopy(base)
+        mutate(cfg)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            json.dump(cfg, fh)
+            p = Path(fh.name)
+        try:
+            rr.load_config(p)
+            return None
+        except rr.ConfigError as exc:
+            return str(exc)
+        finally:
+            p.unlink(missing_ok=True)
+
+    for label, mutate in [
+        ("a misspelled standup key",
+         lambda c: c.update({"standup": {"stall_mins": 5}})),
+        ("a misspelled crystal key",
+         lambda c: c.update({"crystal": {"interval": 60}})),
+        ("a non-numeric standup interval",
+         lambda c: c.update({"standup": {"interval_s": "soon"}})),
+        ("a non-string crystal test_cmd",
+         lambda c: c.update({"crystal": {"test_cmd": 42}})),
+        ("a standup block that is not an object",
+         lambda c: c.update({"standup": [1, 2]})),
+    ]:
+        check(load(mutate) is not None,
+              f"the config loader accepted {label} without complaint")
+    check(load(lambda c: c.update({"standup": {"stall_min": 30}})) is None,
+          "a well-formed nested override should still load")
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -1023,7 +1354,80 @@ def mutation_check() -> int:
     mutants.append(("fix rounds are billed as coordination, not product",
                     break_buckets, lambda: setattr(rr.Run, "manifest", orig_manifest)))
 
-    # (7) The schema validator stops validating.
+    # (7) The runbook stops being ablated with its mechanism -- the arm with
+    # crystal off is still instructed to run speculative merge checks.
+    orig_filter = rr.filter_runbook
+
+    def break_runbook() -> None:
+        rr.filter_runbook = lambda runbook, toggles: (runbook, [])
+
+    mutants.append(("the runbook is not ablated with its mechanism",
+                    break_runbook, lambda: setattr(rr, "filter_runbook", orig_filter)))
+
+    # (8) Standup agent ids go back to being generic, so `git log --all`
+    # matches unrelated history and every agent reads as stalled at once.
+    orig_token = rr.Ctx.agent_token
+
+    def break_ids() -> None:
+        rr.Ctx.agent_token = property(lambda self: "bench")
+
+    mutants.append(("standup agent ids stop being run-unique",
+                    break_ids, lambda: setattr(rr.Ctx, "agent_token", orig_token)))
+
+    # (9) Fix-regression detection goes back to comparing pass COUNTS, which
+    # reports zero for a fix that repairs one assertion and breaks another.
+    orig_regr = rr._fix_regressions
+
+    def break_regressions() -> None:
+        def counts_only(stages):
+            a, b = stages.get("after_build"), stages.get("final")
+            if not a or not b or not a.get("ran") or not b.get("ran"):
+                return None
+            if not a.get("conformance_total") or not b.get("conformance_total"):
+                return None
+            lost = a["conformance_passed"] - b["conformance_passed"]
+            return lost if lost > 0 else 0
+        rr._fix_regressions = counts_only
+
+    mutants.append(("fix-regressions compares pass counts, not assertion names",
+                    break_regressions,
+                    lambda: setattr(rr, "_fix_regressions", orig_regr)))
+
+    # (10) Estimated and measured tokens stop being distinguishable.
+    orig_split = rr._split_provenance
+
+    def break_provenance() -> None:
+        def always_comparable(parts):
+            out = orig_split(parts)
+            out["comparable_across_arms"] = True
+            return out
+        rr._split_provenance = always_comparable
+
+    mutants.append(("estimated tokens are reported as comparable with measured",
+                    break_provenance,
+                    lambda: setattr(rr, "_split_provenance", orig_split)))
+
+    # (11) Crystal stops separating single-branch noise from real conflicts.
+    orig_classify = rr._classify_conflicts
+
+    def break_crystal() -> None:
+        rr._classify_conflicts = lambda report, base: (
+            orig_classify(report, None)[0], [])
+
+    mutants.append(("crystal counts red-alone branches as cross-branch conflicts",
+                    break_crystal,
+                    lambda: setattr(rr, "_classify_conflicts", orig_classify)))
+
+    # (12) The parent session's agent environment leaks into the fresh agents.
+    orig_isenv = rr._is_agent_env
+
+    def break_env() -> None:
+        rr._is_agent_env = lambda key: False
+
+    mutants.append(("the parent session's agent env leaks into fresh agents",
+                    break_env, lambda: setattr(rr, "_is_agent_env", orig_isenv)))
+
+    # (13) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:

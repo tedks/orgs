@@ -155,6 +155,8 @@ DEFAULT_STANDUP = {
     "interval_s": 300,          # how often to observe
     "stall_min": 15,            # minutes without a commit before a stall flag
     "redirect_cooldown_s": 900, # do not re-redirect the same agent faster
+    "startup_grace_s": 900,     # no redirects until an agent has had time
+                                # to produce its first commit
 }
 
 DEFAULT_CRYSTAL = {
@@ -166,6 +168,12 @@ DEFAULT_CRYSTAL = {
 # Review steps, in the order they run. Council sits at the implementer's tier
 # per RUNBOOK §6 (self-review, council, one-rung-up), so it runs before lead.
 REVIEW_STEP_ORDER = ("native", "council", "lead", "cto")
+
+# The foreign provider seats, named once. The council and the audit MUST
+# use the same list: the audit is the yardstick every arm is measured
+# with, and a yardstick with a different number of seats in different
+# arms is not one.
+COUNCIL_SEATS = ("codex", "agy")
 
 DEFAULT_MAX_ROUNDS = {"native": 2, "council": 2, "lead": 1, "cto": 1}
 
@@ -260,6 +268,7 @@ class Proc:
     stdout_path: str | None
     stderr_path: str | None
     spawn_error: str | None = None
+    orphans_swept: bool = False
 
     @property
     def ok(self) -> bool:
@@ -274,31 +283,70 @@ class Proc:
             "stdout": self.stdout_path,
             "stderr": self.stderr_path,
             "spawn_error": self.spawn_error,
+            "orphans_swept": self.orphans_swept,
         }
 
 
-def _kill_tree(proc: subprocess.Popen) -> None:
-    """SIGTERM the child's process GROUP, then SIGKILL what survives.
-
-    The group, not the process: an agent CLI spawns children (a test run, a
-    server it started), and killing only the parent leaves them running,
-    holding ports and billing tokens. `start_new_session=True` at spawn is
-    what makes the group ours to kill.
-    """
+def _group_alive(pgid: int) -> bool:
+    """Is any process still in this group? Signal 0 tests without delivering."""
     try:
-        pgid = os.getpgid(proc.pid)
-    except (ProcessLookupError, PermissionError):
-        return
-    for sig, grace in ((signal.SIGTERM, 10.0), (signal.SIGKILL, 5.0)):
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True          # it exists; we merely may not signal it
+
+
+def _kill_group(pgid: int, *, term_grace: float = 10.0,
+                kill_grace: float = 5.0) -> None:
+    """SIGTERM a process GROUP, then SIGKILL whatever is still in it.
+
+    The group, not the leader: an agent CLI spawns children (a test run, a
+    server it started, a nested agent), and killing only the leader leaves
+    them running -- holding ports, mutating a worktree, and billing tokens
+    into the NEXT regime's wall clock. `start_new_session=True` at spawn is
+    what makes the group ours to kill.
+
+    Waits on the GROUP rather than on the leader. An earlier version returned
+    as soon as the leader exited, which is exactly when an orphaned server is
+    still alive and the sweep was needed most.
+    """
+    for sig, grace in ((signal.SIGTERM, term_grace), (signal.SIGKILL, kill_grace)):
         try:
             os.killpg(pgid, sig)
         except (ProcessLookupError, PermissionError):
             return
         deadline = time.time() + grace
         while time.time() < deadline:
-            if proc.poll() is not None:
+            if not _group_alive(pgid):
                 return
             time.sleep(0.2)
+
+
+# Environment this session carries that must NOT reach a benchmark agent.
+# Each regime is supposed to be "a fresh process, no inherited context";
+# inheriting the orchestrator's own session ids, transcript paths and
+# messaging sockets makes that false, and can let a "fresh" reviewer resume
+# or message its way back into the context it is supposed to lack.
+AGENT_ENV_PREFIXES = ("CLAUDE", "ANTHROPIC_SESSION", "CLAUDECODE",
+                      "CODEX", "GEMINI", "ANTIGRAVITY", "AGY")
+AGENT_ENV_KEEP = ("ANTHROPIC_API_KEY", "CLAUDE_CONFIG_DIR")
+
+
+def _is_agent_env(key: str) -> bool:
+    if key in AGENT_ENV_KEEP:
+        return False
+    up = key.upper()
+    return any(up.startswith(pfx) for pfx in AGENT_ENV_PREFIXES)
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    try:
+        pgid = os.getpgid(proc.pid)
+    except (ProcessLookupError, PermissionError):
+        return
+    _kill_group(pgid)
 
 
 def run_capture(
@@ -310,6 +358,7 @@ def run_capture(
     stderr_path: Path | None = None,
     stdin_data: str | None = None,
     env: dict[str, str] | None = None,
+    scrub_agent_env: bool = False,
 ) -> Proc:
     """Run a command with a hard timeout, streaming output to files.
 
@@ -322,6 +371,10 @@ def run_capture(
     so = open(stdout_path, "wb") if stdout_path else subprocess.DEVNULL
     se = open(stderr_path, "wb") if stderr_path else subprocess.DEVNULL
     proc_env = dict(os.environ)
+    if scrub_agent_env:
+        for k in list(proc_env):
+            if _is_agent_env(k):
+                proc_env.pop(k, None)
     if env:
         proc_env.update(env)
     try:
@@ -340,6 +393,10 @@ def run_capture(
                         str(stdout_path) if stdout_path else None,
                         str(stderr_path) if stderr_path else None,
                         spawn_error=f"{type(exc).__name__}: {exc}")
+        try:
+            pgid = os.getpgid(p.pid)
+        except (ProcessLookupError, PermissionError):
+            pgid = None
         timed_out = False
         try:
             p.communicate(
@@ -360,21 +417,57 @@ def run_capture(
                 p.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 _kill_tree(p)
+        # Sweep the group even when the leader exited CLEANLY. A clean exit is
+        # not evidence that nothing survives: the conformance exam backgrounds
+        # a server, an agent can leave a child behind, and a survivor holds a
+        # TCP port and keeps mutating a worktree into the NEXT regime -- an
+        # isolation leak between runs that no error would ever report.
+        orphans_swept = False
+        if pgid is not None and _group_alive(pgid):
+            orphans_swept = True
+            _kill_group(pgid, term_grace=5.0, kill_grace=5.0)
         return Proc(argv, p.returncode, timed_out, time.time() - t0,
                     str(stdout_path) if stdout_path else None,
-                    str(stderr_path) if stderr_path else None)
+                    str(stderr_path) if stderr_path else None,
+                    orphans_swept=orphans_swept)
     finally:
         for h in (so, se):
             if hasattr(h, "close"):
                 h.close()
 
 
+def git_to_file(args: list[str], *, cwd: Path, timeout: float, out: Path,
+                cap: int) -> tuple[int, str, bool]:
+    """Run git with its stdout streamed to a FILE, then read back at most
+    `cap` bytes.
+
+    For `git diff`, whose size an agent controls: capture_output() buffers the
+    whole thing in this process first, so a committed multi-gigabyte file
+    would exhaust memory and kill the overnight run before it wrote any
+    evidence. Streaming to disk bounds what ever reaches memory.
+
+    Returns (returncode, text, truncated).
+    """
+    err = out.with_suffix(out.suffix + ".err")
+    proc = run_capture(["git", *args], cwd=cwd, timeout=timeout,
+                       stdout_path=out, stderr_path=err)
+    if proc.spawn_error or proc.timed_out:
+        return (124 if proc.timed_out else 127), "", False
+    try:
+        size = out.stat().st_size
+        with open(out, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read(cap)
+    except OSError:
+        return (proc.returncode if proc.returncode is not None else 127), "", False
+    return proc.returncode or 0, text, size > cap
+
+
 def git(args: list[str], *, cwd: Path, timeout: float) -> tuple[int, str, str]:
     """Run a small, bounded git command and capture its output in memory.
 
-    Only for commands whose output is known-small (rev-parse, worktree add,
-    for-each-ref). `git diff` goes through here too and is capped by the
-    caller; a diff large enough to matter is already a finding.
+    Only for commands whose output is known-small: rev-parse, worktree add,
+    for-each-ref, status --porcelain. Anything an AGENT can make arbitrarily
+    large (a diff, a file listing) goes through `git_to_file` instead.
     """
     try:
         cp = subprocess.run(
@@ -411,6 +504,7 @@ class Config:
     worker_ids: list[str]
     target_desc: str
     doctrine: bool
+    vocabulary: str
     raw: dict[str, Any]
 
     @property
@@ -487,8 +581,14 @@ def effective_models(models: dict[str, str], toggles: dict[str, bool]) -> dict[s
     out.setdefault("worker", worker)
     out.setdefault("lead", lead)
     out.setdefault("cto", lead)
-    out.setdefault("implementer", out.get("implementer") or lead)
-    out.setdefault("review_tier", worker)
+    out.setdefault("implementer", lead)
+    # The native reviewer is described to itself as "a peer reviewer at the
+    # implementer's own tier", so it defaults to whoever BUILDS in this
+    # regime -- the worker under decomposition, the solo implementer
+    # otherwise. Defaulting it to `worker` in a goal-directed arm put a
+    # cheaper model in a seat whose prompt claims parity.
+    out.setdefault("review_tier",
+                   out["worker"] if toggles["decomposition"] else out["implementer"])
     # A fix round is implementer work, so it runs at whichever tier built the
     # thing -- the lead's worker tier under decomposition, the solo
     # implementer's tier otherwise.
@@ -571,6 +671,7 @@ def load_config(path: Path) -> Config:
                           f"{sorted(unknown_top)} -- refusing to ignore a "
                           "setting that was meant to change the run")
 
+    vocabulary = ("legacy" if "review" in raw["toggles"] else "split")
     toggles = _parse_toggles(raw["toggles"], where)
     models = effective_models({str(k): str(v) for k, v in raw["models"].items()},
                               toggles)
@@ -602,16 +703,45 @@ def load_config(path: Path) -> Config:
             raise ConfigError(f"{where}: unknown timeout '{k}'")
         timeouts[k] = _positive(v, f"timeout '{k}'")
 
+    # Nested blocks get the same treatment as the top level: an unknown key
+    # here is a setting that was meant to change the run and silently did
+    # not, and a wrongly-typed one is a TypeError hours into an unattended
+    # run rather than a message before it starts.
+    def _nested(name: str, defaults: dict, numeric: tuple[str, ...]) -> dict:
+        out = dict(defaults)
+        block = raw.get(name)
+        if block is None:
+            return out
+        if not isinstance(block, dict):
+            raise ConfigError(f"{where}: '{name}' must be an object")
+        unknown = set(block) - set(defaults)
+        if unknown:
+            raise ConfigError(f"{where}: unknown {name} key(s) "
+                              f"{sorted(unknown)}")
+        for k, v in block.items():
+            if k in numeric:
+                out[k] = _positive(v, f"{name}.{k}")
+            else:
+                out[k] = v
+        return out
+
     standup = dict(DEFAULT_STANDUP)
     if "standup_interval_min" in raw:
         standup["interval_s"] = _positive(raw["standup_interval_min"],
                                           "standup_interval_min") * 60
-    standup.update(raw.get("standup") or {})
+    standup.update(_nested("standup", DEFAULT_STANDUP,
+                           ("interval_s", "stall_min", "redirect_cooldown_s",
+                            "startup_grace_s"))
+                   if raw.get("standup") else {})
     crystal = dict(DEFAULT_CRYSTAL)
     if "crystal_interval_min" in raw:
         crystal["interval_s"] = _positive(raw["crystal_interval_min"],
                                           "crystal_interval_min") * 60
-    crystal.update(raw.get("crystal") or {})
+    if raw.get("crystal"):
+        block = _nested("crystal", DEFAULT_CRYSTAL, ("interval_s", "timeout_s"))
+        if block.get("test_cmd") is not None and not isinstance(block["test_cmd"], str):
+            raise ConfigError(f"{where}: crystal.test_cmd must be a string")
+        crystal.update(block)
 
     # Review steps. `review` in the toggle surface is the internal review
     # ladder (RUNBOOK §6 steps 1-3 minus the council seat); it turns on both
@@ -630,6 +760,17 @@ def load_config(path: Path) -> Config:
         "cto": bool(rs.get("cto", toggles["review_cto"])),
         "council": bool(rs.get("council", toggles["council"])),
     }
+
+    # Write the resolved ladder BACK onto the toggle vector, so there is one
+    # source of truth. Previously `review_steps` could switch a rung on or
+    # off while `toggles` -- which is what the manifest, the coarse regime
+    # and the ablation name are computed from -- still described the other
+    # arrangement, i.e. the record would not say what ran.
+    toggles["review_native"] = steps["native"]
+    toggles["review_lead"] = steps["lead"]
+    toggles["review_cto"] = steps["cto"]
+    toggles["council"] = steps["council"]
+    toggles["review"] = any(toggles[k] for k in REVIEW_TOGGLES)
 
     max_rounds = dict(DEFAULT_MAX_ROUNDS)
     if "max_review_rounds" in raw:
@@ -671,6 +812,7 @@ def load_config(path: Path) -> Config:
         worker_ids=worker_ids,
         target_desc=str(tget("target_desc")),
         doctrine=bool(raw.get("doctrine", default_doctrine(toggles))),
+        vocabulary=vocabulary,
         raw=raw,
     )
 
@@ -706,20 +848,51 @@ ABLATION_NAMES = {
     "decomposition": "decomposition",
     "tiering": "tiering",
     "crystal": "crystal",
+    "parallel": "parallel",
+    "review_native": "review_native",
+    "review_lead": "review_lead",
+    "review_cto": "review_cto",
 }
 
+# `review` is the OR of the three rungs, so it is off only when all three
+# are. Counting both it and the rungs would make a single-rung ablation look
+# like several mechanisms at once and yield no name at all.
+ABLATION_DERIVED = ("review",)
 
-def ablation_of(toggles: dict[str, bool]) -> str | None:
+
+def ablation_keys(toggles: dict[str, bool], vocabulary: str) -> list[str]:
+    """The mechanisms this regime switches OFF, named in its own vocabulary.
+
+    Vocabulary matters. A legacy config has one `review` toggle and has never
+    heard of the CTO rung, so `review_cto: False` there means "not part of
+    this vocabulary", not "ablated" -- reading it as an ablation made
+    protocol-full, which is supposed to be everything-on, report itself as the
+    review_cto ablation.
+
+    A split-vocabulary config names each rung, so each is ablatable on its
+    own; but when ALL THREE are off that is the single `review` ablation, not
+    three.
+    """
+    if vocabulary == "legacy":
+        keys = list(MECHANISM_TOGGLES) + ["review"]
+    else:
+        rungs_off = [k for k in REVIEW_TOGGLES if not toggles.get(k, True)]
+        if len(rungs_off) == len(REVIEW_TOGGLES):
+            keys = list(MECHANISM_TOGGLES) + ["review"]
+        else:
+            keys = list(MECHANISM_TOGGLES) + list(REVIEW_TOGGLES)
+    return sorted(ABLATION_NAMES[k] for k in keys if not toggles.get(k, True))
+
+
+def ablation_of(toggles: dict[str, bool], vocabulary: str = "split") -> str | None:
     """Which single mechanism this regime removes, or None.
 
     None when nothing is off (protocol-full) or when more than one thing is
-    off (raw, native) -- in those cases `toggles` is the honest record and a
-    single name would be a lie.
+    off (raw, r5, r6) -- in those cases a single name would be a lie, and
+    `ablation_set` carries the full truth instead.
     """
-    off = [k for k in ABLATION_NAMES if not toggles.get(k, True)]
-    if len(off) != 1:
-        return None
-    return ABLATION_NAMES[off[0]]
+    off = ablation_keys(toggles, vocabulary)
+    return off[0] if len(off) == 1 else None
 
 
 # --------------------------------------------------------------------------
@@ -812,12 +985,37 @@ class Ctx:
     input_hashes: dict[str, str | None] = field(default_factory=dict)
 
     @property
+    def agent_token(self) -> str:
+        """A token unique to THIS run, used to build every standup agent id.
+
+        standup.sh finds an agent's last activity with
+        `git log --all --fixed-strings --grep=<agent-id>`, and `--all` in this
+        bare-repo layout means every ref in the whole project. With ids like
+        `codec`, `engine`, `server` or `lead`, that grep matches unrelated
+        commits on master and on other runs' branches -- measured on the real
+        repo: `codec` matched 12 commits, the newest 344 minutes old. Every
+        agent therefore reads as stalled from the first observe, and the
+        standup-ON arms get a stream of fabricated "you have not committed"
+        redirects that the standup-OFF arms never see. That is not a
+        measurement of situational awareness; it is harassment applied to
+        half the study.
+
+        A run-unique token cannot appear in history, so a match means the
+        agent really did commit, in this run.
+        """
+        return "bench" + hashlib.sha256(
+            f"{self.run_id}|{self.run_branch}".encode()).hexdigest()[:8]
+
+    def standup_id(self, short: str) -> str:
+        return f"{self.agent_token}-{short}"
+
+    @property
     def lead_agent_id(self) -> str:
-        return "lead"
+        return self.standup_id("lead")
 
     @property
     def solo_agent_id(self) -> str:
-        return "implementer"
+        return self.standup_id("implementer")
 
     @property
     def bus_root(self) -> Path:
@@ -881,6 +1079,59 @@ def _protocol_preamble(cfg: Config, ctx: Ctx) -> str:
             + ctx.doctrine_block + "\n\n")
 
 
+# Runbook sections and the mechanism each one instructs. The runbook is the
+# lead's PROCESS document -- for a process ablation it is not a shared input
+# like the spec, it IS the independent variable. Handing r4 (crystal off) a
+# runbook whose §7 tells it to run speculative merge checks means the arm was
+# still instructed to do the thing that was supposedly removed, and r3-vs-r4
+# then measures a background loop rather than the mechanism.
+RUNBOOK_SECTION_GATES = {
+    "5. standup": "standup",
+    "6. review ladder": "review",
+    "7. speculative merge check": "crystal",
+}
+
+
+def filter_runbook(runbook: str, toggles: dict[str, bool]) -> tuple[str, list[str]]:
+    """Drop the runbook sections whose mechanism this arm does not have.
+
+    A removed section leaves a visible stub naming what was removed, rather
+    than a silent gap in the numbering -- a lead that notices §6 is missing
+    would otherwise go looking for it, and finding nothing is a worse
+    instruction than being told plainly that this arm does not do that.
+
+    Returns (filtered text, the names of the removed sections).
+    """
+    lines = runbook.splitlines()
+    out: list[str] = []
+    removed: list[str] = []
+    skipping: str | None = None
+    for line in lines:
+        if line.startswith("## "):
+            heading = line[3:].strip()
+            low = heading.lower()
+            gate = next((tog for key, tog in RUNBOOK_SECTION_GATES.items()
+                         if low.startswith(key)), None)
+            if gate is not None and not toggles.get(gate, True):
+                skipping = heading
+                removed.append(heading)
+                out.append(f"## {heading}")
+                out.append("")
+                out.append(f"**REMOVED for this run — `{gate}` is OFF.** This "
+                           "arm of the benchmark does not run this step. Do "
+                           "not perform it and do not produce its artifacts.")
+                out.append("")
+                continue
+            skipping = None
+        if skipping is None:
+            out.append(line)
+    text = "\n".join(out)
+    if runbook.endswith("\n"):
+        text += "\n"          # splitlines() drops it; an all-on arm must get
+                              # the document back byte-for-byte
+    return text, removed
+
+
 def _toggle_summary(cfg: Config) -> str:
     on = [k for k in TOGGLE_KEYS if cfg.toggles[k]]
     off = [k for k in TOGGLE_KEYS if not cfg.toggles[k]]
@@ -910,6 +1161,28 @@ def _toggle_summary(cfg: Config) -> str:
     else:
         lines.append("Every mechanism is ON for this run.")
     return "\n".join(lines)
+
+
+def crystal_test_cmd(cfg: Config) -> str:
+    server_dir = str(Path(cfg.server_path).parent) or "."
+    return cfg.crystal["test_cmd"] or f"python3 -m compileall -q {server_dir}"
+
+
+def _worker_id_table(cfg: Config, ctx: Ctx) -> str:
+    """The short id (branch, directory, status file) beside the run-unique
+    tracking id (commit messages, standup bus).
+
+    Two ids because they answer to two different consumers: git wants a name a
+    human can read in `git branch`, and `standup.sh` greps `git log --all` --
+    across every ref in a shared bare repo -- so its id has to be one that
+    cannot occur anywhere else.
+    """
+    rows = ["  | short id | tracking id (in every commit message) |",
+            "  |---|---|"]
+    for w in cfg.worker_ids:
+        rows.append(f"  | `{w}` | `Bench-Agent: {ctx.standup_id(w)}` |")
+    rows.append(f"  | `lead` (you) | `Bench-Agent: {ctx.lead_agent_id}` |")
+    return "\n".join(rows)
 
 
 def compose_worker_brief(cfg: Config, ctx: Ctx) -> str:
@@ -946,6 +1219,11 @@ def compose_build_prompt(cfg: Config, ctx: Ctx) -> str:
                 {"GUARD": str(ctx.guard), "BUS_ROOT": str(ctx.bus_root),
                  "SOLO_AGENT_ID": ctx.solo_agent_id},
                 where="frag_standup_solo.md")
+        # The spec is shared by every arm and describes a team protocol. A
+        # goal-directed arm is the control for that protocol, so it is told
+        # plainly that the process half of the spec is not its job -- without
+        # which the control arm reads "produce every protocol artifact" as a
+        # GOAL and starts doing the thing it exists to be the absence of.
         return render(load_template("implementer_solo.md"), {
             "PROTOCOL_PREAMBLE": _protocol_preamble(cfg, ctx),
             "TARGET": cfg.target,
@@ -954,6 +1232,7 @@ def compose_build_prompt(cfg: Config, ctx: Ctx) -> str:
             "SERVER_PATH": cfg.server_path,
             "SPEC": ctx.spec_text,
             "EXAM": ctx.exam_text,
+            "SPEC_SCOPE_NOTE": load_template("frag_spec_scope_note.md"),
             "STANDUP_SECTION": standup_section,
         }, where="implementer_solo.md")
 
@@ -966,17 +1245,38 @@ def compose_build_prompt(cfg: Config, ctx: Ctx) -> str:
             where="frag_standup_lead.md")
     crystal_section = ""
     if crystal_active(cfg):
+        if cfg.toggles["standup"]:
+            delivery = load_template("frag_crystal_delivery_bus.md")
+        else:
+            # No bus means nothing can push a conflict to the lead. Saying so,
+            # and handing it the command, is honest; the previous text
+            # promised reports "at standup" that could never arrive.
+            delivery = render(
+                load_template("frag_crystal_delivery_selfserve.md"),
+                {"CRYSTAL": str(ctx.crystal_script),
+                 "RUN_BRANCH": ctx.run_branch,
+                 "CRYSTAL_TEST_CMD": crystal_test_cmd(cfg)},
+                where="frag_crystal_delivery_selfserve.md")
         crystal_section = render(load_template("frag_crystal_lead.md"),
-                                 {"RUN_BRANCH": ctx.run_branch},
+                                 {"RUN_BRANCH": ctx.run_branch,
+                                  "CRYSTAL_DELIVERY": delivery},
                                  where="frag_crystal_lead.md")
+    # The whole instruction, both branches, lives in PARALLEL_NOTE. Previously
+    # the surrounding bullet said "all in ONE message, so they run
+    # concurrently" unconditionally and only the note flipped -- so the
+    # sequential arm was told both things and could honour either.
     parallel_note = (
-        "One message, several `Agent` calls: that is what makes them run at "
-        "the same time. Spawning them one per message serialises the sprint "
-        "and is not what this run is measuring."
+        "**Spawn the workers with your `Agent` tool, all in ONE message**, so "
+        "they run concurrently rather than one after another. One message, "
+        "several `Agent` calls: that is what makes them run at the same time. "
+        "Spawning them one per message serialises the sprint and is not what "
+        "this run is measuring."
         if cfg.toggles["parallel"] else
-        "**This run is SEQUENTIAL by configuration**: spawn one worker, wait "
-        "for it, merge it, then spawn the next. Do not run workers "
-        "concurrently — concurrency is the variable that is switched off here."
+        "**This run is SEQUENTIAL by configuration.** Spawn ONE worker, wait "
+        "for it to finish, merge it, then spawn the next. Never have two "
+        "workers running at the same time and never put two `Agent` calls in "
+        "one message — concurrency is the variable that is switched off in "
+        "this arm."
     )
     return render(load_template("lead.md"), {
         "PROTOCOL_PREAMBLE": _protocol_preamble(cfg, ctx),
@@ -985,12 +1285,12 @@ def compose_build_prompt(cfg: Config, ctx: Ctx) -> str:
         "RUN_BRANCH": ctx.run_branch,
         "WORKERS_DIR": str(ctx.workers_dir),
         "WORKER_BRANCH_PREFIX": ctx.worker_branch_prefix,
-        "WORKER_IDS": ", ".join(f"`{w}`" for w in cfg.worker_ids),
+        "WORKER_ID_TABLE": _worker_id_table(cfg, ctx),
         "WORKER_MODEL": cfg.models["worker"],
         "SERVER_PATH": cfg.server_path,
         "SPEC": ctx.spec_text,
         "EXAM": ctx.exam_text,
-        "RUNBOOK": ctx.runbook_text,
+        "RUNBOOK": filter_runbook(ctx.runbook_text, cfg.toggles)[0],
         "WORKER_BRIEF": compose_worker_brief(cfg, ctx),
         "TOGGLE_SUMMARY": _toggle_summary(cfg),
         "PARALLEL_NOTE": parallel_note,
@@ -1569,13 +1869,21 @@ class Run:
         self.escaped: dict | None = None
         self.model_calls = 0
         self.standup_stats = {"ran": False, "observes": 0, "redirects": 0,
-                              "stalls_seen": 0, "errors": 0}
+                              "stalls_seen": 0, "stalls_in_grace": 0,
+                              "errors": 0, "agents": []}
         self.crystal_stats = {"ran": False, "checks": 0, "conflicts": 0,
+                              "real_conflicts": 0, "delivered": 0,
+                              "undelivered": 0, "noisy_branches": [],
                               "errors": 0, "reports": []}
         self.worktree_created = False
         self.base_sha = "unknown"
         self.head_sha = "unknown"
         self.exam_tampered: bool | None = None
+        self.frozen_exam: Path | None = None
+        self.swept: list[dict] = []
+        self.seat_invocations = 0
+        self.models_observed: dict[str, int] = {}
+        self.review_tree: Path | None = None
 
     # -- bookkeeping -------------------------------------------------------
 
@@ -1590,10 +1898,35 @@ class Run:
         print(f"  ! {phase}/{kind}: {detail}", file=sys.stderr, flush=True)
 
     def _count_calls(self, n: int) -> None:
-        """Council and audit seats run in threads, so `+=` on a plain int
-        can lose an increment (load/add/store is not atomic). Locked."""
+        """Assistant turns from a `claude -p` run.
+
+        Kept separate from foreign-seat invocations: a Claude turn and a whole
+        codex session are not the same unit, and adding them produced a
+        `model_calls` figure that meant nothing. Locked, because council and
+        audit seats run in threads and `+=` on a plain int is not atomic.
+        """
         with self._failures_lock:
             self.model_calls += n
+
+    def _count_seat(self) -> None:
+        with self._failures_lock:
+            self.seat_invocations += 1
+
+    def _note_models(self, ev: dict | None) -> None:
+        """Record which models the build ACTUALLY used.
+
+        The manifest records the configured model mix, but nothing made the
+        lead honour it -- a lead that upgrades its workers changes the very
+        variable `tiering` exists to test, and the manifest would still claim
+        the configured mix. `modelUsage` names every model the session
+        touched, so the claim becomes checkable.
+        """
+        mu = (ev or {}).get("modelUsage")
+        if not isinstance(mu, dict):
+            return
+        for model, usage in mu.items():
+            if isinstance(usage, dict):
+                self.models_observed[str(model)] = int(usage.get("outputTokens") or 0)
 
     def log(self, msg: str) -> None:
         print(f"[{iso(utc_now())}] {msg}", flush=True)
@@ -1621,15 +1954,23 @@ class Run:
         rc, out, _ = git(["rev-parse", "refs/heads/master"], cwd=self.framework,
                          timeout=self.cfg.timeouts["git_s"])
         self.base_sha = out.strip() or "unknown"
+        if rc != 0 or len(self.base_sha) != 40:
+            self.fail("isolation", "base-sha-unresolved",
+                      f"could not resolve refs/heads/master to a sha: {out!r}")
+            return False
 
         self.run_dir.mkdir(parents=True, exist_ok=True)
         if self.ctx.run_tree.exists():
             self.fail("isolation", "run-tree-exists",
                       f"{self.ctx.run_tree} already exists; refusing to reuse it")
             return False
+        # Branch from the resolved SHA, not from the NAME `master`. Between the
+        # rev-parse above and this call another worktree can move master, and
+        # a base_sha in the manifest that is not the base the branch was cut
+        # from makes every diff this run computes wrong.
         rc, _out, err = git(
             ["worktree", "add", "-b", self.run_branch,
-             str(self.ctx.run_tree), "master"],
+             str(self.ctx.run_tree), self.base_sha],
             cwd=self.framework, timeout=self.cfg.timeouts["git_s"])
         if rc != 0:
             self.fail("isolation", "worktree-add-failed", err.strip() or f"rc={rc}")
@@ -1639,13 +1980,25 @@ class Run:
         self.log(f"worktree {self.ctx.run_tree} on {self.run_branch} "
                  f"(base {self.base_sha[:12]})")
 
-        # A5: the exam that grades this run is the pristine one. Detect, and
-        # record, if the run tree's copy diverges -- that is evidence about
-        # the run, not a reason to stop it.
-        run_exam = self.ctx.run_tree / self.cfg.grader
+        # A5: the exam that grades this run is the pristine one, SNAPSHOTTED
+        # into the run directory at setup. Grading the live framework copy
+        # would let an edit to this worktree mid-run change the yardstick out
+        # from under a run whose manifest already recorded the old hash --
+        # and six sequential overnight runs give that plenty of opportunity.
         pristine = self.framework / self.cfg.grader
-        if run_exam.is_file():
-            self.exam_tampered = sha256_file(run_exam) != sha256_file(pristine)
+        try:
+            self.frozen_exam = self.run_dir / "frozen-exam.sh"
+            shutil.copyfile(pristine, self.frozen_exam)
+            os.chmod(self.frozen_exam, 0o755)
+        except OSError as exc:
+            self.fail("isolation", "exam-snapshot-failed", str(exc))
+            return False
+        if sha256_file(self.frozen_exam) != self.ctx.input_hashes.get("exam"):
+            self.fail("isolation", "exam-moved-during-setup",
+                      "the framework's exam changed between reading it for the "
+                      "prompts and snapshotting it for grading")
+            return False
+        self.check_exam_tamper()
         return True
 
     def refresh_head(self) -> None:
@@ -1655,33 +2008,88 @@ class Run:
             self.head_sha = out.strip()
 
     def check_exam_tamper(self) -> None:
+        """Has the run tree's copy of the frozen exam moved?
+
+        Deletion and replacement-by-a-directory count as tampering too. The
+        earlier version only compared hashes when the path was a regular
+        file, so `rm` -- the easiest way to get the exam out of the way --
+        left `exam_tampered` reading False.
+        """
         run_exam = self.ctx.run_tree / self.cfg.grader
-        if run_exam.is_file():
-            tampered = sha256_file(run_exam) != sha256_file(self.framework / self.cfg.grader)
-            if tampered and not self.exam_tampered:
-                self.fail("integrity", "exam-modified",
-                          f"the run tree's copy of {self.cfg.grader} differs from "
-                          "the frozen one; grading used the pristine copy")
-            self.exam_tampered = tampered
+        expected = self.ctx.input_hashes.get("exam")
+        if not run_exam.exists():
+            tampered, how = True, "the run tree's copy of the exam was deleted"
+        elif not run_exam.is_file():
+            tampered, how = True, "the run tree's exam path is no longer a file"
+        else:
+            got = sha256_file(run_exam)
+            tampered = got != expected
+            how = f"the run tree's copy of {self.cfg.grader} differs from the frozen one"
+        if tampered and not self.exam_tampered:
+            self.fail("integrity", "exam-modified",
+                      f"{how}; grading used the harness's own snapshot")
+        self.exam_tampered = tampered
 
     # -- materials ---------------------------------------------------------
 
-    def collect_materials(self) -> Materials:
-        """The diff and the built source, frozen at the current head."""
-        self.refresh_head()
-        rc, diff, err = git(["diff", f"{self.base_sha}..{self.head_sha}"],
-                            cwd=self.ctx.run_tree, timeout=self.cfg.timeouts["git_s"])
-        if rc != 0:
-            self.fail("materials", "diff-failed", err.strip() or f"rc={rc}")
-            diff = "(the diff could not be computed; see the manifest failures)"
-        code = self.collect_server_code()
-        return Materials(
-            diff=truncate(diff, DIFF_CAP, "diff"),
-            server_code=code,
-            review_sha=self.head_sha,
-        )
+    def freeze_tree(self, tag: str) -> str:
+        """Commit anything the agent left uncommitted, so the sha the reviewers
+        are given actually names the bytes they are shown and graded.
 
-    def collect_server_code(self) -> str:
+        RUNBOOK §6 wants a review launched against a named, immutable
+        revision. Previously the diff came from `base..head` (committed) while
+        the inlined source and the graded server came from the WORKING TREE --
+        so an agent that stopped mid-edit had its uncommitted work graded and
+        reviewed under a sha that did not contain it.
+
+        Sweeping rather than discarding, because the alternatives are worse:
+        discarding silently throws away work the agent believes it did, and
+        grading a dirty tree makes "the seat cleared sha X" meaningless. The
+        sweep is deterministic and identical in every arm, and it is recorded.
+        The prompts tell the agent this happens.
+        """
+        rc, out, _ = git(["status", "--porcelain"], cwd=self.ctx.run_tree,
+                         timeout=self.cfg.timeouts["git_s"])
+        if rc != 0 or not out.strip():
+            self.refresh_head()
+            return self.head_sha
+        n = len(out.strip().splitlines())
+        rc_a, _o, err_a = git(["add", "-A"], cwd=self.ctx.run_tree,
+                              timeout=self.cfg.timeouts["git_s"])
+        rc_c, _o2, err_c = git(
+            ["-c", "user.name=bench-harness",
+             "-c", "user.email=bench@localhost",
+             "commit", "-q", "-m",
+             f"harness: sweep {n} uncommitted path(s) into the {tag} revision"],
+            cwd=self.ctx.run_tree, timeout=self.cfg.timeouts["git_s"])
+        if rc_a != 0 or rc_c != 0:
+            self.fail("materials", "sweep-failed",
+                      (err_a + " " + err_c).strip() or "git add/commit failed")
+        else:
+            self.swept.append({"tag": tag, "paths": n, "at": iso(utc_now())})
+            self.fail("materials", "uncommitted-work-swept",
+                      f"the agent left {n} uncommitted path(s) at '{tag}'; they "
+                      "were committed so the frozen sha names what is graded")
+        self.refresh_head()
+        return self.head_sha
+
+    def collect_materials(self, tag: str = "review") -> Materials:
+        """The diff and the built source, genuinely frozen at one revision."""
+        sha = self.freeze_tree(tag)
+        out = self.path("logs", f"diff-{tag}.patch")
+        rc, diff, truncated = git_to_file(
+            ["diff", f"{self.base_sha}..{sha}"], cwd=self.ctx.run_tree,
+            timeout=self.cfg.timeouts["git_s"], out=out, cap=DIFF_CAP)
+        if rc != 0:
+            self.fail("materials", "diff-failed", f"git diff exited {rc}")
+            diff = "(the diff could not be computed; see the manifest failures)"
+        elif truncated:
+            diff += (f"\n\n[... diff truncated at {DIFF_CAP} characters; the "
+                     f"full patch is at {out.name} ...]\n")
+        code = self.collect_server_code(sha)
+        return Materials(diff=diff, server_code=code, review_sha=sha)
+
+    def collect_server_code(self, sha: str | None = None) -> str:
         """Every Python file beside the server, inlined with headers.
 
         Inlined rather than referenced because a foreign council seat may not
@@ -1702,20 +2110,116 @@ class Run:
         used = 0
         for p in files:
             rel = p.relative_to(self.ctx.run_tree)
+            # stat BEFORE read: an agent controls these files, and reading a
+            # committed multi-gigabyte .py to then discard it for exceeding the
+            # cap would exhaust memory before the cap ever applied.
             try:
-                body = p.read_text(encoding="utf-8", errors="replace")
+                size = p.stat().st_size
             except OSError as exc:
                 chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
                 continue
-            if used + len(body) > CODE_CAP:
-                chunks.append(f"### `{rel}`\n\n[omitted: the {CODE_CAP}-character "
-                              "inlining budget was exhausted]\n")
+            if size > CODE_CAP or used + size > CODE_CAP:
+                chunks.append(f"### `{rel}`\n\n[omitted: {size} bytes; the "
+                              f"{CODE_CAP}-character inlining budget "
+                              "does not cover it]\n")
+                continue
+            try:
+                with open(p, "r", encoding="utf-8", errors="replace") as fh:
+                    body = fh.read(CODE_CAP - used)
+            except OSError as exc:
+                chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
                 continue
             used += len(body)
             chunks.append(f"### `{rel}`\n\n```python\n{body}\n```\n")
         if not chunks:
             return f"(no Python sources found under {srcdir})"
         return "\n".join(chunks)
+
+    def _tally_seats(self, seats: dict, results: dict, prompt: str,
+                     tok: list, tag: str) -> tuple[dict, list[str], list[str]]:
+        """Parse each seat's reply, bank its estimated cost, and tally.
+
+        Shared by the council and the audit so the two cannot drift apart in
+        how they treat a missing seat -- which is exactly the thing that must
+        stay identical for the audit to be a yardstick.
+        """
+        union = {b: 0 for b in SEVERITY_BUCKETS}
+        union["total"] = 0
+        filled: list[str] = []
+        empty: list[str] = []
+        for seat_name in COUNCIL_SEATS:
+            proc, reply = results.get(seat_name, (None, None))
+            fnd = parse_findings(reply)
+            tok.append(estimated_tokens(prompt, reply or ""))
+            seats[seat_name] = {"proc": proc.summary() if proc else None,
+                                **fnd.to_json()}
+            if fnd.ok:
+                filled.append(seat_name)
+                for b in SEVERITY_BUCKETS:
+                    union[b] += fnd.counts[b]
+                union["total"] += fnd.counts["total"]
+            else:
+                empty.append(seat_name)
+                self.fail(f"{tag}-{seat_name}", "findings-unparsable",
+                          fnd.error or "unknown")
+        return union, filled, empty
+
+    def review_worktree(self, sha: str) -> Path:
+        """A throwaway detached worktree at the reviewed revision.
+
+        Reviewers run headless with --dangerously-skip-permissions. Pointing
+        them at the live product tree gave them write access to the artefact
+        they are judging: a reviewer that "helpfully" edits the server changes
+        what the NEXT grading run measures, with the edit attributed to
+        nobody. It also let a reviewer read whatever the working tree happens
+        to hold at the moment it looks, rather than the revision it was told
+        to review.
+
+        A detached checkout of the frozen sha fixes both: the reviewer sees
+        exactly the named revision, and anything it writes lands in a
+        directory the run throws away.
+
+        Falls back to the run tree if the worktree cannot be made -- a review
+        in the product tree is worse than no review, but losing the whole run
+        to a failed checkout is worse still, and the fallback is recorded.
+        """
+        wt = self.run_dir / "review-tree"
+        if self.review_tree is None:
+            rc, _o, err = git(["worktree", "add", "--detach", str(wt), sha],
+                              cwd=self.framework, timeout=self.cfg.timeouts["git_s"])
+            if rc != 0:
+                self.fail("review", "review-worktree-failed",
+                          f"{err.strip() or rc}; reviewers will run in the "
+                          "product tree, which they can write to")
+                return self.ctx.run_tree
+            self.review_tree = wt
+        else:
+            # Re-point it at this round's revision and discard whatever a
+            # previous reviewer left behind.
+            rc, _o, err = git(["checkout", "--detach", "--force", sha],
+                              cwd=wt, timeout=self.cfg.timeouts["git_s"])
+            rc2, _o2, _e2 = git(["clean", "-qfdx"], cwd=wt,
+                                timeout=self.cfg.timeouts["git_s"])
+            if rc != 0 or rc2 != 0:
+                self.fail("review", "review-worktree-reset-failed",
+                          err.strip() or f"checkout rc={rc} clean rc={rc2}")
+                return self.ctx.run_tree
+        return wt
+
+    def seat_scratch(self, name: str) -> Path:
+        """An empty directory for a foreign seat to sit in.
+
+        Council and audit seats used to be given `-d <the run tree>`. Two
+        problems, both fatal to the study rather than to the run: the audit is
+        supposed to be regime-INDEPENDENT, and a seat standing in the product
+        tree can read the contracts, ledger and status files that exist only
+        in the orgs arms; and two write-capable seats running concurrently in
+        one worktree can race each other and the product. Their code is
+        inlined in the prompt precisely so they need no filesystem.
+        """
+        d = self.run_dir / "seat-scratch" / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
 
     # -- agent invocations -------------------------------------------------
 
@@ -1729,7 +2233,8 @@ class Run:
                 "--output-format", "json", "--dangerously-skip-permissions"]
         self.log(f"  -> claude -p ({model}) {name}  [timeout {int(timeout)}s]")
         proc = run_capture(argv, cwd=cwd or self.ctx.run_tree, timeout=timeout,
-                           stdout_path=out, stderr_path=err, stdin_data=prompt)
+                           stdout_path=out, stderr_path=err, stdin_data=prompt,
+                           scrub_agent_env=True)
         res = parse_claude_result(out)
         if proc.timed_out:
             self.fail(name, "timeout", f"claude -p exceeded {timeout}s and was killed")
@@ -1740,7 +2245,11 @@ class Run:
                       stderr_tail=_tail(err))
         if not res.ok:
             self.fail(name, "unparsable-result", res.error or "unknown")
-        else:
+        if res.result_event is not None:
+            # Count and bill it even when ok is False. A run that hit
+            # max-turns or an API error still spent every token it spent;
+            # discarding a measured figure because the run ended badly
+            # under-reports that arm's real cost.
             self._count_calls(int(res.result_event.get("num_turns") or 0) or 1)
         return proc, res
 
@@ -1756,12 +2265,12 @@ class Run:
             self.fail(name, "ask-agent-missing", f"{self.ask_agent} not found")
             return Proc([str(self.ask_agent)], None, False, 0.0, None, None,
                         spawn_error="not found"), None
-        argv = [str(self.ask_agent), seat_name, "-d", str(self.ctx.run_tree),
-                "-f", str(pf)]
+        scratch = self.seat_scratch(name)
+        argv = [str(self.ask_agent), seat_name, "-d", str(scratch), "-f", str(pf)]
         self.log(f"  -> ask-agent {seat_name} {name}  [timeout {int(timeout)}s]")
-        proc = run_capture(argv, cwd=self.ctx.run_tree, timeout=timeout,
-                           stdout_path=out, stderr_path=err)
-        self._count_calls(1)
+        proc = run_capture(argv, cwd=scratch, timeout=timeout,
+                           stdout_path=out, stderr_path=err,
+                           scrub_agent_env=True)
         if proc.timed_out:
             self.fail(name, "timeout", f"{seat_name} exceeded {timeout}s and was killed")
         elif proc.spawn_error:
@@ -1769,6 +2278,8 @@ class Run:
         elif proc.returncode != 0:
             self.fail(name, "nonzero-exit",
                       f"{seat_name} exited {proc.returncode}", stderr_tail=_tail(err))
+        if not proc.spawn_error:
+            self._count_seat()
         try:
             reply = out.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -1795,13 +2306,22 @@ class Run:
                                     timeout=self.cfg.timeouts["build_s"])
         finally:
             stop.set()
+            # Long enough for a loop blocked in its own subprocess to finish
+            # it and notice the stop. Joining for less abandons a LIVE
+            # thread that goes on writing to the bus and reading shared refs
+            # while the next phase grades -- and, being a daemon, dies
+            # mid-git-operation at interpreter exit.
+            join_s = max(self.cfg.timeouts["crystal_s"],
+                         self.cfg.timeouts["standup_s"]) + 60
             for th in threads:
-                th.join(timeout=90)
+                th.join(timeout=join_s)
                 if th.is_alive():
                     self.fail("build", "loop-hung",
-                              f"the {th.name} loop did not stop within 90s")
-        self.tokens["build"] = res.tokens() if res.ok else zero_tokens(
-            "build result unparsable")
+                              f"the {th.name} loop did not stop within "
+                              f"{join_s:.0f}s; it may still be running")
+            self._check_mechanism_health()
+        self.tokens["build"] = res.tokens()
+        self._note_models(res.result_event)
         self.phases["build"] = time.time() - t0
         self.path("logs", "build.result.json").write_text(
             json.dumps({"proc": proc.summary(), "parsed_ok": res.ok,
@@ -1809,6 +2329,46 @@ class Run:
                         "final_text": res.text}, indent=2), encoding="utf-8")
         self.refresh_head()
         self.check_exam_tamper()
+
+    def _check_mechanism_health(self) -> None:
+        """Did the mechanisms this arm claims to run actually run?
+
+        An ablation compares an arm WITH a mechanism against one without. If
+        the mechanism was configured on but never functioned -- the loop
+        crashed on its first iteration, every observe errored, no seat was
+        reachable -- then both arms ran without it and the difference between
+        them measures noise. Nothing about that surfaces as an error today:
+        the counters are local and the run exits cleanly.
+
+        So the claim is checked, and a mechanism that was on but did nothing
+        is a recorded failure of the RUN, not a silent zero in the study.
+        """
+        if self.cfg.toggles["standup"]:
+            st = self.standup_stats
+            if not st["ran"]:
+                self.fail("standup", "mechanism-dead",
+                          "standup is ON but its loop never started")
+            elif st["observes"] == 0:
+                self.fail("standup", "mechanism-dead",
+                          "standup is ON but completed zero observes; this arm "
+                          "did not actually receive the mechanism")
+            elif st["errors"] >= st["observes"]:
+                self.fail("standup", "mechanism-dead",
+                          f"standup is ON but every one of its {st['observes']} "
+                          "observes errored; treat this arm as standup-OFF")
+        if crystal_active(self.cfg):
+            cr = self.crystal_stats
+            if not cr["ran"]:
+                self.fail("crystal", "mechanism-dead",
+                          "crystal is ON but its loop never started")
+            elif cr["checks"] == 0:
+                self.fail("crystal", "mechanism-dead",
+                          "crystal is ON but completed zero checks; this arm "
+                          "did not actually receive the mechanism")
+            elif cr["errors"] >= cr["checks"]:
+                self.fail("crystal", "mechanism-dead",
+                          f"crystal is ON but every one of its {cr['checks']} "
+                          "checks errored; treat this arm as crystal-OFF")
 
     def _spawn_loop(self, name: str, fn: Callable[[threading.Event], None],
                     stop: threading.Event) -> threading.Thread:
@@ -1831,22 +2391,37 @@ class Run:
         self.standup_stats["ran"] = True
         env = {"STANDUP_BUS": str(self.ctx.bus_root),
                "STANDUP_STALL_MIN": str(self.cfg.standup["stall_min"])}
-        agents = list(self.cfg.worker_ids) if self.cfg.toggles["decomposition"] else []
+        agents = ([self.ctx.standup_id(w) for w in self.cfg.worker_ids]
+                  if self.cfg.toggles["decomposition"] else [])
         agents.append(self.ctx.lead_agent_id if self.cfg.toggles["decomposition"]
                       else self.ctx.solo_agent_id)
+        self.standup_stats["agents"] = agents
         # Seed each inbox so `standup.sh observe` can see the agent at all
         # (it enumerates agents by their bus directory), and so the first
         # thing every agent reads is that it is being observed.
         for a in agents:
-            run_capture([str(self.ctx.framework / "standup/bus.sh"), "send", a, "info",
-                         "Standup is observing this run. Keep status/<id>.md "
-                         "current and commit granularly."],
-                        cwd=self.ctx.run_tree, timeout=30,
-                        stdout_path=self.path("logs", "standup-seed.txt"),
-                        stderr_path=self.path("logs", "standup-seed.err.txt"),
-                        env=env)
+            r = run_capture([str(self.ctx.framework / "standup/bus.sh"), "send", a,
+                             "info",
+                             "Standup is observing this run. Keep your status "
+                             "file current and commit granularly."],
+                            cwd=self.ctx.run_tree, timeout=30,
+                            stdout_path=self.path("logs", "standup-seed.txt"),
+                            stderr_path=self.path("logs", "standup-seed.err.txt"),
+                            env=env)
+            if not r.ok:
+                # A failed seed means this agent has no inbox, so `observe`
+                # cannot see it and no redirect can ever reach it: the
+                # mechanism is OFF for that agent while the manifest says ON.
+                self.standup_stats["errors"] += 1
+                self.fail("standup", "seed-failed",
+                          f"could not create a bus inbox for {a} "
+                          f"(rc={r.returncode}); standup cannot observe or "
+                          "redirect it, so the mechanism is not actually "
+                          "running for that agent")
         last_redirect: dict[str, float] = {}
         log = self.path("logs", "standup.log")
+        started = time.time()
+        grace = float(self.cfg.standup["startup_grace_s"])
         n = 0
         while True:
             n += 1
@@ -1867,6 +2442,12 @@ class Run:
             for agent in _stalled_agents(text):
                 self.standup_stats["stalls_seen"] += 1
                 now = time.time()
+                # No redirect during the opening grace period. An agent has to
+                # be given time to produce its first commit before "you have
+                # not committed" is true rather than merely early.
+                if now - started < grace:
+                    self.standup_stats["stalls_in_grace"] += 1
+                    continue
                 if now - last_redirect.get(agent, 0.0) < self.cfg.standup["redirect_cooldown_s"]:
                     continue
                 last_redirect[agent] = now
@@ -1887,6 +2468,9 @@ class Run:
                         fh.write(f"REDIRECT -> {agent}: {msg}\n")
                 else:
                     self.standup_stats["errors"] += 1
+                    self.fail("standup", "redirect-failed",
+                              f"could not deliver a redirect to {agent} "
+                              f"(rc={r.returncode})")
             if stop.wait(self.cfg.standup["interval_s"]):
                 return
 
@@ -1898,8 +2482,7 @@ class Run:
         worktree.
         """
         self.crystal_stats["ran"] = True
-        server_dir = str(Path(self.cfg.server_path).parent) or "."
-        test_cmd = self.cfg.crystal["test_cmd"] or f"python3 -m compileall -q {server_dir}"
+        test_cmd = crystal_test_cmd(self.cfg)
         log = self.path("logs", "crystal.log")
         n = 0
         while True:
@@ -1930,24 +2513,83 @@ class Run:
                          f"(rc={proc.returncode}) branches={branches} =====\n{text}\n")
             # crystal-check.sh: 0 clean, 1 conflicts found, 2 error.
             if proc.returncode == 1:
+                stanzas, noisy = _classify_conflicts(text, self.ctx.run_branch)
                 self.crystal_stats["conflicts"] += 1
+                if stanzas:
+                    self.crystal_stats["real_conflicts"] += 1
+                if noisy:
+                    self.crystal_stats["noisy_branches"] = sorted(
+                        set(self.crystal_stats["noisy_branches"]) | set(noisy))
                 self.crystal_stats["reports"].append({
                     "check": n, "at": iso(utc_now()), "branches": branches,
                     "report": str(rpt.relative_to(self.run_dir)),
-                    "stanzas": _conflict_stanzas(text),
+                    "stanzas": stanzas,
+                    "noisy_branches": noisy,
                 })
+                self._deliver_crystal(n, stanzas, noisy)
             elif proc.returncode != 0:
                 self.crystal_stats["errors"] += 1
+                self.fail("crystal", "check-failed",
+                          f"crystal-check.sh exited {proc.returncode} on check "
+                          f"#{n}; no speculative merge information was produced")
+
+    def _deliver_crystal(self, check: int, stanzas: list[str],
+                         noisy: list[str]) -> None:
+        """Tell the lead about a speculative conflict.
+
+        Without this the loop wrote to a log nobody in the run can read, while
+        frag_crystal_lead.md promised the lead that conflicts "get reported to
+        you at standup". The r3-vs-r4 crystal ablation would then have
+        measured the presence of a paragraph rather than the mechanism: no
+        conflict could ever change what the org did.
+
+        Delivery rides the standup bus, which is the only channel an agent is
+        told to read. When standup is OFF there is no such channel -- the
+        prompt says so in that case, and the harness records that the report
+        could not be delivered rather than pretending it was.
+        """
+        if not stanzas:
+            return                       # nothing but single-branch noise
+        if not self.cfg.toggles["standup"]:
+            self.crystal_stats["undelivered"] += 1
+            return
+        body = ("Standup — Crystal speculative merge check #%d found a conflict "
+                "between branches that are each green alone:\n  - %s\n"
+                "Adjudicate now, before it is merged: contract changed -> the "
+                "provider migrates its callers; assumption was invalid -> the "
+                "consumer fixes it; disputed -> you decide. Whoever merges "
+                "second cleans up." % (check, "\n  - ".join(stanzas[:8])))
+        if noisy:
+            body += ("\nNote: %s failed the boundary test on its own, so its "
+                     "pairings are noise, not cross-branch conflicts."
+                     % ", ".join(noisy))
+        env = {"STANDUP_BUS": str(self.ctx.bus_root)}
+        r = run_capture([str(self.ctx.standup_script), "redirect",
+                         self.ctx.lead_agent_id, body],
+                        cwd=self.ctx.run_tree,
+                        timeout=self.cfg.timeouts["standup_s"],
+                        stdout_path=self.path("logs", "crystal-delivery.txt"),
+                        stderr_path=self.path("logs", "crystal-delivery.err.txt"),
+                        env=env)
+        if r.ok:
+            self.crystal_stats["delivered"] += 1
+        else:
+            self.crystal_stats["undelivered"] += 1
+            self.fail("crystal", "delivery-failed",
+                      f"a conflict report could not be delivered to the lead "
+                      f"(rc={r.returncode}); the mechanism observed but could "
+                      "not act")
 
     def phase_grade(self, tag: str) -> dict:
         """Run the frozen exam, from the pristine copy, under nix."""
         t0 = time.time()
         server = self.ctx.run_tree / self.cfg.server_path
-        exam = self.framework / self.cfg.grader
+        exam = self.frozen_exam or (self.framework / self.cfg.grader)
         result: dict[str, Any] = {
             "ran": False, "exam": str(exam), "server": str(server),
             "conformance_total": 0, "conformance_passed": 0,
             "passed_all": False, "exit_code": None, "timed_out": False,
+            "trustworthy": False,
         }
         if not server.is_file():
             result["reason"] = f"no server at {self.cfg.server_path}"
@@ -1969,12 +2611,42 @@ class Run:
         result["ran"] = True
         result["exit_code"] = proc.returncode
         result["timed_out"] = proc.timed_out
-        m = re.search(r"conformance:\s*(\d+)\s+passed,\s*(\d+)\s+failed", text)
+        # Anchored to the start of a line, and the LAST such line wins.
+        # The exam runs the server as a child, so the server's own stdout is
+        # interleaved with the exam's -- an unanchored search would happily
+        # scrape a "conformance: 16 passed, 0 failed" that the SERVER printed.
+        # The exam emits this line last, immediately before exiting.
+        matches = re.findall(r"^conformance:\s*(\d+)\s+passed,\s*(\d+)\s+failed\s*$",
+                             text, re.MULTILINE)
+        m = matches[-1] if matches else None
         if m:
-            passed, failed = int(m.group(1)), int(m.group(2))
+            passed, failed = int(m[0]), int(m[1])
             result["conformance_passed"] = passed
             result["conformance_total"] = passed + failed
             result["passed_all"] = (failed == 0 and proc.returncode == 0)
+            # The exam contracts exit 0 (all pass) or 1 (an assertion failed).
+            # Anything else means the harness itself went wrong -- and a score
+            # scraped out of a run that went wrong is not a score. Recorded,
+            # but flagged untrustworthy rather than silently counted.
+            # Cross-check the scraped line against the exit status, which the
+            # server cannot forge: the exam exits 0 only when nothing failed
+            # and 1 only when something did. A line that disagrees with the
+            # status did not come from the exam.
+            consistent = ((proc.returncode == 0 and failed == 0)
+                          or (proc.returncode == 1 and failed > 0))
+            result["trustworthy"] = (proc.returncode in (0, 1)
+                                     and not proc.timed_out and consistent)
+            result["line_count"] = len(matches)
+            if not result["trustworthy"]:
+                self.fail(f"grade:{tag}", "exam-result-inconsistent",
+                          f"the scraped conformance line ({passed} passed, "
+                          f"{failed} failed) does not agree with the exam's exit "
+                          f"status {proc.returncode}; the counts are recorded "
+                          "but marked untrustworthy")
+            if len(matches) > 1:
+                self.fail(f"grade:{tag}", "exam-line-duplicated",
+                          f"{len(matches)} conformance lines were printed; the "
+                          "last was used, but the server may be emitting one")
         else:
             # Exit 2 means the exam could not run (no redis-cli, server never
             # came up). Record that honestly rather than scoring it 0/0 pass.
@@ -2017,14 +2689,16 @@ class Run:
         rounds: list[dict] = []
         fixes = 0
         t0 = time.time()
+        fix_seconds = 0.0
         tok = []
         for rnd in range(1, self.cfg.max_rounds[step] + 1):
-            mat = self.collect_materials()
+            mat = self.collect_materials(f"{step}-round{rnd}")
             prompt = compose_review_prompt(self.cfg, self.ctx, step, mat)
             name = f"review-{step}-round{rnd}"
             proc, res = self.claude(name, prompt, model=model,
-                                    timeout=self.cfg.timeouts["review_s"])
-            tok.append(res.tokens() if res.ok else zero_tokens("unparsable"))
+                                    timeout=self.cfg.timeouts["review_s"],
+                                    cwd=self.review_worktree(mat.review_sha))
+            tok.append(res.tokens())
             fnd = parse_findings(res.text)
             rec = {
                 "round": rnd, "model": model, "reviewed_sha": mat.review_sha,
@@ -2044,11 +2718,17 @@ class Run:
                      f"{fnd.counts['important']} important")
             if rnd >= self.cfg.max_rounds[step]:
                 break                       # no round left to verify a fix in
-            if self._apply_fix(f"{step}-round{rnd}", fnd, res.text or ""):
+            applied, secs = self._apply_fix(f"{step}-round{rnd}", fnd,
+                                            res.text or "")
+            fix_seconds += secs
+            if applied:
                 fixes += 1
             else:
                 break
-        self.phases[f"review:{step}"] = time.time() - t0
+        # The step's own wall clock EXCLUDES the fix rounds nested inside
+        # it: they are recorded under their own `fix:` phase, and leaving
+        # them here too made wall_clock_by_phase sum to more than the run.
+        self.phases[f"review:{step}"] = max(0.0, (time.time() - t0) - fix_seconds)
         self.tokens[f"review:{step}"] = add_tokens(*tok)
         return {"ran": True, "skipped_reason": None, "rounds": rounds,
                 "totals": _sum_rounds(rounds), "fix_rounds_applied": fixes}
@@ -2063,6 +2743,7 @@ class Run:
         rounds: list[dict] = []
         fixes = 0
         t0 = time.time()
+        fix_seconds = 0.0
         tok: list[dict] = []
         for rnd in range(1, self.cfg.max_rounds["council"] + 1):
             mat = self.collect_materials()
@@ -2076,9 +2757,10 @@ class Run:
                     f"council-{seat_name}-round{rnd}", seat_name, prompt,
                     timeout=self.cfg.timeouts["council_s"])
 
-            for seat_name in ("codex", "agy"):
+            for seat_name in COUNCIL_SEATS:
                 th = threading.Thread(target=go, args=(seat_name,),
-                                      name=f"council-{seat_name}")
+                                      name=f"council-{seat_name}",
+                                      daemon=True)
                 th.start()
                 threads.append(th)
             for th in threads:
@@ -2087,34 +2769,23 @@ class Run:
                     self.fail("council", "seat-hung",
                               f"{th.name} did not return within its timeout")
 
-            union = {b: 0 for b in SEVERITY_BUCKETS}
-            union["total"] = 0
-            any_ok = False
-            for seat_name in ("codex", "agy"):
-                proc, reply = results.get(seat_name, (None, None))
-                fnd = parse_findings(reply)
-                tok.append(estimated_tokens(prompt, reply or ""))
-                seats[seat_name] = {
-                    "proc": proc.summary() if proc else None,
-                    **fnd.to_json(),
-                }
-                if fnd.ok:
-                    any_ok = True
-                    for b in SEVERITY_BUCKETS:
-                        union[b] += fnd.counts[b]
-                    union["total"] += fnd.counts["total"]
-                else:
-                    self.fail(f"council-{seat_name}-round{rnd}",
-                              "findings-unparsable", fnd.error or "unknown")
+            union, filled, empty = self._tally_seats(
+                seats, results, prompt, tok, f"council-round{rnd}")
+            any_ok = bool(filled)
             rec = {
                 "round": rnd, "reviewed_sha": mat.review_sha,
                 "seats": seats,
-                "parse_ok": any_ok,
+                # parse_ok means EVERY seat answered. A round where one
+                # provider was rate-limited is not a clean round: its union
+                # is one seat's opinion wearing a two-seat label.
+                "parse_ok": len(filled) == len(COUNCIL_SEATS),
+                "partial": bool(filled) and len(filled) < len(COUNCIL_SEATS),
                 "counts": union if any_ok else None,
                 "union_note": "sum across seats; no cross-seat semantic "
                               "deduplication is attempted (A7)",
-                "seats_filled": [s for s, v in seats.items() if v["parse_ok"]],
-                "seats_empty": [s for s, v in seats.items() if not v["parse_ok"]],
+                "seats_expected": list(COUNCIL_SEATS),
+                "seats_filled": filled,
+                "seats_empty": empty,
             }
             rounds.append(rec)
             self.path("reviews", f"review-council-round{rnd}.json").write_text(
@@ -2134,20 +2805,32 @@ class Run:
                 f"- ({s}) {v['parse_error'] or 'see findings'}"
                 for s, v in seats.items() if not v["parse_ok"])
             fnd_all = Findings(True, merged, count_findings(merged), None, "council")
-            if self._apply_fix(f"council-round{rnd}", fnd_all, prose):
+            applied, secs = self._apply_fix(f"council-round{rnd}", fnd_all, prose)
+            fix_seconds += secs
+            if applied:
                 fixes += 1
             else:
                 break
-        self.phases["review:council"] = time.time() - t0
+        self.phases["review:council"] = max(0.0, (time.time() - t0) - fix_seconds)
         self.tokens["review:council"] = add_tokens(*tok)
         return {"ran": True, "skipped_reason": None, "rounds": rounds,
                 "totals": _sum_rounds(rounds), "fix_rounds_applied": fixes}
 
-    def _apply_fix(self, tag: str, fnd: Findings, prose: str) -> bool:
+    def _apply_fix(self, tag: str, fnd: Findings,
+                   prose: str) -> tuple[bool, float]:
+        """Run one fix round. Returns (the code actually changed, seconds).
+
+        "Applied" means the tree MOVED, not that the agent's process parsed.
+        An agent that disputed every finding, or that simply did nothing,
+        leaves the revision where it was -- counting that as a fix round
+        applied would credit the review ladder with work it did not cause,
+        and would send the loop into another review round over identical code.
+        """
         actionable = [f for f in fnd.findings
                       if f["severity"] in ("critical", "important")]
         if not actionable:
-            return False
+            return False, 0.0
+        before = self.head_sha
         mat = Materials(
             findings_json=json.dumps(actionable, indent=2),
             findings_prose=("### The reviewer's own words\n\n" + prose.strip()
@@ -2155,18 +2838,22 @@ class Run:
         )
         prompt = compose_fix_prompt(self.cfg, self.ctx, mat)
         proc, res = self.claude(f"fix-{tag}", prompt,
-                                 model=self.cfg.models["fix"],
-                                 timeout=self.cfg.timeouts["fix_s"])
+                                model=self.cfg.models["fix"],
+                                timeout=self.cfg.timeouts["fix_s"])
         # Bucketed as PRODUCT, under its own `fix:` key -- a fix round is
         # implementer work (RUNBOOK §8 counts a takeover as product), so
         # folding it into the review seat's total would inflate coordination
         # and deflate product in every arm that reviews at all.
-        self.tokens[f"fix:{tag}"] = (res.tokens() if res.ok
-                                     else zero_tokens("fix result unparsable"))
+        self.tokens[f"fix:{tag}"] = res.tokens()
         self.phases[f"fix:{tag}"] = proc.duration_s
-        self.refresh_head()
+        self.freeze_tree(f"fix-{tag}")
         self.check_exam_tamper()
-        return res.ok
+        changed = self.head_sha != before
+        if res.ok and not changed:
+            self.fail(f"fix-{tag}", "fix-changed-nothing",
+                      "the fix agent finished without moving the revision; "
+                      "the findings were disputed or ignored")
+        return (res.ok and changed), proc.duration_s
 
     # -- the yardstick -----------------------------------------------------
 
@@ -2179,7 +2866,23 @@ class Run:
         construction, the counts are comparable across arms.
         """
         t0 = time.time()
-        mat = self.collect_materials()
+        server = self.ctx.run_tree / self.cfg.server_path
+        if not server.is_file():
+            # Without this guard the seats are handed the string "(no server
+            # was produced ...)", both correctly answer [], and the arm that
+            # built NOTHING records zero escaped defects -- the best possible
+            # score on the study's robustness metric. Null, and say why.
+            reason = (f"no server at {self.cfg.server_path}; there is nothing "
+                      "to audit, so escaped_defects is null rather than zero")
+            self.escaped = {"ran": False, "reason": reason, "parse_ok": False,
+                            "complete": False, "counts": None,
+                            "critical_important": None, "seats": {},
+                            "seats_expected": list(COUNCIL_SEATS),
+                            "seats_filled": [], "seats_empty": list(COUNCIL_SEATS)}
+            self.fail("audit", "no-server", reason)
+            self.phases["audit"] = time.time() - t0
+            return
+        mat = self.collect_materials("audit")
         prompt = compose_audit_prompt(self.cfg, self.ctx, mat)
         results: dict[str, tuple[Proc, str | None]] = {}
         threads = []
@@ -2188,8 +2891,9 @@ class Run:
             results[seat_name] = self.seat(f"audit-{seat_name}", seat_name,
                                            prompt, timeout=self.cfg.timeouts["council_s"])
 
-        for seat_name in ("codex", "agy"):
-            th = threading.Thread(target=go, args=(seat_name,), name=f"audit-{seat_name}")
+        for seat_name in COUNCIL_SEATS:
+            th = threading.Thread(target=go, args=(seat_name,),
+                                  name=f"audit-{seat_name}", daemon=True)
             th.start()
             threads.append(th)
         for th in threads:
@@ -2198,36 +2902,33 @@ class Run:
                 self.fail("audit", "seat-hung", f"{th.name} did not return in time")
 
         seats: dict[str, dict] = {}
-        union = {b: 0 for b in SEVERITY_BUCKETS}
-        union["total"] = 0
-        tok = []
-        any_ok = False
-        for seat_name in ("codex", "agy"):
-            proc, reply = results.get(seat_name, (None, None))
-            fnd = parse_findings(reply)
-            tok.append(estimated_tokens(prompt, reply or ""))
-            seats[seat_name] = {"proc": proc.summary() if proc else None,
-                                **fnd.to_json()}
-            if fnd.ok:
-                any_ok = True
-                for b in SEVERITY_BUCKETS:
-                    union[b] += fnd.counts[b]
-                union["total"] += fnd.counts["total"]
-            else:
-                self.fail(f"audit-{seat_name}", "findings-unparsable",
-                          fnd.error or "unknown")
+        tok: list[dict] = []
+        union, filled, empty = self._tally_seats(seats, results, prompt, tok, "audit")
+        any_ok = bool(filled)
+        complete = len(filled) == len(COUNCIL_SEATS)
         self.escaped = {
             "ran": True,
             "audited_sha": mat.review_sha,
             "seats": seats,
-            "parse_ok": any_ok,
+            "parse_ok": complete,
+            # complete=False means the yardstick was shorter for this arm than
+            # for the others. An overnight rate-limit on one provider would
+            # otherwise silently halve one regime's escaped-defect count and
+            # make it look like the most robust build of the six.
+            "complete": complete,
             "counts": union if any_ok else None,
             "critical_important": (union["critical"] + union["important"]) if any_ok else None,
             "union_note": "sum across seats; no cross-seat semantic "
                           "deduplication is attempted (A7)",
-            "seats_filled": [s for s, v in seats.items() if v["parse_ok"]],
-            "seats_empty": [s for s, v in seats.items() if not v["parse_ok"]],
+            "seats_expected": list(COUNCIL_SEATS),
+            "seats_filled": filled,
+            "seats_empty": empty,
         }
+        if not complete:
+            self.fail("audit", "yardstick-incomplete",
+                      f"only {filled or 'no'} seat(s) answered the escaped-defect "
+                      "audit; this arm's robustness number is NOT comparable "
+                      "with an arm whose audit had every seat")
         self.path("reviews", "audit-escaped-defects.json").write_text(
             json.dumps(self.escaped, indent=2), encoding="utf-8")
         self.tokens["audit"] = add_tokens(*tok)
@@ -2239,12 +2940,33 @@ class Run:
     # -- output ------------------------------------------------------------
 
     def manifest(self, ended: datetime | None) -> dict:
-        final = self.grading_stages.get("final") or self.grading_stages.get("after_build") or {}
-        coordination = add_tokens(*[self.tokens.get(f"review:{s}", {})
-                                    for s in REVIEW_STEP_ORDER])
-        product = add_tokens(self.tokens.get("build", {}),
-                             *[v for k, v in self.tokens.items()
-                               if k.startswith("fix:")])
+        # ONLY the final stage. Falling back to `after_build` published a
+        # pre-review score under the headline `grading` field whenever the run
+        # died after the reviews touched the code -- a number that is not
+        # wrong so much as answering a different question than its name.
+        final = self.grading_stages.get("final") or {}
+        if not final and self.grading_stages:
+            self.fail("manifest", "no-final-grade",
+                      "the final grading stage never ran; grading is reported "
+                      "as zero rather than back-filled from an earlier stage")
+        coord_parts = [self.tokens.get(f"review:{s}", {}) for s in REVIEW_STEP_ORDER]
+        prod_parts = [self.tokens.get("build", {})] + [
+            v for k, v in self.tokens.items() if k.startswith("fix:")]
+        coordination = add_tokens(*coord_parts)
+        product = add_tokens(*prod_parts)
+        provenance = {
+            "coordination": _split_provenance(coord_parts),
+            "product": _split_provenance(prod_parts),
+            "note": (
+                "A `claude -p` seat's tokens are MEASURED; a foreign "
+                "ask-agent seat reports none and is ESTIMATED at "
+                "characters/4. They are summed into one number because the "
+                "schema has one field, but two arms whose review ladders use "
+                "different seat types are NOT comparable on "
+                "coordination_tokens -- compare `measured` against `measured`. "
+                "This is a limitation of what ask-agent reports, not of the "
+                "arithmetic."),
+        }
         wall = (ended - self.started).total_seconds() if ended else \
             (utc_now() - self.started).total_seconds()
         esc_count = (self.escaped or {}).get("critical_important")
@@ -2258,13 +2980,15 @@ class Run:
             "target": self.cfg.target,
             "git_revision": self.base_sha,
             "injected_event": None,
-            "ablation": ablation_of(self.cfg.toggles),
+            "ablation": ablation_of(self.cfg.toggles, self.cfg.vocabulary),
+            "ablation_set": ablation_keys(self.cfg.toggles, self.cfg.vocabulary),
             "toggles": dict(self.cfg.toggles),
             "models": dict(self.cfg.models),
             "cost": {
                 "coordination_tokens": int(coordination["total_tokens"]),
                 "product_tokens": int(product["total_tokens"]),
                 "model_calls": int(self.model_calls),
+                "seat_invocations": int(self.seat_invocations),
                 "wall_clock_seconds": round(wall, 3),
                 "human_intervention_minutes": 0.0,
                 "lead_wait_seconds": None,
@@ -2286,6 +3010,7 @@ class Run:
             "standup": self.standup_stats,
             "crystal": self.crystal_stats,
             "failures": self.failures,
+            "cost_provenance": provenance,
             "meta_product_ratio": (
                 round(coordination["total_tokens"] / product["total_tokens"], 4)
                 if product["total_tokens"] else None),
@@ -2299,6 +3024,14 @@ class Run:
                 "logs": "logs/",
                 "reviews": "reviews/",
             },
+            "budget_tokens": self.cfg.budget_tokens,
+            "budget_overrun": (
+                None if not self.cfg.budget_tokens else
+                max(0, coordination["total_tokens"] + product["total_tokens"]
+                    - int(self.cfg.budget_tokens))),
+            "models_observed": dict(self.models_observed),
+            "models_honoured": _models_honoured(self.cfg.models, self.models_observed),
+            "swept_commits": self.swept,
             "harness": {
                 "script": str(Path(__file__).resolve()),
                 "framework": str(self.framework),
@@ -2385,19 +3118,79 @@ def _tail(path: Path, n: int = 2000) -> str:
     return data[-n:]
 
 
+def _split_provenance(parts: list[dict]) -> dict:
+    """Split a token bucket into what was measured and what was estimated.
+
+    The single `coordination_tokens` figure mixes a `claude -p` seat's real
+    modelUsage with a foreign seat's characters/4 guess. Summed, an arm whose
+    review is one council round looks an order of magnitude cheaper than an
+    arm whose review is a native reviewer -- an artefact of HOW the two were
+    counted, not of what they cost. Reporting both halves is the most this
+    harness can honestly do: ask-agent reports no usage at all.
+    """
+    measured = {"input": 0, "output": 0, "cache_read": 0,
+                "cache_creation": 0, "total_tokens": 0}
+    estimated = dict(measured)
+    for part in parts:
+        if not part:
+            continue
+        target = estimated if part.get("estimated") else measured
+        for k in measured:
+            target[k] += int(part.get(k) or 0)
+    return {"measured": measured, "estimated": estimated,
+            "comparable_across_arms": estimated["total_tokens"] == 0}
+
+
+def _models_honoured(configured: dict, observed: dict) -> bool | None:
+    """Did the build actually use the models the config asked for?
+
+    Nothing forces a lead to pass the configured worker model to its `Agent`
+    calls. A lead that quietly upgrades its workers changes the very variable
+    `tiering` exists to isolate, while the manifest goes on reporting the
+    configured mix. `modelUsage` names every model the session touched, so the
+    claim can at least be checked. None when nothing was observed.
+    """
+    if not observed:
+        return None
+    want = {v.lower() for v in configured.values()}
+    for model in observed:
+        low = model.lower()
+        # modelUsage gives full ids ("claude-haiku-4-5"); configs give
+        # aliases ("haiku"). A configured alias must appear in the id.
+        if not any(alias in low for alias in want):
+            return False
+    return True
+
+
 def _empty_totals() -> dict:
     d = {b: 0 for b in SEVERITY_BUCKETS}
-    d.update({"total": 0, "rounds": 0, "rounds_unparsed": 0})
+    d.update({"total": 0, "rounds": 0, "rounds_unparsed": 0, "rounds_partial": 0})
+    d["first_round"] = {b: 0 for b in SEVERITY_BUCKETS}
+    d["first_round"]["total"] = 0
     return d
 
 
 def _sum_rounds(rounds: list[dict]) -> dict:
-    """Sum severities across a step's rounds.
+    """Aggregate a step's rounds.
 
-    Rounds whose findings block did not parse contribute nothing to the
-    counts and are counted separately as `rounds_unparsed` -- so a step whose
-    reviewer emitted garbage reads as "1 round, 1 unparsed", never as "0
-    findings" (A8).
+    Two numbers, because they answer different questions and conflating them
+    biases the study:
+
+    `first_round` -- what this step caught on a clean look at the build. This
+    is the comparable "bugs caught by this step" figure, because it does not
+    depend on how many rounds the step was configured for.
+
+    the summed buckets -- every finding reported across every round. A defect
+    that was reported, not fixed, and reported again counts twice here, and an
+    arm configured for more rounds accumulates more. No deduplication is
+    attempted: matching two seats' prose descriptions of "the same" defect is
+    not something this harness can do honestly.
+
+    Rounds whose findings block did not parse contribute to no severity count
+    and are tallied as `rounds_unparsed` -- "could not parse" is never
+    recorded as "zero findings" (A8). A round where some but not all seats
+    answered is tallied as `rounds_partial`: its counts are kept (dropping
+    them would be worse) but the round is visibly not a full one.
     """
     tot = _empty_totals()
     for r in rounds:
@@ -2406,9 +3199,15 @@ def _sum_rounds(rounds: list[dict]) -> dict:
         if not r.get("parse_ok") or not isinstance(counts, dict):
             tot["rounds_unparsed"] += 1
             continue
+        if r.get("partial"):
+            tot["rounds_partial"] += 1
         for b in SEVERITY_BUCKETS:
             tot[b] += int(counts.get(b, 0))
         tot["total"] += int(counts.get("total", 0))
+        if r.get("round") == 1:
+            for b in SEVERITY_BUCKETS:
+                tot["first_round"][b] = int(counts.get(b, 0))
+            tot["first_round"]["total"] = int(counts.get("total", 0))
     return tot
 
 
@@ -2416,14 +3215,23 @@ def _fix_regressions(stages: dict) -> int | None:
     """Assertions that passed after the build and stopped passing by the end.
 
     The bug class the whole review ladder exists to catch is the fix that
-    breaks something -- so it gets its own number, or null when either grading
-    stage did not produce one.
+    breaks something, so it gets its own number.
+
+    Compared as SETS of failing assertion names, not as pass counts. A fix
+    round that repairs one assertion while breaking a different one leaves the
+    count identical, and the count-based version reported zero regressions for
+    exactly the case this metric exists to find. The exam prints each failure
+    as `FAIL: <description>`, which `phase_grade` captures per stage.
     """
     a, b = stages.get("after_build"), stages.get("final")
     if not a or not b or not a.get("ran") or not b.get("ran"):
         return None
     if not a.get("conformance_total") or not b.get("conformance_total"):
         return None
+    before, after = a.get("failures"), b.get("failures")
+    if isinstance(before, list) and isinstance(after, list):
+        # Names present in the final failures that were not failing before.
+        return len(set(after) - set(before))
     lost = a["conformance_passed"] - b["conformance_passed"]
     return lost if lost > 0 else 0
 
@@ -2443,16 +3251,53 @@ def _stalled_agents(observe_text: str) -> list[str]:
 
 def _conflict_stanzas(report: str) -> list[str]:
     """The `a@sha × b@sha` headers whose stanza reported a conflict."""
-    stanzas: list[str] = []
+    return _classify_conflicts(report, base=None)[0]
+
+
+def _classify_conflicts(report: str, base: str | None) -> tuple[list[str], list[str]]:
+    """Split a Crystal report into real conflicts and single-branch noise.
+
+    crystal-check.sh's own header warns: "a branch red on its own makes every
+    one of its pairings FAIL, which is noise". One worker whose work-in-
+    progress does not compile therefore turns every pair it appears in into a
+    reported conflict, and counting those inflates the crystal metric with
+    exactly the thing crystal is not for.
+
+    The report gives us the discriminator for free: it checks base × branch
+    before it checks branch × branch. A branch whose stanza against the BASE
+    already fails is red alone, so its later pairings are dropped and the
+    branch is named instead -- which is the actionable fact anyway.
+
+    Returns (real cross-branch conflicts, branches that are red on their own).
+    """
+    stanzas: list[tuple[str, str, str]] = []      # (left, right, verdict)
     header: str | None = None
     for line in report.splitlines():
         if line.startswith("## "):
             header = line[3:].strip()
         elif header and (line.startswith("merge: CONFLICT")
                          or line.startswith("tests: FAIL")):
-            stanzas.append(f"{header} — {line.strip()}")
+            left, _, right = header.partition(" × ")
+            stanzas.append((left.strip(), right.strip(), line.strip()))
             header = None
-    return stanzas
+        elif header and (line.startswith("tests: pass")
+                         or line.startswith("merge: clean")):
+            continue                                # keep the header alive
+    # `name@sha` -> name, so a stanza can be matched against the base name.
+    def bare(ref: str) -> str:
+        return ref.rsplit("@", 1)[0]
+
+    noisy: list[str] = []
+    if base:
+        for left, right, verdict in stanzas:
+            if verdict.startswith("tests: FAIL") and bare(left) == base:
+                noisy.append(bare(right))
+    real: list[str] = []
+    for left, right, verdict in stanzas:
+        if bare(left) in noisy or bare(right) in noisy:
+            continue                                # a red-alone branch's pairing
+        real.append(f"{left} × {right} — {verdict}")
+    return real, sorted(set(noisy))
 
 
 def _crystal_skip_reason(cfg: Config) -> str:
@@ -2474,7 +3319,7 @@ def render_summary(run: "Run", man: dict) -> str:
     A(f"- **run id:** `{man['run_id']}`")
     A(f"- **started / ended:** {man['started_at']} → {man['ended_at']}")
     A(f"- **coarse regime:** `{man['regime']}`  ·  **ablation:** "
-      f"{('`' + man['ablation'] + '`') if man['ablation'] else 'none named (see toggles)'}")
+      f"{('`' + man['ablation'] + '`') if man['ablation'] else (', '.join(man['ablation_set']) or 'none — every mechanism on')}")
     A(f"- **branch:** `{man['artifacts']['run_branch']}` "
       f"(base `{man['git_revision'][:12]}`, head `{man['artifacts']['head_sha'][:12]}`)")
     A(f"- **tree:** `{man['artifacts']['run_tree']}`")
@@ -2674,9 +3519,8 @@ def dry_run(cfg: Config, args: argparse.Namespace) -> int:
     else:
         A("     · standup loop NOT started")
     if crystal_active(cfg):
-        server_dir = str(Path(cfg.server_path).parent) or "."
         A(f"     · crystal loop every {cfg.crystal['interval_s']}s, test-cmd "
-          f"{cfg.crystal['test_cmd'] or f'python3 -m compileall -q {server_dir}'!r}")
+          f"{crystal_test_cmd(cfg)!r}")
     else:
         A(f"     · crystal loop NOT started — {_crystal_skip_reason(cfg)}")
     A(f"  2. grade        frozen exam (pristine copy) under nix, tag=after_build")

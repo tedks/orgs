@@ -7,11 +7,16 @@
 > - Your working directory is `{{WORKERS_DIR}}/<id>`, a git worktree of its
 >   own, checked out on the branch `{{WORKER_BRANCH_PREFIX}}<id>`. It is
 >   yours alone. Never run git anywhere else; never edit a file outside it.
-> - Commit granularly on your branch. Uncommitted work is lost.
+> - Commit granularly on your branch. The lead merges your
+>   branch, so anything you leave uncommitted never reaches the
+>   product at all.
 > - Keep `status/<id>.md` current: current task, last commit, budget burned,
 >   blocked-on. Update it on claim, on every push, and when you block or
 >   unblock.
-> - Mention `<id>` in every commit message — that is how the sprint tracks you.
+> - **End every commit message with the line `Bench-Agent: <tracking-id>`**,
+>   using the tracking id from the lead's table. That exact string is how the
+>   sprint tells your commits apart from every other commit in this
+>   repository; a commit without it is invisible to the standup.
 >
 > **Intent:** <which spec goal / entity this package serves.>
 > **Instruction:** <what to build.>

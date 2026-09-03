@@ -18,7 +18,9 @@ exam, and commit it on `{{RUN_BRANCH}}`.
 - Python 3, standard library only — no third-party packages.
 - You may add supporting modules next to the server (the exam runs the server
   as a script, so `import` of a sibling module in the same directory works).
-- Commit your work. Uncommitted work is not graded.
+- Commit your work as you go. Anything still uncommitted when you stop is
+  swept into a final commit by the harness and IS graded, so do not leave the
+  tree in a state you would not want measured.
 
 ## The specification
 
@@ -33,7 +35,7 @@ tampering is detected and recorded. Run it as often as you like.
 ```bash
 {{EXAM}}
 ```
-{{STANDUP_SECTION}}
+{{SPEC_SCOPE_NOTE}}{{STANDUP_SECTION}}
 ## Done means
 
 Every assertion in that exam passes when it is run against your server, and
