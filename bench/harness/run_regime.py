@@ -2038,7 +2038,7 @@ class Run:
                      f"{fnd.counts['important']} important")
             if rnd >= self.cfg.max_rounds[step]:
                 break                       # no round left to verify a fix in
-            if self._apply_fix(f"{step}-round{rnd}", fnd, res.text or "", tok):
+            if self._apply_fix(f"{step}-round{rnd}", fnd, res.text or ""):
                 fixes += 1
             else:
                 break
@@ -2128,7 +2128,7 @@ class Run:
                 f"- ({s}) {v['parse_error'] or 'see findings'}"
                 for s, v in seats.items() if not v["parse_ok"])
             fnd_all = Findings(True, merged, count_findings(merged), None, "council")
-            if self._apply_fix(f"council-round{rnd}", fnd_all, prose, tok):
+            if self._apply_fix(f"council-round{rnd}", fnd_all, prose):
                 fixes += 1
             else:
                 break
@@ -2137,8 +2137,7 @@ class Run:
         return {"ran": True, "skipped_reason": None, "rounds": rounds,
                 "totals": _sum_rounds(rounds), "fix_rounds_applied": fixes}
 
-    def _apply_fix(self, tag: str, fnd: Findings, prose: str,
-                   token_sink: list[dict]) -> bool:
+    def _apply_fix(self, tag: str, fnd: Findings, prose: str) -> bool:
         actionable = [f for f in fnd.findings
                       if f["severity"] in ("critical", "important")]
         if not actionable:
@@ -2149,10 +2148,16 @@ class Run:
                             if prose.strip() else ""),
         )
         prompt = compose_fix_prompt(self.cfg, self.ctx, mat)
-        _proc, res = self.claude(f"fix-{tag}", prompt,
+        proc, res = self.claude(f"fix-{tag}", prompt,
                                  model=self.cfg.models["fix"],
                                  timeout=self.cfg.timeouts["fix_s"])
-        token_sink.append(res.tokens() if res.ok else zero_tokens("unparsable"))
+        # Bucketed as PRODUCT, under its own `fix:` key -- a fix round is
+        # implementer work (RUNBOOK §8 counts a takeover as product), so
+        # folding it into the review seat's total would inflate coordination
+        # and deflate product in every arm that reviews at all.
+        self.tokens[f"fix:{tag}"] = (res.tokens() if res.ok
+                                     else zero_tokens("fix result unparsable"))
+        self.phases[f"fix:{tag}"] = proc.duration_s
         self.refresh_head()
         self.check_exam_tamper()
         return res.ok

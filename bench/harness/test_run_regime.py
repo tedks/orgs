@@ -732,6 +732,50 @@ def test_manifest_validates_against_the_schema() -> None:
             check("Escaped defects" in text, f"{name}: SUMMARY.md lacks the yardstick")
 
 
+def test_cost_bucketing_follows_runbook_8() -> None:
+    """coordination = review seats; product = build + fix rounds; the audit is
+    in NEITHER (it is the measuring instrument, not work the org did).
+
+    This is not bookkeeping pedantry: meta:product is the tripwire the study
+    compares arms on, and putting the fix rounds on the wrong side inflates
+    coordination and deflates product in every arm that reviews at all."""
+    def tok(n):
+        return {"input": n, "output": 0, "cache_read": 0, "cache_creation": 0,
+                "total_tokens": n, "estimated": False}
+
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("protocol-full.json", Path(td))
+        run.tokens = {
+            "build": tok(1000),
+            "review:native": tok(100),
+            "review:council": tok(200),
+            "review:lead": tok(30),
+            "review:cto": tok(70),
+            "fix:native-round1": tok(500),
+            "fix:council-round1": tok(400),
+            "audit": tok(9999),
+        }
+        man = run.manifest(rr.utc_now())
+        check_eq(man["cost"]["coordination_tokens"], 400,
+                 "coordination must be exactly the review seats")
+        check_eq(man["cost"]["product_tokens"], 1900,
+                 "product must be the build plus every fix round")
+        check_eq(man["meta_product_ratio"], round(400 / 1900, 4),
+                 "meta:product ratio")
+        total = man["cost"]["coordination_tokens"] + man["cost"]["product_tokens"]
+        check(9999 not in (man["cost"]["coordination_tokens"],
+                           man["cost"]["product_tokens"]),
+              "the audit leaked into a cost bucket")
+        check_eq(total, 2300, "the audit must be in neither bucket")
+        check("audit" in man["tokens_by_phase"],
+              "the audit must still be reported in tokens_by_phase")
+
+        run.tokens = {}
+        man = run.manifest(rr.utc_now())
+        check_eq(man["meta_product_ratio"], None,
+                 "no product tokens -> null ratio, never a division by zero")
+
+
 def test_fix_introduced_regressions() -> None:
     """The bug class the whole review ladder exists to catch gets its own
     number: assertions that passed after the build and stopped passing."""
@@ -962,7 +1006,24 @@ def mutation_check() -> int:
     mutants.append(("guard invocations stop pinning STANDUP_BUS",
                     break_bus, lambda: setattr(rr, "compose_build_prompt", orig_build2)))
 
-    # (6) The schema validator stops validating.
+    # (6) Fix rounds get bucketed as coordination instead of product -- the
+    # regression that was in the first version of the manifest writer.
+    orig_manifest = rr.Run.manifest
+
+    def break_buckets() -> None:
+        def mutant(self, ended):
+            man = orig_manifest(self, ended)
+            fix = sum(int(v.get("total_tokens") or 0)
+                      for k, v in self.tokens.items() if k.startswith("fix:"))
+            man["cost"]["coordination_tokens"] += fix
+            man["cost"]["product_tokens"] -= fix
+            return man
+        rr.Run.manifest = mutant
+
+    mutants.append(("fix rounds are billed as coordination, not product",
+                    break_buckets, lambda: setattr(rr.Run, "manifest", orig_manifest)))
+
+    # (7) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:
