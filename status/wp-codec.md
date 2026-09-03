@@ -2,7 +2,7 @@
 
 - **State:** IN_PROGRESS
 - **Current task:** Completed TodoTests implementation; all 9 tests passing (round-trip, binary-safe, incremental feed, malformed input, multiple frames, null variants, Integer/Error types)
-- **Last commit:** 42bd8bff57ede260a37065e10e10cf140065359b
+- **Last commit:** 342946d61ed94e9d6c1db7563e2226351d0cc94e wp-codec: implement boundary tests for C1 contract compliance
 - **Budget burned:** 1 focused session (well under 40 tool calls)
 - **Blocked on:** none
 - **Deviations logged:** none
