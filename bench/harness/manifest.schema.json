@@ -13,7 +13,19 @@
     "run_id": { "type": "string", "description": "unique id, e.g. 2026-09-02T1200Z-protocol-resp-01" },
     "started_at": { "type": "string", "format": "date-time" },
     "ended_at": { "type": ["string", "null"], "format": "date-time" },
-    "regime": { "enum": ["raw", "native", "protocol"] },
+    "regime": {
+      "enum": ["raw", "native", "protocol"],
+      "description": "the coarse class. Kept at three values on purpose: widening it would change what an existing field means across already-recorded runs. run_regime.py DERIVES it from the toggles (raw = no decomposition, no review, no council; native = a lead fans out with no protocol artifacts; protocol = everything else, ablated or not) and puts the config's own label in regime_name."
+    },
+    "regime_name": {
+      "type": ["string", "null"],
+      "description": "the regime config's own label, e.g. 'protocol-full', 'no-council'. The named ablations of bench/regimes/README.md live here; `regime` stays the coarse class."
+    },
+    "toggles": {
+      "type": ["object", "null"],
+      "description": "the mechanism vector this run was configured with — the authoritative record of which parts of the protocol were on. `ablation` names at most one removed mechanism and is null whenever zero or several are off, so this is the field to read.",
+      "additionalProperties": { "type": "boolean" }
+    },
     "target": { "type": "string", "description": "e.g. resp" },
     "git_revision": { "type": "string", "description": "sha of the org protocol used" },
     "injected_event": {
@@ -33,8 +45,8 @@
     },
     "ablation": {
       "type": ["string", "null"],
-      "enum": ["firewall", "standup", "senior_review", "memory", null],
-      "description": "which protocol component was disabled, or null for full protocol"
+      "enum": ["firewall", "standup", "senior_review", "memory", "council", "decomposition", "tiering", "crystal", null],
+      "description": "which single protocol component was disabled, or null. Null means EITHER nothing was disabled (protocol-full) OR several were (raw, native) — in both of those cases one name would be a lie, so read `toggles` for the truth. 'senior_review' is the name this vocabulary already used for the `review` toggle."
     },
     "models": {
       "type": "object",
@@ -67,6 +79,68 @@
         "fix_introduced_regressions": { "type": ["integer", "null"], "minimum": 0 },
         "recovery_seconds_after_restart": { "type": ["number", "null"], "minimum": 0 }
       }
+    },
+    "grading_stages": {
+      "type": ["object", "null"],
+      "description": "the frozen exam run more than once: 'after_build' (before any review touched the code) and 'final'. The difference is what the review ladder cost or bought in graded conformance, and it is what grading.fix_introduced_regressions is computed from. `grading` above always mirrors the FINAL stage.",
+      "additionalProperties": { "type": "object" }
+    },
+    "review_steps": {
+      "type": ["object", "null"],
+      "description": "PRIMARY METRIC: bugs caught, broken down by review step ('native', 'council', 'lead', 'cto'), and within a step by round. Each entry: {ran, skipped_reason, rounds[], totals{critical,important,minor,unknown,total,rounds,rounds_unparsed}, fix_rounds_applied}. A round whose findings block did not parse contributes to rounds_unparsed and to NO severity count — 'could not parse' is never recorded as 'zero findings'. Per-round detail is descriptive; the top-level shape is the contract.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["ran", "rounds", "totals"],
+        "properties": {
+          "ran": { "type": "boolean" },
+          "skipped_reason": { "type": ["string", "null"] },
+          "rounds": { "type": "array" },
+          "totals": { "type": "object" },
+          "fix_rounds_applied": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "escaped_defects": {
+      "type": ["object", "null"],
+      "description": "THE ROBUSTNESS YARDSTICK: a post-hoc cross-provider audit (codex + agy) of the FINAL server, run identically for every regime from a deliberately regime-independent prompt so the counts are comparable across arms. `critical_important` is the headline number and is mirrored into grading.escaped_defects. Counts are the SUM across seats with no semantic deduplication — two seats reporting one defect count twice. Null, not zero, when no seat returned a parsable block.",
+      "properties": {
+        "ran": { "type": "boolean" },
+        "audited_sha": { "type": "string" },
+        "parse_ok": { "type": "boolean" },
+        "critical_important": { "type": ["integer", "null"], "minimum": 0 },
+        "counts": { "type": ["object", "null"] },
+        "seats": { "type": "object" },
+        "seats_filled": { "type": "array" },
+        "seats_empty": { "type": "array" },
+        "union_note": { "type": "string" }
+      }
+    },
+    "tokens_by_phase": {
+      "type": ["object", "null"],
+      "description": "token usage per phase: 'build', 'review:<step>', 'audit'. Each entry carries its own `source` and an `estimated` flag — a `claude -p` phase is measured from the result event's per-session modelUsage aggregate; a foreign ask-agent seat reports no usage at all and is estimated at characters/4. Never compare an estimated figure with a measured one without saying so.",
+      "additionalProperties": { "type": "object" }
+    },
+    "wall_clock_by_phase": {
+      "type": ["object", "null"],
+      "description": "seconds per phase, measured by the harness around each subprocess",
+      "additionalProperties": { "type": "number", "minimum": 0 }
+    },
+    "standup": {
+      "type": ["object", "null"],
+      "description": "the situational-awareness loop's own record: observes run, stalls flagged, redirects sent"
+    },
+    "crystal": {
+      "type": ["object", "null"],
+      "description": "the speculative-merge loop's record: checks run, how many reported a conflict, and the conflicting stanzas"
+    },
+    "failures": {
+      "type": ["array", "null"],
+      "description": "every failure the run hit, in order, each {phase, kind, detail, at}. A run that finished with an empty server and a red exam still writes a complete manifest — a run directory that is only complete on the happy path is not evidence.",
+      "items": { "type": "object" }
+    },
+    "harness": {
+      "type": ["object", "null"],
+      "description": "how the measurement itself was made: the script, the pristine framework worktree, sha256 of every pinned input (spec, exam, runbook, doctrine), whether the run tree's copy of the exam was modified, and the stated cost-bucketing and token-source rules"
     },
     "meta_product_ratio": { "type": ["number", "null"], "description": "coordination_tokens / product_tokens; the soft tripwire" },
     "artifacts": {
