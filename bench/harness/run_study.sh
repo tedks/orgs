@@ -22,12 +22,16 @@ mkdir -p "$logdir"
 started=$(date -u +%FT%TZ)
 echo "STUDY START $started" | tee "$logdir/_study.log"
 
-# Per-arm watchdog. The build alone is budgeted at 90 min; the review ladder,
-# grading and the audit run after it. This is the outer bound that stops one
-# wedged arm from consuming the whole night — run_regime.py bounds every one
-# of its own subprocesses, so reaching this means the orchestrator itself is
-# stuck.
-ARM_TIMEOUT_S=${ARM_TIMEOUT_S:-18000}          # 5 hours
+# Per-arm watchdog, sized from EACH ARM'S OWN configured bounds (see the
+# per-arm computation in the loop below).
+#
+# One fixed bound across arms is not neutral. An arm with more review steps
+# and more rounds has a longer LEGITIMATE ceiling — r3 needs 8.7h where r1
+# needs 4.7h — so a single 5h watchdog would have killed exactly the
+# review-heavy arms and spared the others, censoring the treatment under study
+# and making "more review" look like "failed arm". Each arm asks
+# run_regime.py what its own ceiling is and gets that plus a margin.
+WATCHDOG_MARGIN=${WATCHDOG_MARGIN:-1800}       # 30 min over the arm's own bound
 
 regimes=(
   r1-goal-native-review
@@ -56,8 +60,15 @@ echo "STUDY PIN base=$base_sha inputs=$logdir/_study-pin.json" \
 
 failed=()
 for cfg in "${regimes[@]}"; do
-    echo "=== $(date -u +%FT%TZ) START $cfg ===" | tee -a "$logdir/_study.log"
-    timeout --kill-after=120 "$ARM_TIMEOUT_S" \
+    # The arm's own worst case, from its own timeouts, plus a margin.
+    arm_max=$(python3 bench/harness/run_regime.py \
+                  --config "bench/regimes/configs/$cfg.json" \
+                  --print-max-runtime 2>/dev/null) || arm_max=""
+    case "$arm_max" in ''|*[!0-9]*) arm_max=32400 ;; esac   # 9h fallback
+    arm_timeout=$(( arm_max + WATCHDOG_MARGIN ))
+    echo "=== $(date -u +%FT%TZ) START $cfg (watchdog ${arm_timeout}s) ===" \
+        | tee -a "$logdir/_study.log"
+    timeout --kill-after=120 "$arm_timeout" \
         python3 bench/harness/run_regime.py \
             --config "bench/regimes/configs/$cfg.json" \
             --expect-base-sha "$base_sha" \
@@ -65,7 +76,7 @@ for cfg in "${regimes[@]}"; do
         > "$logdir/$cfg.log" 2>&1
     rc=$?
     [ "$rc" -ne 0 ] && failed+=("$cfg(exit $rc)")
-    [ "$rc" -eq 124 ] && echo "  !! $cfg hit the ${ARM_TIMEOUT_S}s watchdog" \
+    [ "$rc" -eq 124 ] && echo "  !! $cfg hit its ${arm_timeout}s watchdog" \
         | tee -a "$logdir/_study.log"
     echo "=== $(date -u +%FT%TZ) END   $cfg (exit $rc) ===" \
         | tee -a "$logdir/_study.log"

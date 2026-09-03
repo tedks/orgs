@@ -2017,6 +2017,90 @@ def test_sigterm_is_turned_into_an_exception() -> None:
           "main never installs the handlers")
 
 
+def test_watchdog_ceiling_follows_the_arms_own_bounds() -> None:
+    """One fixed watchdog across arms is not neutral: an arm with more review
+    steps has a longer LEGITIMATE ceiling, so a single bound kills the
+    review-heavy arms and spares the rest — censoring the treatment under
+    study and making "more review" look like "failed arm"."""
+    r1 = rr.load_config(CONFIG_DIR / "r1-goal-native-review.json")
+    r3 = rr.load_config(CONFIG_DIR / "r3-orgs-full.json")
+    a, b = rr.worst_case_runtime_s(r1), rr.worst_case_runtime_s(r3)
+    check(b > a,
+          f"the review-heavy arm must get the longer ceiling (r1={a}, r3={b})")
+    check(a >= r1.timeouts["build_s"], "the ceiling must cover the build")
+    # Every arm's ceiling must actually cover its own worst case.
+    for path in all_configs():
+        cfg = rr.load_config(path)
+        floor = cfg.timeouts["build_s"] + cfg.timeouts["council_s"]
+        for step in rr.REVIEW_STEP_ORDER:
+            if cfg.steps[step]:
+                per = (cfg.timeouts["council_s"] if step == "council"
+                       else cfg.timeouts["review_s"])
+                floor += per * cfg.max_rounds[step]
+        check(rr.worst_case_runtime_s(cfg) >= floor,
+              f"{path.name}: the ceiling does not cover its own phases")
+    # And the driver must ask for it rather than hardcoding one.
+    driver = (HARNESS / "run_study.sh").read_text()
+    check("--print-max-runtime" in driver,
+          "the driver does not ask each arm for its own ceiling")
+    check("ARM_TIMEOUT_S" not in driver,
+          "the driver still carries a single fixed watchdog for all arms")
+
+
+def test_grade_requires_exactly_one_conformance_line() -> None:
+    """Two opposite failure modes: requiring the summary to be the FINAL line
+    fails a legitimate arm (the exam's exit trap kills the server, which may
+    log on shutdown after it), while taking the LAST of several lets a server
+    append a forged summary. Exactly one resolves both."""
+    src = (HARNESS / "run_regime.py").read_text()
+    body = src[src.index("def phase_grade"):src.index("def phase_reviews")]
+    check("len(matches) == 1" in body,
+          "the grade does not require exactly one conformance line")
+    check("and line_is_last)" not in body,
+          "the grade still requires the summary to be the final stdout line, "
+          "which fails a legitimate arm whose server logs on shutdown")
+    check("conformance_line_count" in body,
+          "the number of matching lines should be on the record")
+
+
+def test_worktree_reuses_the_preflight_sha() -> None:
+    """Resolving `master` again after the preflight checked it reopened the
+    window the study pin exists to close: a ref move between the two calls
+    passes the pin and then builds the arm from a different base."""
+    src = (HARNESS / "run_regime.py").read_text()
+    body = src[src.index("def create_worktree"):src.index("def refresh_head")]
+    check('self.pinned.get("base_sha"' in body,
+          "create_worktree does not consume the sha the preflight checked")
+    idx = body.index('"worktree", "add"')
+    check("self.base_sha" in body[:idx],
+          "the branch is not created from the recorded sha")
+
+
+def test_budget_verdict_requires_measured_tokens() -> None:
+    """A council arm's coordination is estimated at characters/4. Failing it
+    against an exact budget hands out verdicts that depend on which review
+    mechanism the arm uses — the variable under test."""
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("r3-orgs-full.json", Path(td))
+        over = run.cfg.budget_tokens + 5000
+        measured = {"input": over, "output": 0, "cache_read": 0,
+                    "cache_creation": 0, "total_tokens": over,
+                    "estimated": False, "source": "modelUsage"}
+        run.tokens = {"build": measured}
+        run.manifest(rr.utc_now())
+        check(any(f["kind"] == "exceeded" for f in run.failures),
+              "a MEASURED overspend must be a verdict")
+        run.failures.clear()
+        run.tokens = {"build": dict(measured, estimated=True,
+                                    source="estimate: characters / 4")}
+        run.manifest(rr.utc_now())
+        check(any(f["kind"] == "exceeded-by-estimate" for f in run.failures),
+              "an ESTIMATED overspend must be recorded as indicative")
+        check(not any(f["kind"] == "exceeded" for f in run.failures),
+              "an estimated overspend must NOT be a verdict — it would make "
+              "the budget outcome depend on the review mechanism under test")
+
+
 def test_preflight_refuses_a_drifted_arm() -> None:
     """Six arms are comparable only if built from the same commit against the
     same inputs. Each arm resolves `master` and re-reads the spec/exam itself,
@@ -2587,7 +2671,16 @@ def mutation_check() -> int:
                     lambda: setattr(rr, "SCRUBBABLE_MECHANISM_WORDS",
                                     orig_scrub_words)))
 
-    # (32) The schema validator stops validating.
+    orig_wc = rr.worst_case_runtime_s
+
+    def break_watchdog() -> None:
+        rr.worst_case_runtime_s = lambda cfg: 18000.0      # one bound for all
+
+    mutants.append(("the watchdog stops following the arm's own bounds",
+                    break_watchdog,
+                    lambda: setattr(rr, "worst_case_runtime_s", orig_wc)))
+
+    # (34) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:

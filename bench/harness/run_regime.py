@@ -865,6 +865,26 @@ def load_config(path: Path) -> Config:
     )
 
 
+def worst_case_runtime_s(cfg: Config) -> float:
+    """The longest this arm can legitimately take, from its own timeouts.
+
+    A single wall-clock watchdog across arms is not neutral: an arm with more
+    review steps and more rounds has a LONGER legitimate ceiling, so one fixed
+    bound kills the review-heavy arms and spares the others -- censoring
+    exactly the treatment under study and making "more review" look like
+    "failed arm". The driver asks each arm what its own ceiling is.
+    """
+    t = cfg.timeouts
+    total = t["build_s"] + t["grade_s"] * 2 + t["council_s"]   # build, 2 grades, audit
+    for step in REVIEW_STEP_ORDER:
+        if not cfg.steps[step]:
+            continue
+        rounds = cfg.max_rounds[step]
+        per = t["council_s"] if step == "council" else t["review_s"]
+        total += per * rounds + t["fix_s"] * max(0, rounds - 1)
+    return total
+
+
 def coarse_regime(toggles: dict[str, bool]) -> str:
     """Map the toggle vector onto the frozen schema's three-value `regime`.
 
@@ -2187,13 +2207,20 @@ class Run:
             self.fail("isolation", "no-base-branch",
                       f"refs/heads/master not found in {self.framework}: {err.strip()}")
             return False
-        rc, out, _ = git(["rev-parse", "refs/heads/master"], cwd=self.framework,
-                         timeout=self.cfg.timeouts["git_s"])
-        self.base_sha = out.strip() or "unknown"
-        if rc != 0 or len(self.base_sha) != 40:
-            self.fail("isolation", "base-sha-unresolved",
-                      f"could not resolve refs/heads/master to a sha: {out!r}")
-            return False
+        # Reuse the sha the PREFLIGHT already checked against the study pin.
+        # Resolving `master` a second time reopened the window the pin exists
+        # to close: a ref move between the two calls passed the preflight and
+        # then built the arm from a different base.
+        self.base_sha = self.pinned.get("base_sha", "")
+        if len(self.base_sha) != 40:
+            rc, out, _ = git(["rev-parse", "refs/heads/master"],
+                             cwd=self.framework,
+                             timeout=self.cfg.timeouts["git_s"])
+            self.base_sha = out.strip() or "unknown"
+            if rc != 0 or len(self.base_sha) != 40:
+                self.fail("isolation", "base-sha-unresolved",
+                          f"could not resolve refs/heads/master: {out!r}")
+                return False
 
         self.run_dir.mkdir(parents=True, exist_ok=True)
         if self.ctx.run_tree.exists():
@@ -3069,10 +3096,16 @@ class Run:
         # The exam emits this line last, immediately before exiting.
         matches = re.findall(r"^conformance:\s*(\d+)\s+passed,\s*(\d+)\s+failed\s*$",
                              out_text, re.MULTILINE)
-        # And it must be the LAST non-empty line of stdout. The exam emits it
-        # immediately before exiting, so a server that prints the same line at
-        # startup is followed by the exam's own -- but a server that prints it
-        # LAST would otherwise control the headline counts.
+        # EXACTLY ONE conformance line, not "the last one".
+        #
+        # Two failure modes pull in opposite directions and this resolves
+        # both. Requiring it to be the final line of stdout fails a legitimate
+        # arm: the exam's exit trap kills the backgrounded server, which may
+        # log on shutdown AFTER the summary. Taking the last of several lets a
+        # server append a forged summary that overwrites the real counts. If
+        # exactly one line exists it cannot have been forged without the real
+        # one also being present, and any second line -- whatever its origin
+        # or position -- makes the grade untrustworthy rather than guessed at.
         tail_lines = [ln for ln in out_text.splitlines() if ln.strip()]
         line_is_last = bool(tail_lines) and bool(
             re.fullmatch(r"conformance:\s*\d+\s+passed,\s*\d+\s+failed\s*",
@@ -3094,14 +3127,15 @@ class Run:
             consistent = ((proc.returncode == 0 and failed == 0)
                           or (proc.returncode == 1 and failed > 0))
             result["conformance_line_is_last"] = line_is_last
+            result["conformance_line_count"] = len(matches)
             result["trustworthy"] = (proc.returncode in (0, 1)
                                      and not proc.timed_out and consistent
-                                     and line_is_last)
-            if not line_is_last:
-                self.fail(f"grade:{tag}", "exam-line-not-final",
-                          "the conformance line is not the last line of the "
-                          "exam's stdout, so it may have come from the server "
-                          "rather than the exam")
+                                     and len(matches) == 1)
+            if len(matches) != 1:
+                self.fail(f"grade:{tag}", "exam-line-ambiguous",
+                          f"{len(matches)} conformance lines were printed; the "
+                          "server may be emitting one, so the counts are "
+                          "recorded but not trusted")
             result["line_count"] = len(matches)
             if not result["trustworthy"]:
                 self.fail(f"grade:{tag}", "exam-result-inconsistent",
@@ -3109,10 +3143,7 @@ class Run:
                           f"{failed} failed) does not agree with the exam's exit "
                           f"status {proc.returncode}; the counts are recorded "
                           "but marked untrustworthy")
-            if len(matches) > 1:
-                self.fail(f"grade:{tag}", "exam-line-duplicated",
-                          f"{len(matches)} conformance lines were printed; the "
-                          "last was used, but the server may be emitting one")
+
         else:
             # Exit 2 means the exam could not run (no redis-cli, server never
             # came up). Record that honestly rather than scoring it 0/0 pass.
@@ -3509,14 +3540,29 @@ class Run:
         esc_count = esc.get("critical_important") if esc.get("complete") else None
 
         spent = coordination["total_tokens"] + product["total_tokens"]
-        if self.cfg.budget_tokens and spent > int(self.cfg.budget_tokens):
+        # Only a MEASURED total can fail a budget. A council arm's coordination
+        # is estimated at characters/4, so failing it against an exact number
+        # would hand out budget verdicts that depend on which review mechanism
+        # the arm uses -- the variable under test.
+        spend_is_measured = not (coordination.get("estimated")
+                                 or product.get("estimated")
+                                 or _is_incomplete(coordination)
+                                 or _is_incomplete(product))
+        if (self.cfg.budget_tokens and spent > int(self.cfg.budget_tokens)
+                and spend_is_measured):
             # Recorded as a failure, not just a number. A `claude -p` run
             # cannot be stopped mid-flight, so the budget is an accounting
             # bound rather than a gate -- but an arm that blew through it is
             # not silently comparable with one that stayed inside it.
             self.fail("budget", "exceeded",
-                      f"{spent} tokens spent against a budget of "
+                      f"{spent} measured tokens spent against a budget of "
                       f"{self.cfg.budget_tokens}")
+        elif (self.cfg.budget_tokens and spent > int(self.cfg.budget_tokens)):
+            self.fail("budget", "exceeded-by-estimate",
+                      f"{spent} tokens against a budget of "
+                      f"{self.cfg.budget_tokens}, but the total contains "
+                      "estimated or incomplete figures — indicative only, not "
+                      "a verdict")
         man: dict[str, Any] = {
             "run_id": self.run_id,
             "started_at": iso(self.started),
@@ -4332,6 +4378,12 @@ def build_parser() -> argparse.ArgumentParser:
                         "hash to these values (JSON object, or @path to a "
                         "file of one). Emitted in every manifest under "
                         "harness.input_hashes.")
+    p.add_argument("--print-max-runtime", action="store_true",
+                   help="print this arm's worst-case runtime in seconds, from "
+                        "its own configured timeouts, and exit. The study "
+                        "driver uses it to size a PER-ARM watchdog: one fixed "
+                        "bound across arms would kill the review-heavy ones "
+                        "and spare the rest, censoring the treatment.")
     p.add_argument("--dry-run", action="store_true",
                    help="compose every prompt, check the toggle conformance, "
                         "print the plan — and launch nothing")
@@ -4367,6 +4419,9 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return 2
+    if args.print_max_runtime:
+        print(int(worst_case_runtime_s(cfg)))
+        return 0
     try:
         if args.dry_run:
             return dry_run(cfg, args)
