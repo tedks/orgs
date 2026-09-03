@@ -1435,12 +1435,18 @@ def compose_fix_prompt(cfg: Config, ctx: Ctx, mat: "Materials") -> str:
 class Materials:
     """The run-dependent text a review prompt needs. Filled with clearly
     labelled placeholders under --dry-run so composition can be validated
-    before a single token is spent."""
+    before a single token is spent.
+
+    `tree` is the clean detached checkout of `review_sha` -- where the
+    reviewers stand and where the inlined source was read from. None when the
+    checkout could not be made.
+    """
     diff: str = ""
     server_code: str = ""
     review_sha: str = ""
     findings_json: str = "[]"
     findings_prose: str = ""
+    tree: Path | None = None
 
 
 DRY_MATERIALS = Materials(
@@ -2186,54 +2192,79 @@ class Run:
         elif truncated:
             diff += (f"\n\n[... diff truncated at {DIFF_CAP} characters; the "
                      f"full patch is at {out.name} ...]\n")
-        code = self.collect_server_code(sha)
-        return Materials(diff=diff, server_code=code, review_sha=sha)
+        tree = self.frozen_checkout(sha)
+        code = self.collect_server_code(tree)
+        return Materials(diff=diff, server_code=code, review_sha=sha,
+                         tree=tree)
 
-    def collect_server_code(self, sha: str) -> str:
+    def collect_server_code(self, tree: Path | None) -> str:
         """Every Python file beside the server, inlined with headers.
 
+        Read from `tree`: the clean detached checkout of the frozen revision
+        that the reviewers stand in. That checkout is what makes this both
+        correct and simple --
+
+          * it IS the revision, so the inlined source cannot drift from the
+            sha the seats are told they are reviewing;
+          * it is freshly checked out and cleaned, so a venv, a build
+            artefact or an agent's scratch file cannot eat the inlining
+            budget and push the real server out of the prompt;
+          * it is ordinary files, so a symlinked server reads the way
+            `python3` will read it when the exam runs, and a stat-before-read
+            bounds an oversized file with no subprocess, no temp file and no
+            path-length limit in the way.
+
+        An earlier version did this with `git ls-tree` plus a `git show` per
+        file. It was correct about the revision and wrong about almost
+        everything else; this is the same idea with the plumbing removed.
+
         Inlined rather than referenced because a foreign council seat may not
-        be able to read the filesystem at all (A3's sibling problem) -- and
-        because a review of a named revision should not depend on what the
-        working tree happens to hold when the seat gets around to looking.
+        be able to read a filesystem at all.
         """
-        srcdir = str(Path(self.cfg.server_path).parent) or "."
-        # From the REVISION, not the working tree. Reading the directory
-        # picked up whatever happened to be sitting there -- a venv, a build
-        # artefact, an agent's scratch file -- none of which is in the frozen
-        # sha, and any of which could exhaust the inlining budget and push the
-        # actual server out of the reviewer's prompt.
-        rc, listing, err = git(["ls-tree", "-r", "--name-only", sha, "--", srcdir],
-                               cwd=self.ctx.run_tree,
-                               timeout=self.cfg.timeouts["git_s"])
-        if rc != 0:
-            self.fail("materials", "ls-tree-failed", err.strip() or f"rc={rc}")
-            return f"(could not list {srcdir} at {sha})"
-        paths = [ln.strip() for ln in listing.splitlines()
-                 if ln.strip().endswith(".py") and "__pycache__" not in ln]
-        if not paths:
-            return (f"(no server was produced at {self.cfg.server_path} in "
-                    f"{sha} -- there is nothing to review)")
-        # Entry point first; a reviewer reads it as the way in.
-        paths.sort(key=lambda x: (x != self.cfg.server_path, x))
+        if tree is None:
+            return ("(the frozen revision could not be checked out, so no "
+                    "source is inlined; review the diff above)")
+        server = tree / self.cfg.server_path
+        srcdir = server.parent
+        if not server.is_file():
+            # Named specifically. Helpers can survive while the entry point
+            # does not, and "there are some .py files here" is not the same
+            # claim as "the server exists".
+            if srcdir.is_dir() and any(srcdir.rglob("*.py")):
+                return (f"(NO SERVER at {self.cfg.server_path} in "
+                        f"{self.head_sha[:12]}, although other Python files "
+                        "exist beside it -- the entry point the exam runs is "
+                        "missing)")
+            return (f"(no server was produced at {self.cfg.server_path} -- "
+                    "there is nothing to review)")
+        files = sorted(p for p in srcdir.rglob("*.py")
+                       if "__pycache__" not in p.parts)
+        files.sort(key=lambda p: (p != server, str(p)))   # entry point first
         chunks: list[str] = []
         used = 0
-        for rel in paths:
-            out = self.path("logs", "src", f"{rel.replace('/', '_')}.{sha[:8]}")
-            rc, body, truncated = git_to_file(
-                ["show", f"{sha}:{rel}"], cwd=self.ctx.run_tree,
-                timeout=self.cfg.timeouts["git_s"], out=out,
-                cap=max(0, CODE_CAP - used))
-            if rc != 0:
-                chunks.append(f"### `{rel}`\n\n(unreadable at {sha})\n")
+        for f in files:
+            rel = f.relative_to(tree)
+            # stat BEFORE read: the file is agent-controlled, and reading a
+            # committed multi-gigabyte .py only to discard it for exceeding
+            # the cap would exhaust memory before the cap applied.
+            try:
+                size = f.stat().st_size
+            except OSError as exc:
+                chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
                 continue
-            if truncated or not body:
-                chunks.append(f"### `{rel}`\n\n[omitted or truncated: the "
-                              f"{CODE_CAP}-character inlining budget is "
-                              "exhausted]\n")
-                if not body:
-                    continue
+            if used + size > CODE_CAP:
+                chunks.append(f"### `{rel}`\n\n[omitted: {size} bytes; the "
+                              f"{CODE_CAP}-character inlining budget "
+                              "does not cover it]\n")
+                continue
+            try:
+                body = f.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                chunks.append(f"### `{rel}`\n\n(unreadable: {exc})\n")
+                continue
             used += len(body)
+            # An EMPTY file inlines as an empty block. Reporting it as
+            # "budget exhausted" would be a lie about a real, if boring, file.
             chunks.append(f"### `{rel}`\n\n```python\n{body}\n```\n")
         return "\n".join(chunks)
 
@@ -2266,7 +2297,7 @@ class Run:
                           fnd.error or "unknown")
         return union, filled, empty
 
-    def review_worktree(self, sha: str) -> Path:
+    def frozen_checkout(self, sha: str) -> Path | None:
         """A throwaway detached worktree at the reviewed revision.
 
         Reviewers run headless with --dangerously-skip-permissions. Pointing
@@ -2281,9 +2312,13 @@ class Run:
         exactly the named revision, and anything it writes lands in a
         directory the run throws away.
 
-        Falls back to the run tree if the worktree cannot be made -- a review
-        in the product tree is worse than no review, but losing the whole run
-        to a failed checkout is worse still, and the fallback is recorded.
+        It is also where the inlined source is read from, so the sha the
+        seats are told they are reviewing and the bytes they are shown cannot
+        disagree.
+
+        Returns None if the checkout cannot be made. The caller degrades to
+        the diff alone and records it -- never to the product tree, which is
+        the leak this exists to close.
         """
         wt = self.run_dir / "review-tree"
         if self.review_tree is None:
@@ -2295,11 +2330,10 @@ class Run:
                 # permissions skipped, able to edit the artefact it is
                 # judging. An empty scratch dir is the safe fallback -- the
                 # diff and the source are inlined in the prompt anyway.
-                self.fail("review", "review-worktree-failed",
-                          f"{err.strip() or rc}; the reviewer will run in an "
-                          "empty scratch directory and review only the inlined "
-                          "diff and source")
-                return self.seat_scratch("review-fallback")
+                self.fail("review", "frozen-checkout-failed",
+                          f"{err.strip() or rc}; the reviewers will get the "
+                          "diff alone and no inlined source")
+                return None
             self.review_tree = wt
         else:
             # Re-point it at this round's revision and discard whatever a
@@ -2309,10 +2343,11 @@ class Run:
             rc2, _o2, _e2 = git(["clean", "-qfdx"], cwd=wt,
                                 timeout=self.cfg.timeouts["git_s"])
             if rc != 0 or rc2 != 0:
-                self.fail("review", "review-worktree-reset-failed",
+                self.fail("review", "frozen-checkout-reset-failed",
                           (err.strip() or f"checkout rc={rc} clean rc={rc2}")
-                          + "; falling back to an empty scratch directory")
-                return self.seat_scratch("review-fallback")
+                          + "; the reviewers will get the diff alone")
+                self.review_tree = None
+                return None
         return wt
 
     def seat_scratch(self, name: str) -> Path:
@@ -2327,12 +2362,22 @@ class Run:
         inlined in the prompt precisely so they need no filesystem.
         """
         d = self.run_dir / "seat-scratch" / name
-        if d.exists():
-            # Emptied on every handout. Reusing it let one seat's leftovers
-            # contaminate a later, supposedly fresh one -- which for the
-            # review fallback means a reviewer finding the previous
-            # reviewer's files in its "empty" directory.
-            shutil.rmtree(d, ignore_errors=True)
+        if d.exists() or d.is_symlink():
+            # Emptied on every handout: reusing it let one seat's leftovers
+            # contaminate a later, supposedly fresh one. NOT ignore_errors --
+            # an undeletable leftover, or a path replaced by a symlink, is
+            # exactly the contamination this is here to prevent, so it is
+            # reported and worked around rather than silently tolerated.
+            try:
+                if d.is_symlink() or not d.is_dir():
+                    d.unlink()
+                else:
+                    shutil.rmtree(d)
+            except OSError as exc:
+                self.fail("seat", "scratch-not-clean",
+                          f"could not empty {d}: {exc}; using a fresh path so "
+                          "the seat does not inherit leftovers")
+                d = d.with_name(f"{name}-{int(time.time()*1000)}")
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -2700,6 +2745,8 @@ class Run:
         if not stanzas and not noisy:
             return
         if not self.cfg.toggles["standup"]:
+            # No bus, so nothing can be pushed to the lead. The prompt tells
+            # it to run the check itself in that case.
             self.crystal_stats["undelivered"] += 1
             return
         # Say a thing once. The loop runs every few minutes for the whole
@@ -2710,10 +2757,6 @@ class Run:
         signature = (tuple(stanzas), tuple(noisy))
         if signature == self._last_crystal_signature:
             self.crystal_stats["suppressed_repeats"] += 1
-            return
-        self._last_crystal_signature = signature
-        if not self.cfg.toggles["standup"]:
-            self.crystal_stats["undelivered"] += 1
             return
         if stanzas:
             body = ("Standup — Crystal speculative merge check #%d found a "
@@ -2740,13 +2783,19 @@ class Run:
                         stderr_path=self.path("logs", "crystal-delivery.err.txt"),
                         env=env)
         if r.ok:
+            # Recorded only on SUCCESS. Marking the signature seen before the
+            # delivery landed meant one transient failure suppressed every
+            # later report of the same conflict as a duplicate -- turning
+            # "observed but could not act" from a per-check hiccup into a
+            # permanent silence.
+            self._last_crystal_signature = signature
             self.crystal_stats["delivered"] += 1
         else:
             self.crystal_stats["undelivered"] += 1
             self.fail("crystal", "delivery-failed",
                       f"a conflict report could not be delivered to the lead "
-                      f"(rc={r.returncode}); the mechanism observed but could "
-                      "not act")
+                      f"(rc={r.returncode}); it will be retried on the next "
+                      "check that still finds it")
 
     def phase_grade(self, tag: str) -> dict:
         """Run the frozen exam, from the pristine copy, under nix."""
@@ -2865,10 +2914,11 @@ class Run:
         tok = []
         for rnd in range(1, self.cfg.max_rounds[step] + 1):
             mat = self.collect_materials(f"{step}-round{rnd}")
-            review_cwd = self.review_worktree(mat.review_sha)
+            review_cwd = mat.tree or self.seat_scratch(
+                f"review-fallback-{step}-round{rnd}")
             prompt = compose_review_prompt(
                 self.cfg, self.ctx, step, mat, review_cwd=review_cwd,
-                have_no_tree=review_cwd != self.review_tree)
+                have_no_tree=mat.tree is None)
             name = f"review-{step}-round{rnd}"
             proc, res = self.claude(name, prompt, model=model,
                                     timeout=self.cfg.timeouts["review_s"],
@@ -3049,14 +3099,18 @@ class Run:
         construction, the counts are comparable across arms.
         """
         t0 = time.time()
-        server = self.ctx.run_tree / self.cfg.server_path
-        if not server.is_file():
-            # Without this guard the seats are handed the string "(no server
-            # was produced ...)", both correctly answer [], and the arm that
-            # built NOTHING records zero escaped defects -- the best possible
-            # score on the study's robustness metric. Null, and say why.
-            reason = (f"no server at {self.cfg.server_path}; there is nothing "
-                      "to audit, so escaped_defects is null rather than zero")
+        mat = self.collect_materials("audit")
+        # Guard on what the SEATS are shown, not on the working tree. The
+        # material now comes from the frozen checkout, so a freeze that did
+        # not land would let a working-tree check pass while the seats were
+        # handed the "(no server was produced ...)" placeholder -- both
+        # correctly answer [], and the arm that built nothing banks zero
+        # escaped defects: the best possible score on the headline
+        # robustness metric.
+        if mat.tree is None or not (mat.tree / self.cfg.server_path).is_file():
+            reason = (f"no server at {self.cfg.server_path} in the audited "
+                      f"revision {mat.review_sha[:12]}; there is nothing to "
+                      "audit, so escaped_defects is null rather than zero")
             self.escaped = {"ran": False, "reason": reason, "parse_ok": False,
                             "complete": False, "counts": None,
                             "critical_important": None, "seats": {},
@@ -3065,7 +3119,6 @@ class Run:
             self.fail("audit", "no-server", reason)
             self.phases["audit"] = time.time() - t0
             return
-        mat = self.collect_materials("audit")
         prompt = compose_audit_prompt(self.cfg, self.ctx, mat)
         results: dict[str, tuple[Proc, str | None]] = {}
         threads = []

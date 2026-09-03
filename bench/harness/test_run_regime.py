@@ -1473,18 +1473,52 @@ def test_crystal_health_guard_is_reachable() -> None:
           "making 'checks == 0 and attempts > 0' unreachable")
 
 
-def test_server_code_comes_from_the_frozen_revision() -> None:
-    """Reading the directory picked up whatever happened to be sitting there
-    — a venv, a build artefact — none of which is in the frozen sha, and any
-    of which could exhaust the budget and push the real server out of the
-    reviewer's prompt."""
+def test_server_code_comes_from_the_frozen_checkout() -> None:
+    """The inlined source must come from the clean detached checkout of the
+    reviewed sha, never from the live product tree: the product tree can hold
+    a venv or a build artefact that is in no revision, in nobody's diff, and
+    that could eat the inlining budget and push the real server out of the
+    reviewer's and the auditor's prompt."""
     src = (HARNESS / "run_regime.py").read_text()
-    body = src[src.index("def collect_server_code"):src.index("def review_worktree")]
-    check("ls-tree" in body and "git show" in body.replace('"show"', "git show"),
-          "collect_server_code no longer reads from the revision")
-    check(".rglob(" not in body,
-          "collect_server_code still walks the working directory")
-    check("sha" in body.split("\n")[0], "it should take the sha it reads at")
+    body = src[src.index("def collect_server_code"):src.index("def _tally_seats")]
+    check("tree: Path | None" in body.split("\n")[0],
+          "collect_server_code should read from a checkout it is handed")
+    check("self.ctx.run_tree" not in body,
+          "collect_server_code still reaches into the live product tree")
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        run = _fake_run("r3-orgs-full.json", tmp / "runs")
+        # No checkout at all -> say so, do not silently inline nothing.
+        out = run.collect_server_code(None)
+        check("could not be checked out" in out,
+              f"a missing checkout must be stated: {out[:80]}")
+
+        tree = tmp / "tree"
+        srcdir = tree / Path(run.cfg.server_path).parent
+        srcdir.mkdir(parents=True)
+        # An entry point, a sibling, and an EMPTY module.
+        (tree / run.cfg.server_path).write_text("import codec\nPORT = 1\n")
+        (srcdir / "codec.py").write_text("FRAMES = []\n")
+        (srcdir / "__init__.py").write_text("")
+        (srcdir / "__pycache__").mkdir()
+        (srcdir / "__pycache__" / "junk.py").write_text("x = 1")
+        out = run.collect_server_code(tree)
+        check("import codec" in out, "the entry point was not inlined")
+        check("FRAMES = []" in out, "a sibling module was not inlined")
+        check("junk" not in out, "__pycache__ was inlined")
+        check(out.index("server.py") < out.index("codec.py"),
+              "the entry point should be inlined first")
+        # An empty file is empty, not "budget exhausted".
+        check("budget" not in out,
+              f"an empty module was reported as a budget problem: {out}")
+        check("__init__.py" in out, "the empty module was dropped entirely")
+
+        # The entry point missing while helpers survive is its own statement.
+        (tree / run.cfg.server_path).unlink()
+        out = run.collect_server_code(tree)
+        check("NO SERVER" in out,
+              f"a missing entry point beside surviving helpers: {out[:120]}")
 
 
 def test_seat_scratch_is_emptied_between_uses() -> None:
@@ -1496,6 +1530,34 @@ def test_seat_scratch_is_emptied_between_uses() -> None:
         check_eq(again, d, "the same name should give the same path")
         check(not (again / "leftover.py").exists(),
               "a reused scratch dir still holds the previous seat's files")
+
+
+def test_crystal_signature_is_recorded_only_on_success() -> None:
+    """Marking a conflict "already said" before the delivery landed meant one
+    transient failure suppressed every later report of it as a duplicate —
+    turning a per-check hiccup into permanent silence."""
+    src = (HARNESS / "run_regime.py").read_text()
+    body = src[src.index("def _deliver_crystal"):src.index("def phase_grade")]
+    assign = body.index("self._last_crystal_signature = signature")
+    dispatch = body.index("run_capture(")
+    check(assign > dispatch,
+          "the signature is still recorded before the delivery is attempted")
+    check(body.count('if not self.cfg.toggles["standup"]') == 1,
+          "the standup guard is duplicated; one copy is unreachable")
+
+
+def test_audit_guard_tests_what_the_seats_are_shown() -> None:
+    """The material comes from the frozen checkout, so guarding on the
+    working tree would let a freeze that did not land hand the seats the
+    "(no server)" placeholder — both answer [], and the arm that built
+    nothing banks the best possible robustness score."""
+    src = (HARNESS / "run_regime.py").read_text()
+    body = src[src.index("def phase_audit"):src.index("def manifest")]
+    guard = body[:body.index("prompt = compose_audit_prompt")]
+    check("mat.tree" in guard,
+          "the audit guard does not test the checkout the seats are shown")
+    check("self.ctx.run_tree / self.cfg.server_path" not in guard,
+          "the audit guard still tests the live working tree")
 
 
 # ---------------------------------------------------------------------------
@@ -1782,7 +1844,23 @@ def mutation_check() -> int:
                     break_missing,
                     lambda: setattr(rr, "_models_missing", orig_missing)))
 
-    # (20) The schema validator stops validating.
+    # (20) The crystal delivery marks a conflict "said" before it lands, so
+    # one transient failure silences it permanently.
+    src_now = (HARNESS / "run_regime.py").read_text()
+
+    # (21) The audit's no-server guard goes back to testing the working tree
+    # rather than what the seats are actually shown.
+    orig_audit_guard = rr.Run.collect_server_code
+
+    def break_audit_guard() -> None:
+        rr.Run.collect_server_code = lambda self, tree: "(no server was produced)"
+
+    mutants.append(("the inlined source claims no server while the guard passes",
+                    break_audit_guard,
+                    lambda: setattr(rr.Run, "collect_server_code",
+                                    orig_audit_guard)))
+
+    # (22) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:
