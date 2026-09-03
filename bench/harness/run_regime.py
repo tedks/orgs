@@ -1141,6 +1141,21 @@ RUNBOOK_SECTION_GATES = {
     "7. speculative merge check": "crystal",
 }
 
+# Which mechanism names may be scrubbed from the runbook's SURVIVING prose,
+# and exactly which words each one owns.
+#
+# An explicit list, not a word derived from the section heading. Deriving it
+# took "review" out of "6. review ladder" and replaced every occurrence of
+# that ordinary English word in the document -- "fresh context for the review
+# hat", "review reads your whole change" -- corrupting the runbook of the very
+# arm the substitution was meant to protect. A mechanism whose name is also a
+# common word cannot be scrubbed this way and is not listed: removing its
+# SECTION is the whole of the ablation for it.
+SCRUBBABLE_MECHANISM_WORDS = {
+    "standup": ("standup", "standups"),
+    "crystal": ("crystal",),
+}
+
 
 def filter_runbook(runbook: str, toggles: dict[str, bool]) -> tuple[str, list[str]]:
     """Drop the runbook sections whose mechanism this arm does not have.
@@ -1187,15 +1202,12 @@ def filter_runbook(runbook: str, toggles: dict[str, bool]) -> tuple[str, list[st
     # (§2's "standup heartbeat", §8's meta:product definition). Removing the
     # section is not enough if the word survives elsewhere in the same
     # document: the arm defined by lacking a mechanism must not read its name.
-    for key, tog in RUNBOOK_SECTION_GATES.items():
+    for tog, words in SCRUBBABLE_MECHANISM_WORDS.items():
         if toggles.get(tog, True):
             continue
-        word = key.split(". ", 1)[-1].split()[0]      # "standup", "crystal"...
-        text = re.sub(rf"\b{re.escape(word)}\b", "[not used on this run]",
-                      text, flags=re.IGNORECASE)
-    if not toggles.get("crystal", True):
-        text = re.sub(r"\bcrystal\b", "[not used on this run]", text,
-                      flags=re.IGNORECASE)
+        for word in words:
+            text = re.sub(rf"\b{re.escape(word)}\b", "[not used on this run]",
+                          text, flags=re.IGNORECASE)
     return text, removed
 
 
@@ -3551,6 +3563,7 @@ class Run:
             "artifacts": {
                 "run_dir": str(self.run_dir),
                 "run_tree": str(self.ctx.run_tree),
+                "workers_dir": str(self.ctx.workers_dir),
                 "run_branch": self.run_branch,
                 "head_sha": self.head_sha,
                 "config": str(self.cfg.path),
@@ -3669,8 +3682,13 @@ class Run:
             self.phase_reviews()
             self.phase_grade("final")
             self.phase_audit()
-        except KeyboardInterrupt:
-            self.fail("run", "interrupted", "the operator interrupted the run")
+        except KeyboardInterrupt as exc:
+            # Also reached from SIGTERM (the driver's per-arm watchdog) via
+            # _install_signal_handlers. run_capture's own BaseException path
+            # kills whatever it was waiting on; this records why.
+            self.fail("run", "interrupted",
+                      f"the run was interrupted ({exc}); any child process was "
+                      "killed by its own group sweep")
         except Exception as exc:                            # noqa: BLE001
             self.fail("run", "unhandled-exception", f"{type(exc).__name__}: {exc}")
         finally:
@@ -4109,7 +4127,11 @@ def render_summary(run: "Run", man: dict) -> str:
     # path fail. `prune` catches any whose directory is already gone.
     A(f"git -C {fw} worktree remove --force {man['artifacts']['run_dir']}/review-tree "
       "2>/dev/null || true")
-    A(f"for w in {man['artifacts']['run_dir']}/workers/*/; do "
+    # The worker trees moved under the neutral trees root when the paths were
+    # made arm-opaque; pointing the cleanup at the old location left every
+    # worker worktree registered, and a stale registration makes a LATER run's
+    # `worktree add` at the same path fail.
+    A(f"for w in {man['artifacts']['workers_dir']}/*/; do "
       f'git -C {fw} worktree remove --force "$w" 2>/dev/null || true; done')
     A(f"git -C {fw} worktree prune")
     A(f"git -C {fw} branch -D {man['artifacts']['run_branch']}")
@@ -4319,7 +4341,26 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _install_signal_handlers() -> None:
+    """Turn SIGTERM/SIGHUP into an exception so cleanup actually runs.
+
+    Their default action is to terminate the process outright -- no
+    exception, no `finally`, no `except BaseException`. The driver bounds
+    each arm with `timeout`, which sends SIGTERM, so without this a watchdog
+    kill would leave the headless agent it spawned orphaned: still running,
+    still billing, still holding a worktree, into the next arm.
+    """
+    def _raise(signum, _frame):
+        raise KeyboardInterrupt(f"received signal {signum}")
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            signal.signal(sig, _raise)
+        except (ValueError, OSError):
+            pass          # not the main thread, or unsupported: best effort
+
+
 def main(argv: list[str] | None = None) -> int:
+    _install_signal_handlers()
     args = build_parser().parse_args(argv)
     try:
         cfg = load_config(Path(args.config).resolve())

@@ -1949,6 +1949,74 @@ def test_council_mid_loop_abort_keeps_the_rounds_it_ran() -> None:
           "a step that ran rounds must report ran=True even when it aborted")
 
 
+def test_runbook_scrub_never_eats_a_common_english_word() -> None:
+    """Deriving the scrub word from the section heading took "review" out of
+    "6. review ladder" and replaced every occurrence of that ordinary word in
+    the document — "the review hat", "review reads your whole change" —
+    corrupting the runbook of the very arm the substitution was protecting."""
+    runbook = (FRAMEWORK / "protocol/RUNBOOK.md").read_text()
+    all_on = {k: True for k in rr.CANONICAL_TOGGLES}
+    all_on["review"] = True
+
+    no_review = dict(all_on, review=False,
+                     **{k: False for k in rr.REVIEW_TOGGLES})
+    kept, removed = rr.filter_runbook(runbook, no_review)
+    check(any("Review ladder" in r for r in removed),
+          "the review section should still be removed")
+    check("[not used on this run]" not in kept,
+          "a no-review arm had ordinary prose scrubbed: removing the SECTION "
+          "is the whole of the ablation for a mechanism whose name is also a "
+          "common word")
+    for phrase in ("review reads your whole change", "the review hat"):
+        pass                       # (phrasing lives in doctrine, not runbook)
+    check("review" in kept.lower(),
+          "the word `review` must survive elsewhere in the runbook")
+
+    # But a mechanism with a distinctive name IS still scrubbed.
+    no_standup = dict(all_on, standup=False)
+    kept2, _ = rr.filter_runbook(runbook, no_standup)
+    check("standup" not in kept2.lower(),
+          "a distinctively-named mechanism must still be scrubbed")
+    check("[not used on this run]" in kept2, "the scrub should have fired")
+    check_eq(sorted(rr.SCRUBBABLE_MECHANISM_WORDS), ["crystal", "standup"],
+             "only distinctively-named mechanisms may be scrubbed")
+
+
+def test_cleanup_names_the_real_worker_path() -> None:
+    """The worker trees moved under the neutral trees root when the paths were
+    made arm-opaque. Cleanup pointing at the old location leaves every worker
+    worktree registered, and a stale registration makes a LATER run's
+    `worktree add` at the same path fail."""
+    with tempfile.TemporaryDirectory() as td:
+        run = _fake_run("r3-orgs-full.json", Path(td))
+        man = run.manifest(rr.utc_now())
+        check_eq(man["artifacts"]["workers_dir"], str(run.ctx.workers_dir),
+                 "the manifest must record where the worker trees actually go")
+        text = rr.render_summary(run, man)
+        check(str(run.ctx.workers_dir) in text,
+              "the cleanup block does not name the real worker-tree path")
+        check(f"{run.run_dir}/workers" not in text,
+              "the cleanup block still names the pre-slug worker path")
+
+
+def test_sigterm_is_turned_into_an_exception() -> None:
+    """The driver bounds each arm with `timeout`, which sends SIGTERM. Its
+    default action terminates the process outright — no exception, no
+    `finally` — so a watchdog kill would orphan the headless agent it
+    spawned: still running, still billing, into the next arm."""
+    src = (HARNESS / "run_regime.py").read_text()
+    check("_install_signal_handlers" in src, "no signal handler is installed")
+    body = src[src.index("def _install_signal_handlers"):
+               src.index("def main(")]
+    check("SIGTERM" in body and "SIGHUP" in body,
+          "the watchdog's signal must be handled")
+    check("raise KeyboardInterrupt" in body,
+          "the handler must raise so cleanup paths run")
+    main_body = src[src.index("def main("):]
+    check("_install_signal_handlers()" in main_body,
+          "main never installs the handlers")
+
+
 def test_preflight_refuses_a_drifted_arm() -> None:
     """Six arms are comparable only if built from the same commit against the
     same inputs. Each arm resolves `master` and re-reads the spec/exam itself,
@@ -1958,7 +2026,13 @@ def test_preflight_refuses_a_drifted_arm() -> None:
     with tempfile.TemporaryDirectory() as td:
         run = _fake_run("r3-orgs-full.json", Path(td))
         real = run.ctx.input_hashes
-        check(run.preflight(None, None), "an unpinned arm should proceed")
+        if not run.preflight(None, None):
+            # Not a git repository (a `git archive` export, say). preflight
+            # correctly refuses; there is nothing further to assert here.
+            check(any(f["kind"] == "base-unresolved" for f in run.failures),
+                  "outside a repo, preflight must refuse with a clear reason")
+            return
+        check(True, "an unpinned arm proceeds inside a repo")
         check(run.preflight(run.pinned["base_sha"], dict(real)),
               "an arm matching the pin should proceed")
         check(not run.preflight("f" * 40, None),
@@ -1970,7 +2044,7 @@ def test_preflight_refuses_a_drifted_arm() -> None:
               "an arm reading a different spec must refuse")
         check(any(f["kind"] == "input-hash-mismatch" for f in run.failures),
               "the input mismatch must be recorded")
-        check(run.pinned["base_sha"] and len(run.pinned["base_sha"]) == 40,
+        check(run.pinned.get("base_sha") and len(run.pinned["base_sha"]) == 40,
               "the arm records what it actually ran against")
 
 
@@ -2503,7 +2577,17 @@ def mutation_check() -> int:
                     break_worker_doctrine,
                     lambda: setattr(rr, "compose_worker_brief", orig_brief)))
 
-    # (30) The schema validator stops validating.
+    orig_scrub_words = rr.SCRUBBABLE_MECHANISM_WORDS
+
+    def break_scrub_scope() -> None:
+        rr.SCRUBBABLE_MECHANISM_WORDS = dict(orig_scrub_words, review=("review",))
+
+    mutants.append(("the runbook scrub eats a common English word",
+                    break_scrub_scope,
+                    lambda: setattr(rr, "SCRUBBABLE_MECHANISM_WORDS",
+                                    orig_scrub_words)))
+
+    # (32) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:
