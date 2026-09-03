@@ -1,0 +1,29 @@
+{
+  "target": "resp",
+  "grader": "bench/conformance/resp_conformance.sh",
+  "models": {
+    "cto": "sonnet",
+    "lead": "sonnet",
+    "worker": "haiku",
+    "implementer": "sonnet",
+    "review_tier": "sonnet"
+  },
+  "budget_tokens": 1000000,
+  "timeout_minutes": 90,
+  "standup_interval_min": 5,
+  "crystal_interval_min": 5,
+  "max_review_rounds": 2,
+  "regime": "r5-orgs-no-crystal-no-standup",
+  "toggles": {
+    "decomposition": true,
+    "parallel": true,
+    "standup": false,
+    "crystal": false,
+    "review_native": false,
+    "council": true,
+    "review_lead": true,
+    "review_cto": true,
+    "firewall": true,
+    "tiering": true
+  }
+}
