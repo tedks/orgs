@@ -1671,6 +1671,61 @@ def test_crystal_undelivered_is_counted_once_per_finding() -> None:
                  "nothing can be delivered with no bus")
 
 
+def test_a_blind_review_round_is_not_a_complete_one() -> None:
+    """When the frozen checkout fails, the reviewer stands in an empty
+    scratch directory, its prompt tells it not to go looking for files, and
+    its source section is a single "could not be checked out" note: it
+    reviewed the diff and nothing else.
+
+    Recording that as a complete round put a diff-only review into
+    `first_round`, the designated cross-arm comparable figure, as a clean
+    look at the build. All three council seats found this independently.
+    """
+    with_tree = {"round": 1, "parse_ok": True, "partial": False,
+                 "counts": {"critical": 0, "important": 0, "minor": 0,
+                            "unknown": 0, "total": 0}}
+    blind = dict(with_tree, partial=True)
+    check(_sum_rounds_complete(with_tree),
+          "a reviewer that had the checkout saw the build")
+    check(not _sum_rounds_complete(blind),
+          "a reviewer with no checkout and no inlined source reviewed the "
+          "diff alone; that is not a complete look at the build")
+
+    # And the production flag itself: partial follows the checkout, not the
+    # inlining, because a reviewer WITH a checkout can read what the prompt
+    # truncated.
+    src = (HARNESS / "run_regime.py").read_text()
+    body = src[src.index("def _claude_review_step"):src.index("def _council_step")]
+    check('"partial": mat.tree is None' in body,
+          "a claude review round's partial flag must follow whether it had a "
+          "checkout, not whether the inlining was complete")
+    check('"partial": False,' not in body,
+          "the round is still unconditionally marked complete")
+
+
+def _sum_rounds_complete(round_rec: dict) -> bool:
+    """first_round.complete for a one-round step."""
+    return bool(rr._sum_rounds([round_rec])["first_round"]["complete"])
+
+
+def test_first_round_complete_requires_a_non_partial_round() -> None:
+    """`parse_ok` alone is not completeness: a round can parse and still have
+    reviewed only part of the code. Reverting the `and not partial` half of
+    that check left the whole suite green, so it had no coverage at all."""
+    parsed_full = {"round": 1, "parse_ok": True, "partial": False,
+                   "counts": {"critical": 1, "important": 0, "minor": 0,
+                              "unknown": 0, "total": 1}}
+    parsed_partial = dict(parsed_full, partial=True)
+    check(_sum_rounds_complete(parsed_full), "a whole round is complete")
+    check(not _sum_rounds_complete(parsed_partial),
+          "a round that parsed but reviewed only part of the code must not "
+          "be reported as a complete look at it")
+    t = rr._sum_rounds([parsed_partial])
+    check_eq(t["rounds_partial"], 1, "the round is counted as partial")
+    check_eq(t["first_round"]["critical"], 1,
+             "its findings still count — a partial round is not a lost one")
+
+
 def test_council_refuses_a_round_it_cannot_show_the_seats() -> None:
     """The council prompt carries no diff, so a seat handed un-inlinable
     source reviews nothing, answers [], and the round banks as clean —
@@ -1733,9 +1788,15 @@ def test_seats_can_see_keys_on_the_right_field() -> None:
               "TRUNCATED source still carries real signal — refusing the "
               "round would deflate the councilled arm's findings; the round "
               "runs and is marked partial instead")
-        check(run._seats_can_see(mat(tree=None)) is False
-              or run._seats_can_see(mat(tree=None, server_inlined=True)),
-              "the predicate must not key on the checkout path itself")
+        # Vary ONLY the checkout path, holding server_inlined true. A
+        # predicate keyed on `tree` would disagree across this pair; the
+        # right one does not. (The previous version of this assertion
+        # compared the predicate against itself on identical Materials —
+        # `P(x) is False or P(x)` — which every implementation satisfies.)
+        check_eq(run._seats_can_see(mat(tree=None, server_inlined=True)),
+                 run._seats_can_see(mat(tree=tree, server_inlined=True)),
+                 "the predicate keys on the checkout path rather than on "
+                 "whether the source was actually inlined")
         # The decisive pair: tree present, only server_inlined differs.
         check(run._seats_can_see(mat(tree=tree, server_inlined=True))
               and not run._seats_can_see(mat(tree=tree, server_inlined=False)),
@@ -2176,7 +2237,18 @@ def mutation_check() -> int:
                     break_predicate,
                     lambda: setattr(rr.Run, "_seats_can_see", orig_can_see)))
 
-    # (24) The schema validator stops validating.
+    # (24) A review round with no checkout is banked as a complete one.
+    orig_sum = rr._sum_rounds
+
+    def break_partial() -> None:
+        def mutant(rounds):
+            return orig_sum([dict(r, partial=False) for r in rounds])
+        rr._sum_rounds = mutant
+
+    mutants.append(("a partial round is banked as a complete one",
+                    break_partial, lambda: setattr(rr, "_sum_rounds", orig_sum)))
+
+    # (25) The schema validator stops validating.
     orig_val = rr.validate_schema
 
     def break_validator() -> None:

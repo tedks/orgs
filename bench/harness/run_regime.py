@@ -1452,10 +1452,13 @@ class Materials:
     # reviewing nothing -- and its empty reply would be banked as a clean
     # round. The callers refuse to run in that case.
     server_inlined: bool = False
-    # False when the seats saw only part of what runs -- a truncated file, a
-    # skipped symlinked helper, an unreadable module. The round still runs
-    # (a prefix carries real signal) but is recorded as partial, so it is not
-    # compared against an arm whose seats saw everything.
+    # False when the INLINED source is only part of what runs -- a truncated
+    # file, a skipped symlinked helper, an unreadable module. The round still
+    # runs (a prefix carries real signal). For a council or audit seat, whose
+    # prompt carries no diff and who has no checkout, that makes the round
+    # partial; a native/lead/CTO reviewer stands in the checkout and can read
+    # what the prompt truncated, so for those it is context, and only a
+    # MISSING checkout makes their round partial.
     source_complete: bool = True
 
 
@@ -2219,8 +2222,9 @@ class Run:
         source section is only omission notes must not be scored as "no
         defects found". `complete` says whether the seats saw ALL of it -- a
         truncated file, a skipped symlinked helper, an unreadable module --
-        so a round that reviewed a prefix is recorded as partial instead of
-        as a clean look at the whole thing.
+        so a round whose reviewer could not make up the difference from the
+        checkout is recorded as partial instead of as a clean look at the
+        whole thing.
 
         Read from `tree` -- the clean detached checkout of the reviewed sha --
         so the inlined source cannot drift from the sha the seats are told
@@ -3000,9 +3004,17 @@ class Run:
                 # lead / CTO reviewer also gets the diff and stands in the
                 # frozen checkout, so it can read what the prompt truncated --
                 # marking its round partial would understate a review that
-                # did see everything. Recorded for context, not as partial.
+                # did see everything.
+                #
+                # Unless there IS no checkout. When frozen_checkout fails the
+                # reviewer stands in an empty scratch directory, its prompt
+                # tells it not to go looking for files, and its source section
+                # is a single "could not be checked out" note: it reviewed the
+                # diff and nothing else. That premise inverted is exactly the
+                # case an unconditional False mislabels as a complete look.
                 "inlined_source_complete": mat.source_complete,
-                "partial": False,
+                "had_checkout": mat.tree is not None,
+                "partial": mat.tree is None,
                 "proc": proc.summary(), **fnd.to_json(),
             }
             rounds.append(rec)
@@ -3803,8 +3815,9 @@ def render_summary(run: "Run", man: dict) -> str:
           "others, and `grading.escaped_defects` is null.**")
         A("")
         if not run.escaped.get("seats_complete", True):
-            A(f"- Seats: only {run.escaped.get('seats_filled') or 'none'} "
-              f"answered; {run.escaped.get('seats_empty')} did not.")
+            filled = ", ".join(run.escaped.get("seats_filled") or []) or "none"
+            empty = ", ".join(run.escaped.get("seats_empty") or []) or "none"
+            A(f"- Seats: only {filled} answered; {empty} did not.")
         if not run.escaped.get("source_complete", True):
             A("- Source: the seats did not see all of the code that runs "
               "(a truncated, symlinked or unreadable module).")
@@ -3820,8 +3833,8 @@ def render_summary(run: "Run", man: dict) -> str:
           f"(critical {c['critical']}, important {c['important']}, "
           f"minor {c['minor']}, unknown {c['unknown']}).")
         A("")
-        A(f"Seats filled: {run.escaped['seats_filled'] or 'none'}; "
-          f"empty: {run.escaped['seats_empty'] or 'none'}.")
+        A(f"Seats filled: {', '.join(run.escaped['seats_filled']) or 'none'}; "
+          f"empty: {', '.join(run.escaped['seats_empty']) or 'none'}.")
         A("")
         for seat, v in run.escaped["seats"].items():
             if not v["parse_ok"]:
