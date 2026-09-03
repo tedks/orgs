@@ -118,11 +118,16 @@ class PipeliningTests(ServerE2ETestCase):
             msg2 = b"*2\r\n$4\r\nPING\r\n$3\r\ntwo\r\n"
             sock.sendall(msg1 + msg2)
 
-            # Read responses
-            response1 = sock.recv(1024)
-            if b"two" not in response1:
-                response2 = sock.recv(1024)
-                response1 += response2
+            # Read responses. A single recv() is not a frame boundary — TCP
+            # may deliver the two replies split across more than one chunk
+            # (council review: agy) — so accumulate until both are in, the
+            # same pattern test_three_pipelined_requests already uses.
+            response1 = b""
+            while b"$3\r\ntwo\r\n" not in response1:
+                chunk = sock.recv(1024)
+                if not chunk:
+                    break
+                response1 += chunk
 
             # First should be $3\r\none\r\n, second should be $3\r\ntwo\r\n
             self.assertIn(b"$3\r\none\r\n", response1)
@@ -264,6 +269,40 @@ class MalformedInputTests(ServerE2ETestCase):
             sock.sendall(b"*1\r\n$4\r\nPING\r\n")
             response = sock.recv(1024)
             self.assertEqual(response, b"+PONG\r\n")
+
+    def test_non_utf8_simple_string_does_not_crash_server(self):
+        """A non-UTF-8 byte in a +/- line must close the connection, not the
+        whole process (council review, lead:11 — previously an uncaught
+        UnicodeDecodeError in codec._parse_line killed the server for every
+        connected/future client, a one-packet remote DoS)."""
+        sock = self.connect()
+        sock.sendall(b"+\xff\r\n")
+        response = sock.recv(1024)
+        self.assertEqual(response, b"")  # connection closed, not a crash
+        sock.close()
+
+        # The server process itself must still be alive and serving others.
+        time.sleep(0.1)
+        with self.connect() as sock:
+            sock.sendall(b"*1\r\n$4\r\nPING\r\n")
+            response = sock.recv(1024)
+            self.assertEqual(response, b"+PONG\r\n")
+
+    def test_null_element_in_command_array_is_rejected_not_reindexed(self):
+        """A command array containing a null bulk string must not be silently
+        filtered into a shorter, differently-shaped command (council review,
+        lead:11 — GET <nil> foo was being reinterpreted as GET foo)."""
+        with self.connect() as sock:
+            sock.sendall(b"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
+            self.assertEqual(sock.recv(1024), b"+OK\r\n")
+
+            # GET <nil> foo: 3-element array, middle element is a null bulk
+            # string. Must be rejected (Error reply), never silently become
+            # "GET foo" (which would wrongly return "bar").
+            sock.sendall(b"*3\r\n$3\r\nGET\r\n$-1\r\n$3\r\nfoo\r\n")
+            response = sock.recv(1024)
+            self.assertNotEqual(response, b"$3\r\nbar\r\n")
+            self.assertTrue(response.startswith(b"-"), f"expected an Error reply, got {response!r}")
 
 
 if __name__ == "__main__":

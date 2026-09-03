@@ -37,6 +37,19 @@ class RoundTripTests(unittest.TestCase):
         with self.assertRaises(ProtocolError):
             codec.feed(b"?not-a-type-byte\r\n")
 
+    def test_non_utf8_simple_string_raises_protocol_error(self):
+        # Regression: _parse_line used to call .decode("utf-8", errors="strict")
+        # with no try/except, so a non-UTF-8 byte in a SimpleString/Error line
+        # raised an uncaught UnicodeDecodeError instead of ProtocolError — which
+        # server.py's `except ProtocolError` doesn't catch, crashing the whole
+        # process on one packet (council review, lead:11).
+        codec = RespCodec()
+        with self.assertRaises(ProtocolError):
+            codec.feed(b"+\xff\r\n")
+        codec = RespCodec()
+        with self.assertRaises(ProtocolError):
+            codec.feed(b"-\xff\r\n")
+
 
 class TodoTests(unittest.TestCase):
     """wp-codec: demonstrate each item against the running RespCodec/encode."""

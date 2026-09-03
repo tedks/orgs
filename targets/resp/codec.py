@@ -88,7 +88,11 @@ def _parse_line(buf: bytes, cls):
     idx = _find_crlf(buf)
     if idx == -1:
         return None, 0
-    return cls(buf[1:idx].decode("utf-8", errors="strict")), idx + 2
+    try:
+        text = buf[1:idx].decode("utf-8", errors="strict")
+    except UnicodeDecodeError as e:
+        raise ProtocolError(f"invalid utf-8 in {cls.__name__} line: {e}") from e
+    return cls(text), idx + 2
 
 
 def _parse_integer(buf: bytes):

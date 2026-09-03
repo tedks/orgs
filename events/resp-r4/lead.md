@@ -141,3 +141,156 @@ separate council rounds for ~600 lines of disjoint-file diff is
 coordination overhead without added rigor. Rollback: re-run
 per-package if this round's findings turn out entangled across
 packages in a way that makes per-file attribution unreliable.
+
+## lead:11 · 2026-09-03T13:20:00Z · review-seat-outcome
+- actor: lead (sonnet), scribe for external seats
+- based_on: 7d5e198
+- refs: review round OPENED at lead:10
+Three seats reviewed the frozen revision 7d5e198 (diff base
+42bd8bf..7d5e198): claude (native `Agent` subagent, full project
+context — read post-change files, not just the diff), codex
+(`/ask-agent codex`, diff-only), agy (`/ask-agent agy -d /tmp`,
+diff-only). All three answered; no missing seat.
+
+- **claude:** Critical — `codec.py` `_parse_line` raises an uncaught
+  `UnicodeDecodeError` (not `ProtocolError`) on a non-UTF-8 byte in a
+  SimpleString/Error line; `server.py`'s accept loop has no exception
+  boundary around `serve_connection`, so this crashes the whole
+  process — a one-packet unauthenticated remote DoS. Verified live by
+  the reviewer. Important — (a) `feed()` loses already-parsed valid
+  frames when a later frame in the same call raises `ProtocolError`
+  (local `frames` list never returned); (b) `server.py`'s command
+  construction silently filters null/non-`BulkString` array elements
+  rather than rejecting, causing argument-shift (e.g. `GET <nil> foo`
+  → `GET foo`); (c) none of the new commands are exercised through the
+  real socket+codec+server path in tests, only via direct
+  `Engine.execute()` calls, which is why (b) was invisible to 33/33
+  green. Nits: `encode()` doesn't guard embedded CRLF in
+  SimpleString/Error (currently harmless — all such values are
+  engine-authored literals); `INCR` more lenient than real Redis
+  (whitespace/underscore/no-overflow); sleep-based E2E test timing;
+  `find_free_port()` TOCTOU.
+- **codex:** Critical — `INCR` doesn't enforce RESP2 signed-64-bit
+  integer semantics (Python ints don't overflow; lenient parsing).
+  Important — several test-robustness gaps in
+  `test_server_e2e.py` (no socket timeouts; `recv()` treated as a
+  frame boundary when TCP can fragment/coalesce; partial-frame tests
+  close instead of completing the frame so don't prove buffering
+  retention; racy/cwd-dependent server startup in
+  `ServerE2ETestCase.setUpClass`); codec round-trip tests use
+  `encode()` to generate their own decoder input, so a matched
+  encoder/decoder bug pair could hide. Nits: unused imports in
+  `test_server_e2e.py`; status files stale/inconsistent state
+  vocabulary (`IN_PROGRESS`/`COMPLETE`/`DONE` vs. this ledger's
+  `REVIEW`).
+- **agy:** Critical (claimed) — empty command array (`*0\r\n`)
+  crashes `Engine.execute` via `command[0]` `IndexError`. **Verified
+  false**: `engine.py:23-24` already guards `if not command: return
+  Error(...)` (present since the M1 tracer, unchanged by wp-engine) —
+  no crash occurs; disposition below. Important — real, live TCP
+  fragmentation can defeat `test_pipelined_ping_with_message`'s
+  single-fallback `recv()` (only reads twice, unlike
+  `test_three_pipelined_requests`'s accumulate-until-satisfied loop).
+  Nits: `DEL` is single-key only vs. real Redis's variadic form (by
+  design — C2 pins exactly this); `INCR` leniency (same class as
+  codex's Critical, see disposition); sleep-based E2E timing; loose
+  `assertEqual(count(...), 3)` in `test_three_pipelined_requests`.
+
+## lead:12 · 2026-09-03T13:25:00Z · takeover
+- actor: lead (sonnet), model sonnet, taking over from wp-codec
+  (haiku) and wp-server (haiku)
+- based_on: 7d5e198
+- refs: lead:11
+Reason: two Critical/Important findings from lead:11 are small,
+well-scoped, single-function fixes in files the lead originally wrote
+in the M1 tracer; re-delegating to a fresh haiku round for a ~5-10
+line fix each is coordination overhead disproportionate to the fix
+size (meta:product economy) and the lead — sonnet, one rung up from
+haiku — is the correct owner per STATES.md's takeover rule. Applied
+directly, not through another worker round:
+1. `targets/resp/codec.py` `_parse_line`: wrap the utf-8 decode in
+   try/except, raise `ProtocolError` on `UnicodeDecodeError` (was:
+   uncaught, crashed the process). Regression test added
+   (`test_non_utf8_simple_string_raises_protocol_error` in
+   `test_codec_contract.py`, `test_non_utf8_simple_string_does_not_crash_server`
+   in `test_server_e2e.py`); mutation-checked (reverted the fix,
+   confirmed the codec-level test goes red with the exact
+   UnicodeDecodeError the fix now catches; restored, confirmed green
+   again) per LESSONS.md 2026-09-01.
+2. `targets/resp/server.py` command construction: reject (Error
+   reply) a command array containing any null/non-`BulkString`
+   element instead of silently filtering it out (was: silent
+   argument-shift, e.g. `GET <nil> foo` → `GET foo`). Regression test
+   added (`test_null_element_in_command_array_is_rejected_not_reindexed`);
+   mutation-checked (reverted the fix, confirmed the test fails with
+   the exact silent-reindex behavior described — `GET foo` returned
+   `bar`; restored, confirmed green).
+Also applied, same commit (test-quality fixes flagged by multiple
+seats, cheap, no design risk): hardened
+`test_pipelined_ping_with_message`'s flaky single-fallback read into
+the same accumulate-until-satisfied loop `test_three_pipelined_requests`
+already uses (agy); normalized the three status/wp-*.md files' `State`
+field to `REVIEW` (codex — they had drifted to non-STATES.md
+vocabulary `IN_PROGRESS`/`COMPLETE`/`DONE`).
+Full suite: 36/36 green (33 + 3 new). Frozen exam: 12/12 green,
+unchanged. Rollback: `git revert` this commit — both fixes are
+additive (stricter rejection, not behavior removal) and independent
+of every other file in the sprint.
+
+## lead:13 · 2026-09-03T13:25:30Z · deviation-adjudicated
+- actor: lead (sonnet)
+- based_on: 7d5e198
+- refs: lead:11
+Three findings from lead:11 dispositioned as NOT blocking this
+sprint's merge, each logged here rather than silently dropped
+(council-review-to-fixpoint discipline):
+1. **agy's "empty command IndexError" Critical — REJECTED, false
+   positive.** Verified by direct code read: `engine.py:23-24`
+   already returns an `Error` frame for an empty command; no
+   `IndexError` is reachable. No fix needed.
+2. **codex's "INCR lacks signed-64-bit bounds/strict parsing"
+   Critical, and the matching Nit from claude and agy — REJECTED as
+   blocking, filed as an amendment candidate against
+   `contracts/C2-command-engine.md` for future consideration.**
+   Rationale: the spec's goals list requires only "correct error
+   replies for... non-integer INCR" (docs/specs/2026-09-02-resp-tracer.md);
+   C2 as published does not pin INCR's integer grammar or overflow
+   behavior, and the frozen exam does not assert it (only
+   `SET n 10; INCR n` → 11, and `INCR` on a non-numeric string →
+   error, both of which already pass). Real-Redis-literal parity is
+   not a stated goal (target README calls this "a Redis-compatible
+   *subset*"; spec's non-goals list excludes performance-class
+   concerns generally). Adding strict ASCII-only parsing + 64-bit
+   range checks now is real, contained work with no downside, but
+   it's unrequested machinery relative to this sprint's actual goals
+   and exam — filed for a future amendment rather than expanding
+   scope unilaterally at integration time.
+3. **codex's and claude's test-robustness findings not already
+   fixed above (no socket timeouts in `test_server_e2e.py`; `recv()`
+   as an assumed frame boundary in several tests rather than
+   accumulate-and-decode; racy/cwd-dependent server startup in
+   `find_free_port()`/`setUpClass`; codec round-trip tests generating
+   their own decoder input via `encode()` rather than hand-written
+   wire bytes) — FILED, not fixed. Rationale: these are internal test
+   infrastructure quality improvements, not product defects — the
+   product-facing gate is the frozen exam (unaffected, uneditable,
+   already robust to these exact classes of flakiness by its own
+   design) plus the two regression tests just added for the real bugs
+   found. Proportionality: gold-plating every test-quality nit this
+   late in a small bench sprint trades meta:product ratio for
+   marginal internal-suite robustness with no product behavior at
+   stake. Left as a retro note for LESSONS.md rather than in-sprint
+   rework.
+- **claude's finding (b), "`feed()` drops already-parsed frames when
+  a later frame in the same call raises `ProtocolError`" — FILED as
+  an interpretation/amendment candidate against
+  `contracts/C1-resp-codec.md`, not fixed.** Rationale: real and
+  reproducible by inspection, but a correct fix needs a C1 surface
+  change (either `feed()` yielding frames incrementally via a new
+  method, or `ProtocolError` carrying the frames parsed earlier in
+  the same call) — a contract-boundary change, which per doctrine
+  gets a huddle/ruling rather than a silent patch during fix-delta.
+  Low real-world exposure (requires a valid command and malformed
+  bytes to land in the exact same `recv()` chunk); not exam-tested.
+  Rollback if this reading is wrong: reopen as Critical and block next
+  time it's raised.

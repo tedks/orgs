@@ -15,7 +15,7 @@ import os
 import socket
 import sys
 
-from codec import Array, BulkString, ProtocolError, RespCodec, encode
+from codec import Array, BulkString, Error, ProtocolError, RespCodec, encode
 from engine import Engine
 
 
@@ -36,11 +36,16 @@ def serve_connection(conn: socket.socket, engine: Engine) -> None:
             for frame in frames:
                 if not isinstance(frame, Array) or frame.value is None:
                     continue
-                command = [
-                    item.value
-                    for item in frame.value
-                    if isinstance(item, BulkString) and item.value is not None
-                ]
+                items = frame.value
+                if not all(isinstance(item, BulkString) and item.value is not None for item in items):
+                    # A command array element that isn't a non-null bulk string
+                    # (e.g. a nested Array, or an explicit null bulk string) has
+                    # no well-defined argument position to drop into — reject
+                    # the whole command rather than silently reindexing the
+                    # remaining arguments into a different, valid-looking arity.
+                    conn.sendall(encode(Error("ERR protocol error: expected bulk string array")))
+                    continue
+                command = [item.value for item in items]
                 reply = engine.execute(command)
                 conn.sendall(encode(reply))
 
