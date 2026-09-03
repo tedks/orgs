@@ -1,0 +1,22 @@
+{
+  "regime": "no-decomposition",
+  "target": "resp",
+  "toggles": {
+    "decomposition": false,
+    "firewall": true,
+    "tiering": true,
+    "review": true,
+    "council": true,
+    "standup": true,
+    "crystal": true,
+    "parallel": true
+  },
+  "models": {
+    "cto": "sonnet",
+    "lead": "sonnet",
+    "worker": "haiku",
+    "review_tier": "sonnet"
+  },
+  "grader": "bench/conformance/resp_conformance.sh",
+  "budget_tokens": 800000
+}

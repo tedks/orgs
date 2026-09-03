@@ -1,0 +1,4 @@
+{ "regime": "raw", "target": "resp",
+  "toggles": { "decomposition": false, "firewall": false, "tiering": false, "review": false, "council": false, "standup": false, "crystal": false, "parallel": false },
+  "models": { "worker": "sonnet" },
+  "grader": "bench/conformance/resp_conformance.sh", "budget_tokens": 200000 }
