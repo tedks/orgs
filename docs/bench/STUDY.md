@@ -61,9 +61,32 @@ Configs: `bench/regimes/configs/r{1..6}-*.json`.
 
 ## Status log
 
-- 2026-09-03: study launched. Orchestrator build in progress (subagent
-  `orchestrator-builder`, Opus, council-to-fixpoint required). Six configs
-  committed. Driver + results pending orchestrator validation.
+- 2026-09-03: study launched. Orchestrator built (Opus subagent): 2817-line
+  `run_regime.py`, 15 prompt templates, 585 tests passing; builder self-found
+  and fixed 3 runtime bugs (unpinned STANDUP_BUS, fix-round mis-billing,
+  counter race). Dry-runs of r1/r3/r6/raw compose correctly.
+- 2026-09-03 **CTO gate — NO-GO (held launch).** Two reviews:
+  - **Fork-review** (a Claude fork of the CTO): code clean on adversarial
+    read, but returned NO-GO on principle — *a Claude fork reviewing
+    Claude-built code is the correlated-blind-spot case this study exists to
+    measure*; its GO is necessary, not sufficient.
+  - **Cross-provider council** (codex + agy): **~10 Critical study-invalidating
+    findings the fork found zero of.** Verified real against the code:
+    ablations don't ablate the *instructions* (the lead gets the full runbook
+    regardless of toggles, so r4/r5 still tell it to use crystal/standup);
+    `git log --all` on reused worker-ids bleeds progress signal across runs;
+    the full parent env (session ids, messaging sockets) leaks into the
+    "fresh" agents; grading reads the live tree not the committed SHA and the
+    conformance regex is unanchored (fakeable); a failed/missing review seat
+    is silently counted as zero; crystal conflicts are never delivered to the
+    org (inert). **This is the study's thesis — cross-provider review catches
+    what same-provider review structurally cannot — demonstrated on the
+    study's own harness before a single arm ran.** It is the strongest single
+    result so far, and it is why the launch was held rather than producing
+    ~5M tokens of contaminated garbage.
+  - Builder dispatched to fix all Critical/Important to fixpoint and
+    **re-council both providers to CLEAN** before any arm runs. Launch resumes
+    only after a re-verified CLEAN.
 
 ## Results
 
