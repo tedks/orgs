@@ -1,6 +1,6 @@
 ---
 name: orgs-crystal
-description: Speculative merge-checking across concurrent worker branches. At standup cadence, attempt each open branch-pair merge in a scratch worktree and run the boundary tests; a textual conflict or a clean-merge-with-red-tests is a semantic conflict — record it and deliver it to the lead. Detects integration breakage early, before late integration becomes the failure mode.
+description: Speculative merge-checking across concurrent worker branches. At the cadence the sprint root sets, attempt each open branch-pair merge in a scratch worktree and run the boundary tests; a textual conflict or a clean-merge-with-red-tests is a semantic conflict — record it and deliver it to the lead. Detects integration breakage early, before late integration becomes the failure mode.
 ---
 
 # orgs-crystal — speculative merge check
