@@ -35,5 +35,13 @@ Templates: `protocol/templates/work-package.md`, `protocol/templates/contract.md
    default.
 
 Record each transition via `orgs-ledger`. Hand the packed packages to
-`orgs-implement`; if the variety includes them, `orgs-standup` and
-`orgs-crystal` begin watching the fan-out.
+`orgs-implement`. (What else watches the fan-out is the sprint root's wiring,
+not this skill's concern.)
+
+## On contracts
+
+Contracts are **authored in `orgs-spec`** — one per boundary, councilled with
+the spec before it merges. Decomposition does not originate them; it
+**refines** them into concrete boundary tests and instantiates the
+work-package references to them. If decomposition finds a contract missing or
+wrong, that is a spec bug: file the interpretation request or amendment.

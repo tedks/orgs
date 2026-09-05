@@ -34,7 +34,8 @@ past the roster's threshold, an interface change — or on the roster's
 
 - **Observe:** `standup.sh observe` produces a compact digest — git log +
   status entries + stall detection — **never transcripts**. Inputs are the
-  status entries and the event ledger since the last standup.
+  status entries, the event ledger since the last standup, the git log, and
+  the open PRs: compact state, never transcripts.
 - **Redirect / halt:** post steering to the bus for the drifting agent; the
   chair facilitates, the adjudicator per ownership decides.
 - **Outputs**, committed as `orgs-ledger` events: decisions, reassignments,

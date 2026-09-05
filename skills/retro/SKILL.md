@@ -11,7 +11,10 @@ bent, what the numbers say, and where the contracts were wrong.
 ## The closing acts
 
 1. **Adjudicate remaining deviations** in the ledger — each bent rule is either
-   justified-and-kept or reverted.
+   justified-and-kept or reverted. Normally the standup's adjudicator moves a
+   deviation `LOGGED → ADJUDICATED` as the sprint runs; **in a variety with no
+   standup, the retro's lead is the adjudicator** for every deviation still
+   LOGGED (see `STATES.md`).
 2. **File lessons** (`LESSONS.md`): each with **provenance** (what happened),
    **scope** (where it applies), and **reconsider-when** (what would make it
    wrong). Link related lessons.
@@ -34,6 +37,9 @@ bent, what the numbers say, and where the contracts were wrong.
   largest slice. Record it explicitly as an unbucketed line rather than hiding
   it; a cost claim that omits it understates the hierarchy's true cost.
 - The ratio is a **soft tripwire**, compared sprint-over-sprint, never a gate.
+- Under the bench, the same two buckets also populate the run manifest's
+  `cost` fields (the evaluator reads them from the CLOSED ledger entry); a
+  normal sprint needs only the ledger entry.
 
 ## Cold-start audit (at milestones)
 

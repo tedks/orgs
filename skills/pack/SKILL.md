@@ -17,7 +17,7 @@ Template: `protocol/templates/context-manifest.md`.
 1. **The doctrine prompt block** from `doctrine/DOCTRINE.md` (§ Prompt block),
    verbatim, first. Every role prompt begins with it.
 2. **The hat** — one line: "you are the L5 lead for entity X" / "you are the
-   reviewer at the CTO tier for PR N".
+   accountable lead reviewing PR N".
 3. **The whole design doc.** It always rides whole.
 4. **The role's scope + the contracts it consumes** — for an implementer, its
    owned paths and the published contracts of what it depends on; nothing else.

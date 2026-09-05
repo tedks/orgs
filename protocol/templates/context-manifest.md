@@ -4,8 +4,11 @@ What was packed into an agent's context at claim time. A packing list, not
 a firewall — the agent may read anything; this records what it was *given*,
 for reproducibility and the cold-start audit.
 
-- **Pack type:** implementer | reviewer | auditor
+- **Pack type:** implementer | reviewer | auditor | takeover | continuation
   - *implementer* packs additionally include **the work package itself**;
+  - *takeover* / *continuation* (journey) packs include the prior agent's
+    **branch, diff, PR thread, status entry**, and a transcript excerpt where
+    the reasoning matters — the journey travels via committed artifacts;
   - *reviewer* packs include the **diff under review, the acceptance
     criteria, and the consumed contracts** — never the context of the agent
     whose work is under review (decontamination). A review *seat* may still

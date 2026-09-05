@@ -21,7 +21,8 @@ States and transitions: `protocol/STATES.md`.
 - **Causal order** comes from the event chain: `refs` carries the predecessor
   event id, not a wall-clock time. `based_on` stays a git sha (what the event
   was computed against). Do not order the sprint by timestamps.
-- **Event kinds** include: `state-change`, `deviation`, `interpretation-filed`,
+- **Event kinds** include: `state-change`, `deviation`, `review-finding`,
+  `lead-review`, `interpretation-filed`,
   `docs-bug`, `crystal-conflict`, `huddle-convened`/`-decided`/`-reconciled`,
   `takeover`, `lesson`. Use the kind the STATES table names for the transition.
 

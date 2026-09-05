@@ -39,7 +39,7 @@ tripwire when not).
 | From | To | Who | Evidence |
 |---|---|---|---|
 | — | LOGGED | any agent | one line: what bent, why, rollback op (or "read — n/a") |
-| LOGGED | ADJUDICATED | next standup's adjudicator | justified / unjustified + one line why |
+| LOGGED | ADJUDICATED | next standup's adjudicator; in a variety with no standup, the retro's lead | justified / unjustified + one line why |
 | ADJUDICATED | (spawns) | adjudicator | may open a docs bug, interpretation request, amendment candidate, or work-package re-spec |
 
 Gated deviations (unnameable rollback, boundary-crossing, beyond scope) may

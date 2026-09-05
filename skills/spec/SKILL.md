@@ -10,7 +10,11 @@ features — it is the **boundaries**: which entities exist, what each one
 publishes, and how they connect. Everything downstream (decomposition,
 firewalled context, review) is derived from these.
 
-Template: `docs/spec-template.md`. Output: `docs/specs/<name>.md`.
+Template: `docs/spec-template.md`. Outputs: `docs/specs/<name>.md` **and one
+`contracts/<boundary>.md` per boundary** (from `protocol/templates/contract.md`)
+— the contracts are authored here, as part of the spec, and councilled with
+it. Decomposition later refines them into boundary tests; it does not
+originate them.
 
 ## The load-bearing sections
 
@@ -31,6 +35,8 @@ Template: `docs/spec-template.md`. Output: `docs/specs/<name>.md`.
 The spec merges only after a **council round on the spec itself is CLEAN**
 (use `orgs-council`). A boundary error caught here is cheap; caught after
 fan-out it is an amendment. Record the spec's CLEAN council in `orgs-ledger`.
+A spec is **substantive** — it is never the "trivial docs-only" change that
+`orgs-council` lets skip a round; this gate is unconditional.
 
 ## Changes after merge
 

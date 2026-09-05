@@ -5,11 +5,18 @@ description: On-demand escalation at the reversibility gate. Any agent convenes 
 
 # orgs-huddle — escalate at the reversibility gate
 
-Not a step in the sprint — a thing any agent reaches for. The doctrine gate:
-huddle **first** only when you can't name your rollback, would change something
-across a contract boundary, or would exceed owned scope. Otherwise you deviate
-and log (`orgs-ledger`); the huddle is for the genuinely irreversible or
-cross-boundary call.
+Not a step in the sprint — the escalation floor any agent reaches for, always
+available because the doctrine block (packed into every role) names it. Two
+triggers, from doctrine:
+
+- **Huddle first** (mandatory, before acting) at the reversibility gate: you
+  can't name your rollback, you'd change something across a contract boundary,
+  or you'd exceed owned scope.
+- **Huddle voluntarily** whenever you genuinely **can't tell what intent
+  requires** — fork and keep working while you ask, knowing the answer arrives
+  stale.
+
+Outside those, deviate to serve intent and log the bend (`orgs-ledger`).
 
 ## Convening
 

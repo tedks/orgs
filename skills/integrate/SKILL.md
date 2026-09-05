@@ -22,6 +22,9 @@ The defense is to integrate **continuously**, not to firewall and hope.
 ## Handoff
 
 Once every non-abandoned package is INTEGRATED and the trunk is green against
-the full boundary-test suite, the sprint is ready for `orgs-retro`. Run the
-target's conformance exam at integration so correctness is a fact on the trunk,
-not a claim.
+the full boundary-test suite, the sprint is ready for `orgs-retro`.
+
+Integration verifies against the **boundary tests** the org owns. It does
+**not** run the external graded conformance exam — grading belongs to the
+evaluator, outside every variety, so the thing being scored never touches its
+own score.

@@ -28,7 +28,7 @@ For each open branch pair:
 - Record a **`crystal-conflict`** event via `orgs-ledger` with the exact
   revisions, and **deliver it to the lead** (and notify both owners) — a
   conflict that only lands in a log is inert; it must reach the org that can
-  act on it (via the standup bus if present, else directly to the lead).
+  act on it. The delivery channel is the sprint root's wiring.
 - **Resolution ownership is semantic:** contract change → provider migrates
   callers; invalid assumption → consumer fixes; disputed → record
   `semantic-deadlock`, the lead adjudicates.
