@@ -8,9 +8,12 @@ uniformly.
 
 ## Design and how each regime was run
 
-A regime is the full protocol with mechanisms toggled off (see
-`bench/regimes/`). Two regimes reuse builds from earlier in the project (the
-"before" states); three are new or analytic:
+A regime is the full protocol with mechanisms toggled off (the toggle-based
+regime configs used at the time are preserved at tag
+`archive/runnable-framework`; the project has since moved to composing regimes
+from skills rather than toggling a monolith — see
+`docs/design/skill-decomposition.md`). Two regimes reuse builds from earlier in
+the project (the "before" states); three are new or analytic:
 
 | Regime | = | How produced |
 |---|---|---|
@@ -117,4 +120,5 @@ multi-team target where its coordination structure could plausibly matter.
 
 Per-regime servers under `bench/study/<regime>/`; each hardened server passes
 12/12 and survives the crash-probe battery (oversized INCR / length / count,
-deep nesting, nil-value INCR, CRLF command). Regime configs in `bench/regimes/`.
+deep nesting, nil-value INCR, CRLF command). Regime configs preserved at tag
+`archive/runnable-framework`.
