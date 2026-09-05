@@ -16,7 +16,7 @@ tests exactly this).
 | From | To | Who | Evidence required |
 |---|---|---|---|
 | — | DRAFT | lead | intent field naming the spec section served |
-| DRAFT | READY | lead | acceptance criteria + boundary tests named; necessity challenge passed (PROCEED or SIMPLIFY applied) |
+| DRAFT | READY | lead | acceptance criteria + boundary tests named; necessity challenge passed (PROCEED or SIMPLIFY applied). **No-decomposition variety:** the single whole-spec implicit package enters READY on the implementer's *stated assumptions* — no necessity challenge (the spec's own necessity was settled at the spec council) |
 | READY | CLAIMED | worker (or lead assigns) | worker + model recorded (role and model both stamped) |
 | CLAIMED/IN_PROGRESS/REVIEW/REWORK | CLAIMED | lead | takeover — resets to CLAIMED under the new (higher-tier) owner with a fresh context pack, re-walking the ladder from there; a `takeover` event records new owner + model + reason, so takeover rate is derivable at retro |
 | CLAIMED | IN_PROGRESS | worker | context manifest committed |
@@ -39,7 +39,7 @@ tripwire when not).
 | From | To | Who | Evidence |
 |---|---|---|---|
 | — | LOGGED | any agent | one line: what bent, why, rollback op (or "read — n/a") |
-| LOGGED | ADJUDICATED | next standup's adjudicator | justified / unjustified + one line why |
+| LOGGED | ADJUDICATED | next standup's adjudicator; in a variety with no standup, the retro's lead | justified / unjustified + one line why |
 | ADJUDICATED | (spawns) | adjudicator | may open a docs bug, interpretation request, amendment candidate, or work-package re-spec |
 
 Gated deviations (unnameable rollback, boundary-crossing, beyond scope) may
@@ -114,7 +114,7 @@ entry into it.
 |---|---|---|---|
 | — | PLANNED | lead | spec section owned |
 | PLANNED | TRACER | lead (player-coach) | ready to build the walking skeleton (player-coach builds the tracer *before* decomposing — RUNBOOK §3) |
-| TRACER | EXECUTING | lead | tracer bullet green — contracts demonstrably compose; only *then* are work packages drafted, necessity-challenged, and READY |
+| TRACER | EXECUTING | lead | tracer bullet green — contracts demonstrably compose; only *then* are work packages drafted, necessity-challenged, and READY. **No-decomposition variety:** PLANNED → EXECUTING directly (no TRACER state) — a whole-spec build is its own tracer |
 | EXECUTING | INTEGRATING | integration owner | every non-abandoned package INTEGRATED (integration is continuous — packages merge as they are ACCEPTED, not batched here) |
 | INTEGRATING | RETRO | integration owner | main green on all boundary tests; no open Crystal conflicts |
 | RETRO | CLOSED | lead | lessons filed (provenance/scope/reconsider-when); meta:product recorded; deviations all adjudicated; cold-start audit passed if milestone |

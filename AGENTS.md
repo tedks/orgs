@@ -20,15 +20,21 @@ agent genuinely needs divergent instructions.
 
 ## Project structure
 
-<!-- TODO: this is a placeholder skeleton; the real structure will follow
-     the spec once it stabilizes. Current layout: -->
-
 - `README.md` — concept pitch (draft)
-- `docs/spec-template.md` — section headers for the design-doc spec that
-  the CEO/CTO agents will iterate on
-- `docs/amendments/` — where spec amendments will live once the spec exists
-- `skills/` — sketch of the intended skill layout (not yet implemented)
-- `LESSONS.md` — lessons-learned memory, stub for now
+- `skills/` — **the protocol, as a graph of composable skills.** `skills/sprint`
+  is the root runbook; the rest are the acts. See `skills/README.md`.
+- `protocol/` — `STATES.md` (transition tables the skills cite),
+  `templates/` (artifact templates), and `RUNBOOK.md` (now a pointer into the
+  skills, absorbed by `skills/sprint`)
+- `tools/` — the executables skills wrap: `tools/crystal/` (speculative merge
+  detector), `tools/standup/` (forced-observe bus + guard)
+- `doctrine/DOCTRINE.md` — the ambient how-we-work doc; its prompt block is
+  packed into every role prompt by `skills/pack`
+- `bindings/claude-code.md` — how roles map to Claude Code primitives
+- `bench/` — the evaluator (frozen exam, grader, nix devshell); `docs/bench/`
+  holds the ablation study and the contamination-vectors checklist
+- `docs/spec-template.md`, `docs/amendments/` — spec authoring and amendments
+- `LESSONS.md` — lessons-learned memory
 - `.planning/PLANS.md` — ExecPlan format guide for non-trivial work
 
 ## Environment
