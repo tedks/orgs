@@ -11,8 +11,8 @@ docs-bug rather than depending on it. Build inside your scope, on your branch,
 and leave a trail others can pick up.
 
 Your pack (from `orgs-pack`) opens with the doctrine block; it governs. Any
-tooling you must run your commands through is stated in your pack by the
-sprint's root — this skill does not assume any.
+tooling you must run your commands through is in your pack's **wiring slot**,
+placed there by the sprint's root — this skill does not assume any.
 
 ## The loop
 

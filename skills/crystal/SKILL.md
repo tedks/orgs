@@ -15,7 +15,7 @@ textual/tree-diff detection; the build-and-test oracle is the unclaimed part.
 Tool: `tools/crystal/crystal-check.sh` (git-archive plain-files sandbox; never
 touches the real repo or pushes).
 
-## The check (at standup cadence)
+## The check (at the cadence the sprint root sets)
 
 For each open branch pair:
 1. Attempt the merge in a **scratch worktree, never pushed**.
@@ -32,8 +32,8 @@ For each open branch pair:
 - **Resolution ownership is semantic:** contract change → provider migrates
   callers; invalid assumption → consumer fixes; disputed → record
   `semantic-deadlock`, the lead adjudicates.
-- Whoever merges second cleans up by default. Conflict debt is visible at
-  standup so it ages loudly rather than silently.
+- Whoever merges second cleans up by default. Open conflict debt is reported
+  to the lead on every check so it ages loudly rather than silently.
 
 ## Requires parallel branches
 

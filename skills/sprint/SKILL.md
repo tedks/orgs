@@ -56,14 +56,17 @@ deviation. Assumed everywhere below.
 ## Wiring (the cross-skill connections — they live HERE, not in the skills)
 
 The leaf skills never say "if X is present." The composer says how they
-connect. In the **full** composition:
+connect, and **the only channel for wiring to reach a role is the pack's wiring
+slot** (`orgs-pack`): this root hands each role's wiring to whoever calls
+`pack` for it (`decompose` for implementers, the council/review dispatcher for
+reviewers). Nothing is injected outside the pack, so the manifest stays the
+complete record. In the **full** composition:
 
-- **implement ↔ standup:** workers run their dev-loop commands through
-  `tools/standup/guard.sh <agent-id> -- <cmd>` so redirects/halts are forced
-  into view. (This instruction is issued by this root — `implement` itself is
-  unconditional.)
-- **crystal → lead:** a `crystal-conflict` is delivered to the lead over the
-  standup bus.
+- **implement ↔ standup:** the implementer wiring slot says: run your dev-loop
+  commands through `tools/standup/guard.sh <agent-id> -- <cmd>` so redirects/
+  halts are forced into view. (`implement` itself is unconditional.)
+- **crystal:** runs its check at the standup heartbeat; a `crystal-conflict`
+  is delivered to the lead over the standup bus.
 - **standup triggers:** budget tripwire, stop condition, `crystal-conflict`,
   blocked past threshold, interface change, or the roster heartbeat.
 - **deviations → adjudicator:** `LOGGED → ADJUDICATED` by the next standup's
@@ -71,11 +74,17 @@ connect. In the **full** composition:
 - **review → integrate:** each ACCEPTED package flows to integrate immediately.
 
 A variety that omits a skill **also omits that skill's wiring lines**, and
-re-routes anything left dangling (e.g. with no `standup`, crystal delivers
-straight to the lead and the **retro's lead adjudicates deviations**; with no
-`decompose`, `implement` runs in its whole-spec mode). Write each variety as
-its own short root file: the skills it composes, in order, plus its wiring.
-Never a flag on this file.
+must re-route anything left dangling — every dependency a remaining skill had
+on the removed one gets an explicit substitute:
+- **no `standup`:** crystal runs its check **at each ACCEPTED-package
+  integration** (a fixed cadence) and delivers conflicts **directly to the
+  lead**; the **retro's lead adjudicates deviations** (`STATES.md`).
+- **no `decompose`:** `implement` runs in **whole-spec mode**; the single
+  implicit package enters READY on the implementer's stated assumptions and
+  the sprint enters EXECUTING directly — see the no-decomposition rows in
+  `STATES.md`.
+Write each variety as its own short root file: the skills it composes, in
+order, plus its wiring and its re-routes. Never a flag on this file.
 
 ## Composition and varieties
 

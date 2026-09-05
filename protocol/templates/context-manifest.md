@@ -4,6 +4,9 @@ What was packed into an agent's context at claim time. A packing list, not
 a firewall — the agent may read anything; this records what it was *given*,
 for reproducibility and the cold-start audit.
 
+- **Wiring:** the sprint root's role-specific cross-skill instructions for
+  this pack, verbatim (e.g. the guard command), or `none`. The only channel
+  by which wiring reaches a role — never injected outside the pack.
 - **Pack type:** implementer | reviewer | auditor | takeover | continuation
   - *implementer* packs additionally include **the work package itself**;
   - *takeover* / *continuation* (journey) packs include the prior agent's

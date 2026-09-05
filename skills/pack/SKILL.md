@@ -23,8 +23,18 @@ Template: `protocol/templates/context-manifest.md`.
    owned paths and the published contracts of what it depends on; nothing else.
 5. **Selected lessons** relevant to the act.
 
-Record the pack as a manifest (what was included, at which sha) so a takeover
-or audit can reconstruct what the role could see.
+6. **The wiring slot** — any role-specific cross-skill instructions the sprint
+   root attached for this role (e.g. "run your dev-loop commands through
+   `tools/standup/guard.sh <id> --`"). This is the **only** path by which the
+   root's wiring reaches a role: the root hands its wiring for the role to
+   whoever calls `pack` for that role (`decompose` for implementers, the
+   council/review dispatcher for reviewers), and `pack` places it in this slot.
+   Nothing is injected into a prompt outside the pack — so the manifest stays
+   the complete record of what the role was told.
+
+Record the pack as a manifest (what was included, at which sha, including the
+wiring slot) so a takeover or cold-start audit can reconstruct exactly what the
+role could see and was instructed.
 
 ## Lean by default
 

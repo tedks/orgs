@@ -42,9 +42,14 @@ Identity is the **model provider**, not the CLI name. Let `me` = my provider:
 ## Each seat gets a fresh pack
 
 Assemble every seat's prompt with `orgs-pack` as a **judgment pack**: the frozen
-diff + spec + acceptance criteria + contracts + boundary tests — never the
-implementer's transcript. Foreign seats can't read your files; inline the
-material in the prompt.
+diff + spec + contracts + acceptance criteria + boundary tests **where they
+exist** — never the implementer's transcript. Two pack shapes:
+- **Code review** (a work package): diff + spec + contracts + criteria + the
+  package's boundary tests.
+- **Spec review** (the `orgs-spec` gate, before any decomposition): the spec +
+  its contracts + the boundary diagram. Boundary tests don't exist yet and are
+  not required — the seats review the *boundaries*, not code.
+Foreign seats can't read your files; inline the material in the prompt.
 
 ## To fixpoint
 
