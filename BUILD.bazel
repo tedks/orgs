@@ -1,0 +1,48 @@
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Sources and test modules are listed explicitly, not globbed: a new module
+# must be added here, or it is not built or not run.
+
+py_library(
+    name = "tier_drift_lib",
+    srcs = [
+        "src/tier_drift/__init__.py",
+        "src/tier_drift/aggregate.py",
+        "src/tier_drift/catalog.py",
+        "src/tier_drift/collector.py",
+        "src/tier_drift/insights.py",
+    ],
+    data = ["catalog/models.toml"],
+    imports = ["src"],
+)
+
+# Every test module is the srcs of one py_test running tests/pytest_main.py,
+# which collects exactly the modules in that target's runfiles.
+# precompile is disabled because the targets share that main.
+TEST_MODULES = [
+    "tests/test_collector.py",
+    "tests/test_collector_floor.py",
+    "tests/test_golden.py",
+]
+
+[
+    py_test(
+        name = module.removeprefix("tests/").removesuffix(".py"),
+        srcs = [
+            module,
+            "tests/pytest_main.py",
+        ],
+        main = "tests/pytest_main.py",
+        precompile = "disabled",
+        # The golden and floor tests are skipped unless pointed at private
+        # data or a real host; these carry the pointers into the sandbox.
+        env_inherit = ["TIER_DRIFT_GOLDEN_DIR", "TIER_DRIFT_FLOOR_HOST", "HOME", "SSH_AUTH_SOCK"],
+        deps = [
+            ":tier_drift_lib",
+            "@pypi//pytest",
+        ],
+    )
+    for module in TEST_MODULES
+]

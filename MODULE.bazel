@@ -1,0 +1,23 @@
+module(
+    name = "tier_drift",
+    version = "0.1.0",
+    compatibility_level = 1,
+)
+
+bazel_dep(name = "rules_python", version = "1.6.3")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.defaults(python_version = "3.12")
+python.toolchain(python_version = "3.12")
+use_repo(python, "python_3_12", "pythons_hub")
+
+# Test-only PyPI dependencies; the package itself is stdlib-only.
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pypi",
+    python_version = "3.12",
+    requirements_lock = "//:requirements.lock",
+)
+use_repo(pip, "pypi")
+
+register_toolchains("@pythons_hub//:all")
