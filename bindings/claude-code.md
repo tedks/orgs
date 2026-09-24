@@ -26,6 +26,10 @@ good engineering"): every role prompt begins with the DOCTRINE.md prompt
 block verbatim, then the role's hat ("you are the L5 lead for entity X…"),
 then the context manifest contents. The design doc always rides whole.
 
+v0 note: this file is the only binding. Codex CLI and Antigravity bindings
+are deferred until the first sprint proves the artifact set (the cold-start
+audit may run on them read-only before then).
+
 ## Lean operating mode (observed 2026-09-23/24)
 
 When the coordinator's own tokens are the scarce resource, the binding tightens:
@@ -38,7 +42,3 @@ When the coordinator's own tokens are the scarce resource, the binding tightens:
 - A finished worker is thanked and writes its own entry in the off-duty waiting list (session id, working directory, window, role, exact resume command, what it would pick up, one or two things worth keeping), commits it, and exits. New work starts in a fresh worker.
 
 A non-normative example from the chaos launch: seven lanes on Opus 5.5 in a `chaos` tmux session, briefed by file, councils and landings inside the lanes, sixty-six PRs on master in one day at about 0.45 percent of a weekly quota each, the coordinator's own share of spend at two percent.
-
-v0 note: this file is the only binding. Codex CLI and Antigravity bindings
-are deferred until the first sprint proves the artifact set (the cold-start
-audit may run on them read-only before then).
