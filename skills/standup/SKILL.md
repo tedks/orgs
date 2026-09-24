@@ -24,6 +24,8 @@ samples the bus for pending steering **after** it, and forces a nonzero exit
 (87) on a pending halt even when the command itself succeeded — so a redirect
 or halt is pushed into the agent's view at a point it cannot rabbit-hole past.
 
+The forced observe is one message out and one message back. The coordinator sends the standup word; each worker answers with at most six lines, in its own words: what is in flight and what the current commit does; what is next; what tests cover the change and what is untested; what it would cut if the deadline demanded; what here repeats work elsewhere; blockers or questions. A worker that cannot say these six things is the finding. The coordinator answers only where something is off.
+
 ## Convening
 
 On a **trigger** — budget tripwire, stop condition, `crystal-conflict`, blocked
@@ -42,6 +44,10 @@ past the roster's threshold, an interface change — or on the roster's
   deviation adjudications, redirects, contract-change proposals. Decisions are
   proposals until reconciled against head; invalidated speculative work is
   preserved, never auto-discarded.
+
+The digest is read as a critic, with five questions asked of every item: do we need this; is it over-engineered beyond what the deadline requires; does it repeat another worker or the framework; is there a path without a test, or a negative assertion without its positive twin; is there an obvious mistake. Silence is the answer to an item that passes all five.
+
+Inside a worker that itself runs sub-workers, the standup is event-driven, not timed: a sub-worker's report at each task boundary is its standup, and the worker checks the diff against the brief before the next task begins.
 
 ## Standalone
 

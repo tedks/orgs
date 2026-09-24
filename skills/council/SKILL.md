@@ -39,6 +39,10 @@ Identity is the **model provider**, not the CLI name. Let `me` = my provider:
 - Warm-chain a seat across rounds (`ask-agent --resume`, identity-verified each
   round) so the seat that found an issue re-verifies its own fix.
 
+### Quota-scarce ordering
+
+When a foreign provider's quota is the scarce resource, order the seats: the own-provider seat runs to fixpoint first, so the foreign seat reviews a clean diff and spends one pass rather than three. Then one foreign pass; a second only when the fix it demanded touches money or authority. A missing foreign seat stays a missing seat, noted in the record and filed as a backfill review to run when quota returns. Landing with the seat empty is an operator decision that only the CEO makes, logged as such; it is never written up as convergence.
+
 ## Each seat gets a fresh pack
 
 Assemble every seat's prompt with `orgs-pack` as a **judgment pack**: the frozen
@@ -66,6 +70,8 @@ Foreign seats can't read your files; inline the material in the prompt.
    empty seat is not CLEAN and does not count toward the fixpoint; if a
    required provider stays unavailable, escalate to the CEO rather than
    declaring convergence). That is the fixpoint.
+
+The council may be run by the worker that owns the change, seating a fresh own-provider subagent and the foreign seats itself, triaging and converging in place, and posting each round's record on the change. The coordinator then reads the record, not the verdicts. This is the lean regime, for when the coordinator's context is the scarce resource; it trades the coordinator's second reading for the record, the gates and the critic's standup, and it is what standing authority makes safe.
 
 ## Non-negotiables (each cost a night or a lesson)
 
