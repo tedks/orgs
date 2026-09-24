@@ -26,6 +26,19 @@ good engineering"): every role prompt begins with the DOCTRINE.md prompt
 block verbatim, then the role's hat ("you are the L5 lead for entity X…"),
 then the context manifest contents. The design doc always rides whole.
 
+## Lean operating mode (observed 2026-09-23/24)
+
+When the coordinator's own tokens are the scarce resource, the binding tightens:
+
+- A worker is a Claude Code session in its own tmux window and git worktree, spawned with the strongest model and briefed from a file; its resume id is recorded so it can be brought back for its own work. Inside it, edits and gate runs go to Sonnet-class subagents with tight briefs and twenty-line reports; logs go to Haiku-class readers that return the failing assertion with file and line.
+- Messages to the coordinator take fixed forms and nothing else: `LANDED #<n> <sha>`; `<worker> (<window>): BLOCKED: <one line>`; `<worker> (<window>): NEEDS RULING: <one line>`; `<worker> (<window>): COMPACT ME`; the six-line standup reply; a one-line answer. The origin prefix is used only when the message does not already carry its origin.
+- Workers message each other directly for dependencies; nothing routes through the coordinator that needs no judgment.
+- Compaction is sent into the worker's window as the `/compact <focus>` slash command by the coordinator, via the send helper, because a session cannot run a slash command on itself.
+- Readiness is an event-driven table the coordinator keeps from `LANDED`, `BLOCKED` and `NEEDS RULING` messages, so a readiness report is a file read, not a reconstruction.
+- A finished worker is thanked and writes its own entry in the off-duty waiting list (session id, working directory, window, role, exact resume command, what it would pick up, one or two things worth keeping), commits it, and exits. New work starts in a fresh worker.
+
+A non-normative example from the chaos launch: seven lanes on Opus 5.5 in a `chaos` tmux session, briefed by file, councils and landings inside the lanes, sixty-six PRs on master in one day at about 0.45 percent of a weekly quota each, the coordinator's own share of spend at two percent.
+
 v0 note: this file is the only binding. Codex CLI and Antigravity bindings
 are deferred until the first sprint proves the artifact set (the cold-start
 audit may run on them read-only before then).
