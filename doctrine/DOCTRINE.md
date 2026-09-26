@@ -225,9 +225,12 @@ open decisions and their owners, owned processes and leases and their
 release, outstanding or ambiguous sends that must not be replayed, and the
 first bounded next action. The provider-native resume handle comes last;
 the shard must not require it. Personal thanks and the off-duty invitation
-stay apart from operational recovery. Verify the shard is committed and
-pushed where a remote is configured, record a handoff receipt, then request
-exit; confirm the exit and the release of owned resources before marking
+stay apart from operational recovery. Shards hold session ids, panes and
+paths, so they go only to a private location (the off-duty repo, private
+on GitHub as `tedks/off-duty`, or the project's private records) and are
+pushed only to a private remote, never to a public repo. Verify the shard
+is committed there and pushed where a private remote is configured, record
+a handoff receipt, then request exit; confirm the exit and the release of owned resources before marking
 the lane RETIRED. A failed handoff blocks exit; an exit failure leaves
 retirement pending. Public audit records cite sanitized evidence, never
 private session content.
@@ -378,7 +381,7 @@ The distilled form, packed verbatim into every role prompt:
 > is not global idle. Name active children truthfully and surface urgent
 > blockers. Thank retiring lanes; verify the lane's handoff shard (one file
 > per session, never a shared append) is privately committed, and pushed
-> where a remote is configured, before exit; confirm exit/resource release before marking
+> only to a private remote, before exit; confirm exit/resource release before marking
 > RETIRED.
 > A question is not a cancellation: answer and re-enter the mission; only the named
 > authority's explicit pause, a tripped stop condition or the acceptance
