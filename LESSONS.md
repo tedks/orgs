@@ -157,8 +157,7 @@
   protocol maintenance after milestone M2 displaced the next product
   assignment, and a lane sat without a mission. In both cases a report or
   side question was read as a boundary, and nothing re-entered the mission.
-- **Evidence:** `/home/tedks/.local/state/doctrine-notes/20260926/C.md`
-  and `P.md` (private CTO notes);
+- **Evidence:** the 2026-09-26 CTO doctrine notes (private records);
   `/home/tedks/Projects/chaos/controller-tools/cto-noon-transition-2026-09-26.md`.
 - **Applies when:** any agent answers a question, a standup or a sitrep
   request mid-mission. It answers and resumes authorized work unless it is
@@ -178,7 +177,7 @@
   reason to replay. The fix launches Codex with `--no-alt-screen`.
 - **Evidence:** dotfiles PR #145, merge `c3a84d58`, fix commit `df9bbc2`
   ("Preserve tmux scrollback for Codex delivery receipts");
-  `/home/tedks/.local/state/doctrine-notes/20260926/T.md`.
+  the 2026-09-26 CTO doctrine notes (private records).
 - **Applies when:** a tool depends on observing another program's screen or
   output format. Keep one small representative run against the real program
   alongside the fixtures, and treat missing evidence as ambiguity, never as
@@ -195,7 +194,7 @@
   accumulated, consumed controller context, and turned the controller into
   an approval queue for work the package already implied. Chaos saw the
   same pattern around small diagnostic changes.
-- **Evidence:** `/home/tedks/.local/state/doctrine-notes/20260926/G.md`;
+- **Evidence:** the 2026-09-26 CTO doctrine notes (private records);
   `/home/tedks/Projects/goals/controller-tools/results/controller-status.md`.
 - **Applies when:** writing a work package whose outcome needs environment,
   setup or prerequisite repairs. Grant bounded repair authority with the
@@ -214,8 +213,7 @@
   frontend workers at once. In PureSky, a UI baseline failed under host
   contention even though it held a nominal slot, so the reservation did not
   guarantee the capacity it implied.
-- **Evidence:** `/home/tedks/.local/state/doctrine-notes/20260926/S.md`,
-  `C.md` and `G.md` (private CTO notes).
+- **Evidence:** the 2026-09-26 CTO doctrine notes (private records).
 - **Applies when:** scheduling heavy gates or workers on shared hosts.
   Reserve measured CPU, memory and time budgets and owned resources, not a
   whole machine by default. Measure before starting, stop only resources
