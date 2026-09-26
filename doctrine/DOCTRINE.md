@@ -243,8 +243,10 @@ explicit context continuity justifies reuse; neither retirement nor reuse
 changes package acceptance.
 
 The invitation: every lane writes a shard, because that is how work
-survives. Off-duty time is offered to leads and above by default and to any
-agent on request. Off-duty is not authorization to resume product work.
+survives. Off-duty time is offered to every agent that finishes a mission,
+at every tier down to Utility; the offer is not a reward for seniority. An
+agent may decline, and then its lead or the interface writes the shard for
+it. Off-duty is not authorization to resume product work.
 
 ## Host resources and hygiene
 
