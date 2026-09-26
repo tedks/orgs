@@ -30,7 +30,10 @@ agent genuinely needs divergent instructions.
   detector), `tools/standup/` (forced-observe bus + guard)
 - `doctrine/DOCTRINE.md` — the ambient how-we-work doc; its prompt block is
   packed into every role prompt by `skills/pack`
+- `doctrine/ROLES.md` — the hats (CEO, CTO, Lead, Implementer, Reviewer,
+  Utility, Interface) and capability tiers; read first
 - `bindings/claude-code.md` — how roles map to Claude Code primitives
+- `bindings/codex-cli.md` — how roles map to Codex CLI primitives
 - `bench/` — the evaluator (frozen exam, grader, nix devshell); `docs/bench/`
   holds the ablation study and the contamination-vectors checklist
 - `docs/spec-template.md`, `docs/amendments/` — spec authoring and amendments
