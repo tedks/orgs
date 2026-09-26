@@ -76,8 +76,9 @@ When the coordinator's own tokens are the scarce resource:
   through the coordinator that needs no judgment.
 - Compaction: the worker saves durable state, then sends `COMPACT ME`. A peer
   delivers bare `/compact` into its pane over `tmux-message` and confirms the
-  compaction event. A message is text; it never runs a harness command on the
-  recipient. This stays until the harness-control MCP lands.
+  compaction event. That bare `/compact` is the only harness command a peer
+  types; an ordinary message asking the worker to compact runs nothing. This
+  stays until the harness-control MCP lands.
 - A finished lane follows the doctrine's retirement contract: thank it,
   verify its handoff shard (one file per session, never a shared append) is
   committed and pushed, request exit, and confirm exit and resource release.

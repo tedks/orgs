@@ -17,8 +17,11 @@ after that.
 - Records over chat. Routine progress goes to durable records. The human
   hears decisions, blockers, changed state and requested sitreps.
 - Messages go over the shared tmux transport with receipts; the global
-  instructions carry the rules. A message is text; it never runs a harness
-  command on the recipient.
+  instructions carry the rules. A message is text: asking an agent to run a
+  harness command does not run it. The one harness command a peer delivers
+  is a bare `/compact` typed into the recipient's empty composer, under the
+  same input-protection checks as any delivery, and confirmed by the
+  compaction event, never by the send.
 - Every task boundary runs the boundary ritual (doctrine, *Economy of
   context*): inspect the diff, disposition the evidence, release what you
   own, push, rewrite the current-state header, then continue, compact, hand
