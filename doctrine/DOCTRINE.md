@@ -260,8 +260,9 @@ kill a peer's process, delete a peer's cache or mutate a shared tag.
 Deleting is enumerated. Build the candidate list into a file with find or
 the tool's own listing, review it against live worktrees and lane records,
 then delete from the file. No recursive delete on a glob or on a
-variable-only path. Sweeps run in a fresh Utility-tier agent with the list
-as its brief. Shared temporary directories are never glob-deleted. At every
+variable-only path. The owning lane builds and reviews the list; the sweep
+then runs in a fresh Utility-tier agent whose brief is exactly that
+reviewed list, and anything not on it is left alone. Shared temporary directories are never glob-deleted. At every
 boundary a lane releases what it owns: it stops its servers, tears down its
 stacks, prunes its own artifacts, and says what it left behind on purpose.
 
