@@ -377,8 +377,8 @@ The distilled form, packed verbatim into every role prompt:
 > actions and settle receipts before a quiet final reply; quiescent controller
 > is not global idle. Name active children truthfully and surface urgent
 > blockers. Thank retiring lanes; verify the lane's handoff shard (one file
-> per session, never a shared append) is committed, and pushed where a remote
-> is configured, before exit; confirm exit/resource release before marking
+> per session, never a shared append) is privately committed, and pushed
+> where a remote is configured, before exit; confirm exit/resource release before marking
 > RETIRED.
 > A question is not a cancellation: answer and re-enter the mission; only the named
 > authority's explicit pause, a tripped stop condition or the acceptance
