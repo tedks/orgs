@@ -14,3 +14,50 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-09-26T18:32:43-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Nits from the PR #21 council (rounds 1-6, final CLEAN at a1f7472). None
+    were applied in the PR.
+
+
+    1. DOCTRINE "Favor shelling out" puts bounded implementation at the Lead and Implementer
+    tiers, while ROLES treats Lead as a coordinator hat. Say that tiers are capabilities,
+    not roles. (agy + Anthropic)
+
+    2. ROLES lets a Reviewer be any tier, but DOCTRINE puts judgment and audit at
+    Frontier, and ROLES says Utility makes no judgment calls. State the allowed reviewer
+    tiers. (OpenAI)
+
+    3. The LESSONS entry "A status reply is not the end of a mission" says "explicitly
+    paused, blocked or done". Doctrine''s three mission enders are an explicit pause,
+    a tripped stop condition, and acceptance evidence in hand. Align the wording.
+    (Anthropic)
+
+    4. "never permanent doctrine" in the Provider budget bullet is unclear. It seems
+    to mean an outage never becomes a rule. (Anthropic)
+
+    5. ROLES gives the CTO "merges of gated clean work" and the Lead "normal merge".
+    Say who merges what. (Anthropic)
+
+    6. The tier table is duplicated in both bindings and will drift. Keep one copy
+    and link to it. (Anthropic)
+
+    7. The repo mixes the README''s L3-L7 levels (also in the work-package template
+    and skills/pack) with ROLES tier names. Pick one vocabulary or document the mapping
+    in one place. (Anthropic)
+
+    8. The dotfiles agent-spawn.sh cannot select a Claude model (--model is Codex-only),
+    so a Claude successor cannot be launched at a chosen tier. This is a launcher
+    gap in the dotfiles repo. (Anthropic)
+
+    9. For a CTO successor, the Claude binding''s tier-mismatch rule sends the decision
+    to "the CTO", which is the role being replaced. Name who decides, presumably the
+    CEO or the Interface role. This assigns authority, so it needs the operator. (Anthropic)
+
+    10. The Codex exit command was verified only by string inspection of the 0.157.1
+    binary. Confirm /exit or /quit with a live retirement and drop the "unverified"
+    mark. (Anthropic)
+
+    11. Several edited paragraphs in DOCTRINE.md and both bindings have uneven line
+    wrapping. This is cosmetic. (Anthropic)'
