@@ -20,11 +20,15 @@ after that.
 - Interactive sessions message over the shared tmux transport with
   receipts; the global instructions carry the rules. A native subagent
   uses its host's messaging primitive instead, as the binding says. A
-  message is text: asking an agent to run a
-  harness command does not run it. The one harness command a peer delivers
-  is a bare `/compact` typed into the recipient's empty composer, under the
-  same input-protection checks as any delivery, and confirmed by the
-  compaction event, never by the send.
+  message is text: asking an agent to run a harness command does not run
+  it. The only harness commands a peer delivers are a bare `/compact` and
+  the bare exit command, each typed into the recipient's empty composer
+  under the same input-protection checks as any delivery. `/compact` is
+  confirmed by the compaction event; exit is sent only after the handoff
+  shard's receipt is recorded, and is confirmed by observing the pane's
+  process end, never by the send and never by a kill. Until that is
+  observed, retirement is pending exit. This stays until the harness-control
+  MCP lands.
 - Every task boundary runs the boundary ritual (doctrine, *Economy of
   context*): inspect the diff, disposition the evidence, release what you
   own, push, rewrite the current-state header, then continue, compact, hand

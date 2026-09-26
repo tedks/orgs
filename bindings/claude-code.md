@@ -19,7 +19,7 @@ that's the portability claim the cold-start audit tests.
 | Deterministic fan-out (enumerated sprint, fixed task list) | `Workflow` tool — only for the mechanical middle; decomposition and redirection stay with the live lead |
 | Team isolation | git worktrees per team/branch (bare-repo layout); packing lists via prompt assembly |
 | Handoff and migration | A retirement followed by a spawn. The outgoing agent's handoff shard becomes the successor's brief, and the successor is launched with `agent-spawn.sh` on the new provider. The launcher's `--model` option applies to Codex only, so today a Claude successor starts on its configured default model; the roster records the model actually selected, and if it differs from the lane's assigned tier the successor is not briefed until the CTO, who decides tier per lane (ROLES.md), disposes of the mismatch. Nobody fixes it by typing into the successor's pane. See doctrine, *Quiet coordination and lifecycle*, and [doctrine/ROLES.md](../doctrine/ROLES.md). |
-| Harness self-control | **Pending** the harness-control MCP. Until it lands, a session cannot compact itself: it asks with `COMPACT ME`, and a peer sends bare `/compact` over `tmux-message`. |
+| Harness self-control | **Pending** the harness-control MCP. Until it lands, a session cannot compact or exit itself: it asks with `COMPACT ME`, and a peer sends bare `/compact` over `tmux-message`; at retirement a peer types bare `/exit` (see Lean operating mode). |
 | Codex seat sessions | `codex exec resume <id> -` (append, single writer) / `codex exec fork <id> -` (non-mutating branch) |
 | agy seat sessions | `--conversation <id>` headless; ids via `--log-file` scrape or `~/.gemini/antigravity-cli/conversations/` |
 
@@ -64,10 +64,14 @@ When the coordinator's own tokens are the scarce resource, the binding tightens:
 - Readiness is an event-driven table the coordinator keeps from `LANDED`, `BLOCKED` and `NEEDS RULING` messages, so a readiness report is a file read, not a reconstruction.
 - A finished lane follows the doctrine's retirement contract and STATES lane
   lifecycle: thank it, verify its handoff shard (one file per session, never
-  a shared append) is committed, and pushed where a remote is configured,
-  then request exit through the
-  binding and confirm resource release. Never infer
-  retirement from the sender's exit code. New missions start in fresh lanes
+  a shared append) is committed and pushed per the doctrine's
+  shard-privacy rule, and record the handoff receipt. Only then a peer types
+  bare `/exit` into the lane's empty composer over `tmux-message`, under the
+  same input-protection checks as `/compact`. The receipt is the pane's
+  process ending, observed; never a kill. Until then retirement is pending
+  exit; confirm resource release before marking the lane RETIRED. Never infer
+  retirement from the sender's exit code. This stays until the
+  harness-control MCP lands. New missions start in fresh lanes
   unless exact context continuity is explicitly justified.
 - The installed dotfiles `spawn-agent` delivery helper owns typing protection,
   bounded backoff and submission mechanics. Follow its documented outcomes;
