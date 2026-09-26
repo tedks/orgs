@@ -380,8 +380,8 @@ The distilled form, packed verbatim into every role prompt:
 > is configured, before exit; confirm exit/resource release before marking
 > RETIRED.
 > A question is not a cancellation: answer and re-enter the mission; only the named
-> authority's explicit pause, a tripped stop condition or accepted evidence
-> ends it, and a pause outlives quota resets. At DONE, assign the next
+> authority's explicit pause, a tripped stop condition or the acceptance
+> evidence in hand ends it, and a pause outlives quota resets. At DONE, assign the next
 > bounded mission or record the lane idle. Favor shelling out: pick the tier
 > for the task and keep Frontier context for judgment. At each boundary
 > inspect the diff, release owned resources, push, rewrite the current-state
