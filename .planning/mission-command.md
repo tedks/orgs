@@ -16,7 +16,7 @@ A lead can delegate bounded work, verify what actually passed, deliver control m
 
 ## Surprises & Discoveries
 
-PR #19 already added standing authority, lane-owned councils and silence on healthy standups. The roster still says 30 minutes and review still requires hypothetical CI. The remote exists despite the stale AGENTS note. Lane-10's measured worker costs contradict a universal claim that coordinator re-reads dominate cost. Transport exit success left the first peer message in the composer; receipt inspection identified it and permitted only an exact-payload Enter retry.
+PR #19 already added standing authority, lane-owned councils and silence on healthy standups. At initial inspection the roster said 30 minutes and review required hypothetical CI; both are now corrected. The remote exists despite the stale AGENTS note. Lane-10's measured worker costs contradict a universal claim that coordinator re-reads dominate cost. Transport exit success left the first peer message in the composer; receipt inspection identified it and permitted only an exact-payload Enter retry.
 
 ## Decision Log
 
@@ -26,7 +26,7 @@ Decision: retain full fresh-context lead review; executive audit is additional w
 
 ## Outcomes & Retrospective
 
-Implementation and review pending. Merge requires the CTO's final evidence audit. Keep the issue in progress until landing; follow-ups must be filed rather than silently dropped.
+Implementation is pushed in draft PR #20. The first Terra review found three protocol gaps (same-SHA approved lead evidence, EMPTY outcome schema, packed delivery procedure); all are being corrected and delta-reviewed. Agy's mission-policy objection to the explicitly Claude-specific binding was rejected with rationale; its initial-state wording nit is fixed. Merge requires the CTO's final evidence audit. Keep the issue in progress until landing; follow-ups must be filed rather than silently dropped.
 
 ## Context and Orientation
 
@@ -59,3 +59,5 @@ No new library or executable interface. Existing doctrine prompt packing, sprint
 Revision note: initial plan records scope, source evidence and acceptance before implementation.
 
 Revision note: implementation now reconciles gate evidence, authorized empty-seat exceptions and a separate lane retirement lifecycle; frozen-head review is next.
+
+Revision note: first review corrections tighten exact-SHA approval, represent EMPTY honestly and deliver operational safety rules in the packed doctrine block; convergence pending.

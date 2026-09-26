@@ -38,7 +38,9 @@ Types: `deviation`, `deviation-adjudicated`, `huddle-convened`,
 `crystal-conflict`, `semantic-deadlock`, `state-change`, `lesson`.
 
 `lead-review` records the one-rung-up lead's fresh-context result for a
-package (outcome: approved / findings `<ids>` / no-finding), the evidence the
+package (outcome: approved/CLEAN / findings `<ids>` / no-finding), with
+the frozen SHA and full-review/fix-delta scope. Only an explicit approved/CLEAN
+result covering the accepted SHA satisfies the evidence the
 work-package ACCEPTED gate requires. `crystal-conflict` records a speculative
 merge conflict (branches + revisions + textual|semantic); `semantic-deadlock`
 records a conflict whose resolution ownership is disputed and awaiting lead
@@ -56,9 +58,14 @@ referencing the deviation's event id (`<actor-id>:<local-seq>`): justified /
 unjustified · one line why.
 
 `review-seat-outcome` records one seat's result for one round (seat · round
-· `findings: <ids>` or `no-finding`), written by the accountable lead as
+· `findings: <ids>` or `no-finding` for a received verdict, or
+`EMPTY: <reason>` for an unavailable seat), written by the accountable lead as
 scribe — external seats have no repo access. `review-clean` closes a review
-at fixpoint, citing the seat-outcome events it rests on.
+at fixpoint for the present seats, citing the seat-outcome events it rests
+on and the frozen SHA covered by the full review and subsequent fix deltas.
+A required EMPTY seat blocks full convergence; any CEO-authorized landing
+exception records issuer, revision, seat, scope, expiry and backfill issue.
+It never changes EMPTY into a received no-finding verdict.
 
 The per-PR findings file (`protocol/templates/review-findings.md`) is a
 **projection** of this ledger: every row cites its `review-finding` /

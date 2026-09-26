@@ -266,6 +266,18 @@ The distilled form, packed verbatim into every role prompt:
 > the source, file the docs bug. Write what you can defend. Delegate explicit
 > authority and stop conditions; bound workers and review each task's diff.
 > Tie acceptance to source/head evidence. Protect human input before control
-> delivery; transport success is not receipt or action completion. Finish
-> requested control work before a quiet final reply, naming active children
-> truthfully. Preserve a verified private resumable handoff before retirement.
+> delivery: human/unknown composer input or a modal means defer with bounded
+> backoff and a timeout; recheck before paste. Streaming output with an empty
+> composer permits delivery. Mixed/ambiguous input means stop: never submit,
+> clear, overwrite or blindly repaste. Keep the outgoing payload private;
+> never log unfinished human input. Transport success is not receipt: verify
+> the exact message in submitted history or an explicit pending queue. A
+> queue receipt is not action completion. Retry submission only for exact
+> own unsent payload with no unrelated input/modal, keeping the same event id;
+> recipients check prior disposition before acting. Screen polling has races,
+> so do not promise atomic typing exclusion. Finish requested spawn/control
+> actions and settle receipts before a quiet final reply; quiescent controller
+> is not global idle. Name active children truthfully and surface urgent
+> blockers. Thank retiring lanes; verify append-only, privately committed
+> resumable handoff (push where configured) without lost concurrent entries
+> before exit; confirm exit/resource release before marking RETIRED.
