@@ -223,7 +223,12 @@ authorization, explicit pauses, worktree, branch and exact heads, tested
 versus merged commits, evidence paths and their limits, failed attempts,
 open decisions and their owners, owned processes and leases and their
 release, outstanding or ambiguous sends that must not be replayed, and the
-first bounded next action. The provider-native resume handle comes last;
+first bounded next action. Open product questions do not live only in the
+shard: before retiring or handing off, the lane files each one as its own
+issue in the project's tracker under an `open-questions` component (the
+options, its recommendation, who decides, what it blocks, the record it
+came from) and links them from the shard. The shard is private and
+per-session; the tracker is where the CEO answers. The provider-native resume handle comes last;
 the shard must not require it. Personal thanks and the off-duty invitation
 stay apart from operational recovery. Shards hold session ids, panes and
 paths, so they go only to a private location (the off-duty repo, private
