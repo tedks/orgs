@@ -81,7 +81,7 @@ When the coordinator's own tokens are the scarce resource:
   stays until the harness-control MCP lands.
 - A finished lane follows the doctrine's retirement contract: thank it,
   verify its handoff shard (one file per session, never a shared append) is
-  committed and pushed, request exit, and confirm exit and resource release.
+  committed, and pushed where a remote is configured, request exit, and confirm exit and resource release.
   Migration to another model or provider is the same shard used as the
   successor's brief, spawned with `agent-spawn.sh` (`--model` sets the
   model for a Codex successor only; see the Claude Code binding for a

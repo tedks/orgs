@@ -64,7 +64,8 @@ When the coordinator's own tokens are the scarce resource, the binding tightens:
 - Readiness is an event-driven table the coordinator keeps from `LANDED`, `BLOCKED` and `NEEDS RULING` messages, so a readiness report is a file read, not a reconstruction.
 - A finished lane follows the doctrine's retirement contract and STATES lane
   lifecycle: thank it, verify its handoff shard (one file per session, never
-  a shared append) is committed and pushed, then request exit through the
+  a shared append) is committed, and pushed where a remote is configured,
+  then request exit through the
   binding and confirm resource release. Never infer
   retirement from the sender's exit code. New missions start in fresh lanes
   unless exact context continuity is explicitly justified.
