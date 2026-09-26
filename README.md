@@ -34,8 +34,13 @@ Design goals:
   well-run engineering org — design review, player-coach leads, written
   standups, blameless retros — rituals models already understand deeply.
 
-No skills are implemented yet; see [docs/spec-template.md](docs/spec-template.md)
-and [skills/README.md](skills/README.md) for the intended shape.
+The protocol is a graph of composable skills under [skills/](skills/README.md),
+rooted at `skills/sprint`. Start with [doctrine/ROLES.md](doctrine/ROLES.md)
+for the hats, then [doctrine/DOCTRINE.md](doctrine/DOCTRINE.md) for how we
+work. Harness bindings map both to real primitives:
+[bindings/claude-code.md](bindings/claude-code.md) and
+[bindings/codex-cli.md](bindings/codex-cli.md). Specs start from
+[docs/spec-template.md](docs/spec-template.md).
 
 ## License
 

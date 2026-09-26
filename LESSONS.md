@@ -149,3 +149,77 @@
 - **Evidence:** chaos-speech PRs #893 through #964 on 2026-09-23; the lane protocol's fifteen points and the landing script in that repo's `docs/process/` and `tools/`; the per-lane spend table in the coordinator's session.
 - **Applies when:** one coordinator drives several implementer agents and its own context or quota is the binding constraint; when landing can be scripted and gate-enforced; when the review record on the change can stand in for the coordinator's second reading.
 - **Reconsider when:** the harness lets a session compact itself or hold tool output out of band, which removes the reason for the coordinator/worker split; when a foreign review seat is reliably available, which removes the quota-scarce ordering; when a landed change shows the record-plus-gates regime missing a class of defect the coordinator's own reading would have caught.
+
+## 2026-09-26 — A status reply is not the end of a mission
+
+- **What happened:** in the Chaos org, lanes B and H went idle after
+  answering standups while authorized work remained. In PredictionBook,
+  protocol maintenance after milestone M2 displaced the next product
+  assignment, and a lane sat without a mission. In both cases a report or
+  side question was read as a boundary, and nothing re-entered the mission.
+- **Evidence:** `/home/tedks/.local/state/doctrine-notes/20260926/C.md`
+  and `P.md` (private CTO notes);
+  `/home/tedks/Projects/chaos/controller-tools/cto-noon-transition-2026-09-26.md`.
+- **Applies when:** any agent answers a question, a standup or a sitrep
+  request mid-mission. It answers and resumes authorized work unless it is
+  explicitly paused, blocked or done. At DONE, the controller assigns the
+  next bounded mission or records why the lane stays idle. The rule now
+  lives in doctrine as "Mission continuation".
+- **Reconsider when:** a scheduler or dispatcher reassigns idle lanes
+  mechanically, so continuation no longer depends on each agent's discipline.
+
+## 2026-09-26 — A small real smoke test found what fixtures did not
+
+- **What happened:** the shared tmux sender passed its behavior tests and
+  its deterministic live-terminal test. A small smoke against a real Codex
+  session then accepted a long message but lost its receipt, because the
+  session ran in alternate-screen mode and the first rows of the receipt
+  never reached tmux scrollback. The rule held: missing evidence is not a
+  reason to replay. The fix launches Codex with `--no-alt-screen`.
+- **Evidence:** dotfiles PR #145, merge `c3a84d58`, fix commit `df9bbc2`
+  ("Preserve tmux scrollback for Codex delivery receipts");
+  `/home/tedks/.local/state/doctrine-notes/20260926/T.md`.
+- **Applies when:** a tool depends on observing another program's screen or
+  output format. Keep one small representative run against the real program
+  alongside the fixtures, and treat missing evidence as ambiguity, never as
+  a reason to resend. The rule now lives in doctrine under "Verification
+  is a waterfall" (Good engineering).
+- **Reconsider when:** the harness exposes a structured receipt (a queue API
+  or a control channel with typed results), so screen observation is no
+  longer the evidence.
+
+## 2026-09-26 — Approval accumulates around bounded repairs
+
+- **What happened:** Goals Android work needed repeated controller rulings
+  for setup and test-harness prerequisites. Each ruling was small, but they
+  accumulated, consumed controller context, and turned the controller into
+  an approval queue for work the package already implied. Chaos saw the
+  same pattern around small diagnostic changes.
+- **Evidence:** `/home/tedks/.local/state/doctrine-notes/20260926/G.md`;
+  `/home/tedks/Projects/goals/controller-tools/results/controller-status.md`.
+- **Applies when:** writing a work package whose outcome needs environment,
+  setup or prerequisite repairs. Grant bounded repair authority with the
+  outcome. Escalate changed intent, changed risk, changed evidence
+  requirements or an exhausted attempt budget, not each attempt. The rule
+  now lives in each package as "repair authority" (`doctrine/DOCTRINE.md`,
+  Standing authority; `doctrine/ROLES.md`).
+- **Reconsider when:** a repair turns out to cross a contract boundary or
+  cause an irreversible effect often enough that per-attempt review would
+  have caught it.
+
+## 2026-09-26 — A reservation grants scope, not capacity
+
+- **What happened:** whole-host reservations serialized independent work in
+  Chaos and Goals, hiding real spare capacity; Goals later ran eight
+  frontend workers at once. In PureSky, a UI baseline failed under host
+  contention even though it held a nominal slot, so the reservation did not
+  guarantee the capacity it implied.
+- **Evidence:** `/home/tedks/.local/state/doctrine-notes/20260926/S.md`,
+  `C.md` and `G.md` (private CTO notes).
+- **Applies when:** scheduling heavy gates or workers on shared hosts.
+  Reserve measured CPU, memory and time budgets and owned resources, not a
+  whole machine by default. Measure before starting, stop only resources
+  you own, and let peers coordinate leases directly. The rule now lives in
+  doctrine as "Host resources and hygiene".
+- **Reconsider when:** hosts enforce resource isolation (cgroups, per-lane
+  VMs), so a reservation does guarantee capacity.
