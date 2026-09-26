@@ -34,11 +34,26 @@ audit may run on them read-only before then).
 
 When the coordinator's own tokens are the scarce resource, the binding tightens:
 
-- A worker is a Claude Code session in its own tmux window and git worktree, spawned with the strongest model and briefed from a file; its resume id is recorded so it can be brought back for its own work. Inside it, edits and gate runs go to Sonnet-class subagents with tight briefs and twenty-line reports; logs go to Haiku-class readers that return the failing assertion with file and line.
+- A worker is a Claude Code session in its own tmux window and git worktree, spawned with the capability selected in the roster and briefed from a file; its resume id is recorded so it can be brought back for its own work. Inside it, bounded tactical subagents use tight briefs and concise acceptance reports. Model tiers and concurrency come from the roster, not this historical example.
 - Messages to the coordinator take fixed forms and nothing else: `LANDED #<n> <sha>`; `<worker> (<window>): BLOCKED: <one line>`; `<worker> (<window>): NEEDS RULING: <one line>`; `<worker> (<window>): COMPACT ME`; the six-line standup reply; a one-line answer. The origin prefix is used only when the message does not already carry its origin.
 - Workers message each other directly for dependencies; nothing routes through the coordinator that needs no judgment.
-- Compaction is sent into the worker's window as the `/compact <focus>` slash command by the coordinator, via the send helper, because a session cannot run a slash command on itself.
+- Compaction is sent into the worker's window as bare `/compact` after durable state is saved (long focus text may be delivered as an ordinary message, not a slash-command argument) by the coordinator, via the send helper, because a session cannot run a slash command on itself.
 - Readiness is an event-driven table the coordinator keeps from `LANDED`, `BLOCKED` and `NEEDS RULING` messages, so a readiness report is a file read, not a reconstruction.
-- A finished worker is thanked and writes its own entry in the off-duty waiting list (session id, working directory, window, role, exact resume command, what it would pick up, one or two things worth keeping), commits it, and exits. New work starts in a fresh worker.
+- A finished lane follows the doctrine's retirement contract and STATES lane
+  lifecycle: thank it, verify a private append-only resumable handoff, then
+  request exit through the binding and confirm resource release. Never infer
+  retirement from the sender's exit code. New missions start in fresh lanes
+  unless exact context continuity is explicitly justified.
+- The installed dotfiles `spawn-agent` delivery helper owns typing protection,
+  bounded backoff and submission mechanics. Follow its documented outcomes;
+  inspect application receipt separately. Before sending, protect human or
+  unknown composer input and modals; output generation alone does not prohibit
+  pending delivery. Mixed input stops submission. Tmux screen polling cannot
+  guarantee atomic exclusion. Do not assume the helper enforces a contract
+  until its reviewed version is installed and verified; defer if protection
+  or receipt cannot be established. Portable policy is in doctrine, not a
+  second sender implementation here.
+- Final replies follow controller quiescence, with continuing children named
+  accurately. Routine events update records; urgent blockers still surface.
 
 A non-normative example from the chaos launch: seven lanes on Opus 5.5 in a `chaos` tmux session, briefed by file, councils and landings inside the lanes, sixty-six PRs on master in one day at about 0.45 percent of a weekly quota each, the coordinator's own share of spend at two percent.

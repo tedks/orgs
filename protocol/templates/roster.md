@@ -20,9 +20,21 @@ gets a fresh context regardless.
 
 ## Standup parameters
 
-- **Heartbeat:** <default: every 30 minutes of active work, or on any PR /
-  escalation / Crystal-conflict event, whichever first>
+- **Heartbeat:** <default: every 45 minutes of active work; material events trigger
+  immediate attention, task reports trigger immediate diff review>
 - **Blocked threshold:** <default: blocked longer than one heartbeat →
   convene>
 - **Monitor (who watches the triggers):** <default: each accountable lead
   for their entity's packages>
+
+## Lane authority and resources
+
+Record each lane's mission/package, session and worktree, authority envelope,
+stop conditions and escalation destination; selected capability/model/provider;
+maximum concurrent tactical workers (default two); review-seat budget;
+acceptance evidence and PR/audit links; latest event id and next standup due.
+Track file/host leases by exact scope, holder and resource/run id, with peer
+agreement before acquisition and an explicit release receipt. A request or
+silence does not transfer a lease. Resumption reconciles stale leases with
+the holder before reuse. Retired lanes leave the active cadence roster;
+private resumable handoffs are referenced only by sanitized receipts.

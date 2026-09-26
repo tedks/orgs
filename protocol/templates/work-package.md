@@ -17,6 +17,11 @@
 - **Boundary tests:** <pre-written contract tests this must pass, by path>
 - **Budget:** <tokens and/or wall-clock — soft; exceeding it is normal when
   logged, a tripwire when silent>
+- **Authority:** <actions delegated; required executive audit or merge gate>
+- **Worker bound:** <default two concurrent tactical workers; review each task
+  diff before assigning the next task; record model/provider and budget>
+- **Evidence:** <each acceptance item → command/artifact + source revision,
+  tested head, result, untested cases; exception authority/scope/expiry>
 - **Stop conditions:** <e.g. same test failing 3 distinct ways → reorient or
   escalate>
 - **Escalation destination:** <who adjudicates for this package>

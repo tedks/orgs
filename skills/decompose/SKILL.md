@@ -23,6 +23,10 @@ Templates: `protocol/templates/work-package.md`, `protocol/templates/contract.md
    entity it serves), acceptance criteria in prose, **boundary tests by path**
    (pre-written, first-class artifacts the review evaluates), budget, stop
    conditions, and an escalation destination. One package = one owned scope.
+   Give tactical briefs numbered acceptance items, exact gate commands,
+   explicit STOP conditions for money/design decisions, and a report mapping
+   each item to evidence, untested cases and judgment calls. Required gates
+   cannot be silently dropped as a worker scope decision.
 3. **Necessity challenge** on the decomposition itself — a fresh-context,
    cheap-model seat returns **PROCEED / SIMPLIFY / STOP_AND_ESCALATE** into the
    ledger. One decomposition-level PROCEED satisfies the work-package gate

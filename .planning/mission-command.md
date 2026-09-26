@@ -9,8 +9,8 @@ A lead can delegate bounded work, verify what actually passed, deliver control m
 ## Progress
 
 - [x] (2026-09-25) Read the assignment, PR #19, current doctrine/skills/state tables and source-session practices; claimed ditz `mission-command-quiet-delivery`.
-- [ ] Publish early draft PR with this plan.
-- [ ] Update doctrine, existing skills/templates/state tables and binding caveats.
+- [x] (2026-09-25) Published early draft PR #20 with the plan.
+- [x] (2026-09-25) Updated doctrine, existing skills/templates/state tables and binding caveats.
 - [ ] Validate links, whitespace and scenario walkthroughs; review frozen head with native Terra and foreign agy.
 - [ ] Push evidence, sync ditz and send final audit packet to CTO before merge.
 
@@ -57,3 +57,5 @@ Public artifacts contain generalized practices only, no session transcripts, ide
 No new library or executable interface. Existing doctrine prompt packing, sprint wiring, ledger actor ids and state tables remain canonical. P owns dotfiles sender flags, bounded polling, receipt inspection and installed global instructions; orgs defines the behavior those bindings must provide.
 
 Revision note: initial plan records scope, source evidence and acceptance before implementation.
+
+Revision note: implementation now reconciles gate evidence, authorized empty-seat exceptions and a separate lane retirement lifecycle; frozen-head review is next.

@@ -48,6 +48,18 @@ the present.
 
 Empowered deviation has a steady state: standing authority. Once the CEO has said what the intent is and what the gates are, the coordinator merges what is gated and clean without asking, and spawns, briefs and re-tasks workers toward the Schwerpunkt without asking. It pauses for four things only: money, the CEO's keys or secrets, product scope and rulings, and acts that are irreversible or face outward. Everything else it decides, and it flags the decision inline as it makes it, and in a decision log the CEO reads when they choose. A queue of approvals waiting on one person is the failure this exists to prevent.
 
+Delegate a mission, not an approval queue: each package names intent, owned
+scope, acceptance evidence, authority to act and explicit stop conditions.
+Money, keys, product rulings, irreversible effects and boundary changes stop
+at the named authority; ordinary work inside the envelope proceeds. Standing
+authority does not waive the review ladder or authorize an unstated exception.
+The lane owns its gates, council fixes and evidence. The executive checks the
+final evidence against acceptance, spot-checks risky claims and resolves holes
+before any merge requiring its audit. This selective audit is additional to
+whole-diff package review, not a substitute. Readiness names the criterion
+proved, the source/head and any scoped exception; one successful check never
+makes an entire launch green.
+
 A correction is a message to every recipient of the original, by name. A relayed error that is corrected only at its source lands elsewhere as a ruling.
 
 ### Tempo
@@ -62,11 +74,23 @@ victory, logged as one.
 
 #### Economy of context
 
-Attention is paid for in context. Measured over a week of parallel workers, re-reading context was 85 to 90 percent of all spend; the words the agents produced were under a tenth. So the rules of tempo are rules about context:
+Attention is paid for in context. Measured over a week of parallel workers, re-reading context was 85 to 90 percent of all spend; the words the agents produced were under a tenth. This is an observation from that deployment, not a universal cost model;
+worker test cycles can dominate instead. Measure before choosing a regime.
+The practical rules are:
 
-- A coordinator's context holds judgment, not tool output. Reads, edits, gate runs and log digests happen in fresh, cheap workers that return a few lines; the coordinator never sees the log.
+- A coordinator keeps judgment and concise evidence; tactical workers perform
+  bounded reads, edits and gates. The coordinator inspects the actual diff
+  at every task boundary before the next brief, and reads underlying evidence
+  whenever a report leaves uncertainty. Delegation does not exempt its own edits.
+- Capability tiers are configurable by role, risk and available budget, not
+  timeless model names. Record the selected model and provider. Default to at
+  most two concurrent tactical workers per lane; the roster may set a tighter
+  limit or explicitly authorize a different bound. Review seats are separate
+  roles, with their own budget, not extra editing workers.
 - A fresh context with a precise brief beats a full context with the right history. New work gets a new worker; a finished worker is continued only when the next task needs the exact context it holds.
-- Compaction is a harness act, not a worker's choice. A worker cannot compact itself; the coordinator does it for the worker at task boundaries, and a worker that needs it says so in one line and waits.
+- Compaction follows the binding's lifecycle controls. Save durable state first;
+  if external control is required, request it and wait rather than pretending
+  a message ran a harness command.
 - Provider quota is a budget the coordinator manages. Review seats spend it first; nothing else does until the review seats are safe.
 
 ## Good engineering
@@ -102,6 +126,52 @@ Two test maxims earn their place by the bugs they caught. Unknown never renders 
 
 Verification is a waterfall. The expensive integration run, the one against real external services, measures the state that will ship, so it runs once the layouts are final rather than after each change; running it early buys knowledge that the next change supersedes.
 
+## Quiet coordination and lifecycle
+
+Material events (a block/unblock, ruling request, changed dependency, accepted
+or landed head, resource release, or control failure) update durable records
+and reach the responsible peer promptly. Dependencies and file/host leases go
+directly between their owners, with exact scope, holder, run/resource identity
+and release receipt; unresolved authority goes to the coordinator. Routine
+healthy acknowledgements stay silent. Active lanes give compact standups on
+the roster's cadence, default 45 minutes; task-boundary review is immediate.
+Ledger event ids travel with relays so repeated observations do not create
+new decisions or duplicate work. Silence is never proof of receipt or success.
+
+Before control delivery, inspect for human or unknown unsent input and modals.
+Defer with bounded backoff and a stated timeout; recheck immediately before
+paste. Streaming agent output with an empty composer permits delivery. If
+input becomes mixed or ambiguous, do not submit, clear, overwrite or blindly
+repaste it. Preserve the outgoing payload privately for deliberate retry;
+never record unfinished human text or keys. Screen inspection has races;
+bindings must state their limits and cannot promise atomic typing exclusion.
+Transport exit zero is not application receipt: verify submitted history or
+an explicit pending queue for the exact message. A queued message is received,
+not proof its requested action finished. Retry submission only when the exact
+own payload is unsent and no unrelated input or modal is present. A retry
+retains the event id; the recipient checks prior disposition before acting.
+The binding owns implementation, backoff values and receipt mechanisms.
+
+Complete requested spawn/control actions and resolve their receipts before a
+consolidated final reply; then the controller stays quiescent except for
+material events and requested responses. Controller quiescence means no pending
+requested dispatch/control work, not global idle. State continuing child work
+and its reporting destination accurately. Urgent blockers and questions may
+be answered while children run; healthy worker chatter goes to records rather
+than burying the final answer. Standups continue for active lanes only.
+
+Retirement is a polite, verified handoff, not a kill. Thank the lane; it saves
+session/model, worktree, role, exact resume instructions, unresolved work,
+next authorized action and useful lessons privately. Append to an actor-owned
+shard, or serialize a shared append and reconcile concurrent changes without
+replacing another entry. Verify the preserved prefix and new entry, commit
+and push where a remote is configured, and record a handoff receipt before
+requesting exit. Confirm exit and owned-resource release before marking the
+lane retired. A failed handoff blocks exit; an exit failure leaves retirement
+pending. Public audit records cite sanitized evidence, never private session
+content. New missions get fresh lanes unless explicit context continuity
+justifies reuse; neither retirement nor reuse changes package acceptance.
+
 ## Precedence
 
 On conflict, highest first:
@@ -134,6 +204,8 @@ is gated if it trips any of the three, not only the reversibility one.
 
 ## Glossary
 
+- **Lane** — a coordinator accountable for a delegated mission/work package,
+  with bounded tactical workers and its own gate/review evidence.
 - **Work package** — the delegated unit: intent, instruction, owned scope,
   acceptance criteria, budget, escalation destination.
 - **Deviation** — any departure from instruction or doctrine, logged in one
@@ -191,4 +263,9 @@ The distilled form, packed verbatim into every role prompt:
 > Tests must be able to fail — mutation-check any test that pins a fix.
 > Evidence over claims; smallest defensible change; scope stays put. Read
 > anything, depend only on published contracts, and if you had to find it in
-> the source, file the docs bug. Write what you can defend.
+> the source, file the docs bug. Write what you can defend. Delegate explicit
+> authority and stop conditions; bound workers and review each task's diff.
+> Tie acceptance to source/head evidence. Protect human input before control
+> delivery; transport success is not receipt or action completion. Finish
+> requested control work before a quiet final reply, naming active children
+> truthfully. Preserve a verified private resumable handoff before retirement.

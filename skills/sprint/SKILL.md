@@ -32,7 +32,8 @@ deviation. Assumed everywhere below.
    contract per boundary. Merges only after a council round on the spec is
    CLEAN. → produces the spec + its contracts.
 2. **size** — count boundaries, assign hats (not headcount), instantiate
-   `org/ROSTER.md`. Every artifact type whose trigger fires gets produced no
+   `org/ROSTER.md`, including lane authority, worker bounds, resource leases,
+   audit links and active standup cadence. Every artifact type whose trigger fires gets produced no
    matter how few agents wear the hats; **an unfired trigger (a sprint with no
    escalations) owes nothing.** Sizing is short and lives here.
 3. **[decompose]** — the lead builds the tracer bullet, refines the spec's
@@ -71,7 +72,14 @@ complete record. In the **full** composition:
   blocked past threshold, interface change, or the roster heartbeat.
 - **deviations → adjudicator:** `LOGGED → ADJUDICATED` by the next standup's
   adjudicator.
-- **review → integrate:** each ACCEPTED package flows to integrate immediately.
+- **tactical task → lane:** bounded task reports carry acceptance evidence and
+  judgment calls; the lane reviews each diff before assigning another task.
+- **review → integrate:** each ACCEPTED package flows to integrate immediately,
+  after any executive audit explicitly required by its authority envelope.
+- **lifecycle → ledger:** material control/receipt, resource and retirement
+  events use actor-owned ledger shards; private handoffs stay private. Apply
+  the doctrine's quiet-delivery contract to dispatch and final replies; active
+  children retain their own cadence even when the controller is quiescent.
 
 A variety that omits a skill **also omits that skill's wiring lines**, and
 must re-route anything left dangling — every dependency a remaining skill had

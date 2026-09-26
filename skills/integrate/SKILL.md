@@ -12,7 +12,8 @@ The defense is to integrate **continuously**, not to firewall and hope.
 ## The job
 
 - Merge each package **as it reaches ACCEPTED** (CLEAN review ladder + green
-  boundary tests), promptly — do not batch merges to the end.
+  boundary tests), promptly — do not batch merges to the end. Honor any required executive
+  audit before landing; record it against the final pushed head.
 - Keep the trunk **green against all boundary tests**, not just the merged
   package's own. A merge that reddens another entity's boundary test is a
   semantic conflict — hand it back through `orgs-crystal`'s ownership rules
@@ -21,7 +22,10 @@ The defense is to integrate **continuously**, not to firewall and hope.
 
 ### Delegated landing
 
-The integration owner may be the worker that made the change, when landing is a scripted act rather than a judgment: merge the trunk into a detached copy of the change; run the gates on that union, only those the union changes; push the union to the branch; merge with a normal merge; verify the trunk's tree equals the union; only then close the tracker items and post the record. The script stops at its first failure and says why, and a lock keeps two landings from racing. Smokes that need artifacts a scratch checkout lacks run in the worker's own checkout on the union head and are recorded by note. The coordinator's standing authority covers the merge; the script is the integration owner's judgment written down.
+The integration owner may be the worker that made the change, when landing is a scripted act rather than a judgment: merge the trunk into a detached copy of the change; run the gates on that union, only those the union changes; push the union to the branch; merge with a normal merge; verify the trunk's tree equals the union; only then close the tracker items and post the record. If the union changes the audited head, refresh affected gate/review evidence
+and obtain any required renewed audit before merging. A release receipt names
+the merged head and resource/run ids released; a process exit alone proves
+neither release nor delivery. The script stops at its first failure and says why, and a lock keeps two landings from racing. Smokes that need artifacts a scratch checkout lacks run in the worker's own checkout on the union head and are recorded by note. The coordinator's standing authority covers the merge; the script is the integration owner's judgment written down.
 
 ## Handoff
 
