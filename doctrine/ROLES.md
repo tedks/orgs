@@ -32,7 +32,8 @@ after that.
 - Every task boundary runs the boundary ritual (doctrine, *Economy of
   context*): inspect the diff, disposition the evidence, release what you
   own, push, rewrite the current-state header, then continue, compact, hand
-  off or retire explicitly.
+  off or retire explicitly. At hand-off or retirement, every open product
+  question becomes a tracker issue under `open-questions` first.
 - A question is not a cancellation. Answer it and re-enter the mission.
 
 ## CEO (the human)
