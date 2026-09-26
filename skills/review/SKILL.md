@@ -1,6 +1,6 @@
 ---
 name: orgs-review
-description: The accountable lead's one-rung-up review to fixpoint. Freeze the target at a named immutable revision, review with fresh context (never the implementer's transcript), give one feedback round before any takeover, and repeat on the fix delta until CLEAN. Council CLEAN + this review CLEAN = ACCEPTED; merge only CLEAN + CI green (once CI exists).
+description: The accountable lead's one-rung-up review to fixpoint. Freeze the target at a named immutable revision, review with fresh context (never the implementer's transcript), give one feedback round before any takeover, and repeat on the fix delta until CLEAN. Council CLEAN + this review CLEAN = ACCEPTED; merge only CLEAN + applicable local gates on the exact head.
 ---
 
 # orgs-review — the lead's one-rung-up review
@@ -42,7 +42,16 @@ review cannot be pinned to the named revision (e.g. it read a working tree),
 4. **Repeat on the fix delta to fixpoint.** Re-review only the delta since the
    last-reviewed sha — that is where fix-introduced regressions hide. A round
    is CLEAN when it produces no new actionable finding.
-5. Merge only **CLEAN + CI green (once CI exists)**.
+5. Acceptance requires **CLEAN + applicable local gates on the exact head**.
+   Match each acceptance sentence to source/head-specific evidence and note
+   untested cases. A changed head invalidates affected evidence; rerun affected
+   gates and review the delta. An authorized exception must name its issuer,
+   criterion, scope and expiry; never promote it to blanket readiness.
+
+When authority requires an executive audit, send the final acceptance map,
+pushed head, gate commands/results, council record, exceptions and unresolved
+items before merge. The executive selectively spot-checks and resolves holes;
+this does not replace this skill's fresh-context whole-diff lead review.
 
 ## Rules that cost us to learn
 

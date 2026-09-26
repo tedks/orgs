@@ -32,7 +32,13 @@ placed there by the sprint's root — this skill does not assume any.
 
 Before handing off, **self-review against the acceptance criteria** — this is
 the first rung of the review ladder and it is yours. Then push a committed,
-quiescent head; the review ladder (`orgs-council`, then the lead's
+quiescent head with each acceptance item mapped to its command/artifact,
+source revision and tested SHA, result and untested cases. Run long gates in
+one supervised operation and report completion or a material blocker once;
+repeated "waiting" messages are not progress. Reuse a test environment only
+under an agreed lease and with rerunnable fixtures that reset their own state.
+A "pre-existing" failure needs comparison with the same base in a controlled
+environment; stale dependencies are not a waiver. The review ladder (`orgs-council`, then the lead's
 `orgs-review`) runs against that frozen sha.
 
 ## When you hit friction

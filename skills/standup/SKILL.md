@@ -30,7 +30,8 @@ The forced observe is one message out and one message back. The coordinator send
 
 On a **trigger** — budget tripwire, stop condition, `crystal-conflict`, blocked
 past the roster's threshold, an interface change — or on the roster's
-**heartbeat**. Each accountable lead monitors the triggers for their entity.
+**heartbeat** (default 45 minutes of active work). Keep the active roster
+and next due time centrally; retired lanes are not polled. Each accountable lead monitors the triggers for their entity.
 
 ## Run the standup
 
@@ -44,6 +45,10 @@ past the roster's threshold, an interface change — or on the roster's
   deviation adjudications, redirects, contract-change proposals. Decisions are
   proposals until reconciled against head; invalidated speculative work is
   preserved, never auto-discarded.
+
+Relay material events with their original ledger ids and evidence links;
+deduplicate effects, not independent observations. Healthy receipts need no
+extra acknowledgement; missing replies remain unknown, never CLEAN.
 
 The digest is read as a critic, with five questions asked of every item: do we need this; is it over-engineered beyond what the deadline requires; does it repeat another worker or the framework; is there a path without a test, or a negative assertion without its positive twin; is there an obvious mistake. Silence is the answer to an item that passes all five.
 

@@ -22,11 +22,11 @@ tests exactly this).
 | CLAIMED | IN_PROGRESS | worker | context manifest committed |
 | IN_PROGRESS | BLOCKED | worker | blocking dependency, filed escalation, or open huddle named |
 | BLOCKED | IN_PROGRESS | worker | blocker resolved, entry references resolution |
-| IN_PROGRESS | REVIEW | worker | PR open; self-review done; acceptance criteria addressed with evidence |
+| IN_PROGRESS | REVIEW | worker | PR open; self-review done; acceptance items mapped to source/head-specific evidence and untested cases |
 | REVIEW | REWORK | reviewing lead | findings ledger entries (severity + evidence) |
 | REWORK | REVIEW | worker | fix delta referenced; only the delta re-reviewed |
-| REVIEW | ACCEPTED | accountable lead | council round CLEAN; one-rung-up `lead-review` event recorded (fresh context); findings all dispositioned |
-| ACCEPTED | INTEGRATED | integration owner | merged; contract tests green at head |
+| REVIEW | ACCEPTED | accountable lead | council CLEAN and approved/CLEAN one-rung-up `lead-review` (fresh context), both covering the exact accepted SHA via full review plus any fix deltas; findings all dispositioned; applicable local gates at that SHA; any CEO-authorized missing-seat exception names that SHA (never labeled full convergence) |
+| ACCEPTED | INTEGRATED | integration owner | executive audit at final head when required by the authority envelope; merged normally; applicable local and contract gates recorded at tested union/merged head; scoped exceptions cited |
 | any | ABANDONED | accountable lead | reason logged; salvageable branch preserved |
 
 Health signals watched at retro: takeover rate (leads rewriting worker
@@ -99,10 +99,10 @@ the lead's `review-seat-outcome` events are the record.
 | From | To | Who (records) | Evidence |
 |---|---|---|---|
 | — | OPENED | accountable lead | names a frozen revision (sha / PR head) and a quiescent tree; scope: full PR (round 1) or fix delta (round N) |
-| OPENED | FINDINGS | lead, from council seat outputs (fresh or warm-chained; warm seats identity-verified per round) | one `review-seat-outcome` per seat: findings (severity, claim, evidence) or explicit `no-finding` |
+| OPENED | FINDINGS | lead, from council seat outputs (fresh or warm-chained; warm seats identity-verified per round) | one `review-seat-outcome` per seat: received findings (severity, claim, evidence), received `no-finding`, or `EMPTY` with reason (not a verdict) |
 | FINDINGS | DISPOSITIONED | accountable lead | per finding: fixed / filed with rationale / rejected with reason — never silently dropped |
 | DISPOSITIONED | OPENED | lead | opens the next round; it reviews the fix delta only |
-| any round | CLEAN | lead | `review-clean` citing every seat's outcome event: zero new Critical/Important; fixpoint reached |
+| any round | CLEAN | lead | `review-clean` citing every seat's outcome event: zero new Critical/Important; fixpoint reached for present seats at the named frozen SHA (full review plus fix deltas); required EMPTY seats block full convergence and acceptance unless CEO grants a scoped exception naming that SHA, seat, scope and expiry (not CLEAN for the empty seat) |
 
 ## Sprint
 
@@ -118,3 +118,19 @@ entry into it.
 | EXECUTING | INTEGRATING | integration owner | every non-abandoned package INTEGRATED (integration is continuous — packages merge as they are ACCEPTED, not batched here) |
 | INTEGRATING | RETRO | integration owner | main green on all boundary tests; no open Crystal conflicts |
 | RETRO | CLOSED | lead | lessons filed (provenance/scope/reconsider-when); meta:product recorded; deviations all adjudicated; cold-start audit passed if milestone |
+
+## Lane retirement
+
+Lane lifecycle is separate from work-package state: stopping a session neither
+accepts nor abandons its work. The roster and private handoff preserve who
+owns unresolved packages. Record public evidence with sanitized references.
+
+| From | To | Who | Evidence required |
+|---|---|---|---|
+| ACTIVE | HANDOFF_PENDING | coordinator | mission completed or stop decision; thanks and handoff request; unresolved ownership named |
+| HANDOFF_PENDING | EXIT_READY | coordinator, from lane's receipt | append-only private resume entry verified without lost concurrent entries; durable commit/push where configured; next authorized action recorded |
+| EXIT_READY | RETIRED | coordinator | exit confirmed; owned resources released with receipts; active roster/cadence updated |
+
+A failed handoff remains HANDOFF_PENDING; a failed exit remains EXIT_READY.
+Control transport success does not license either transition. Fresh missions
+use fresh lanes unless context continuity is explicitly justified and logged.

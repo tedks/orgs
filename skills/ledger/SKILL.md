@@ -21,6 +21,14 @@ States and transitions: `protocol/STATES.md`.
 - **Causal order** comes from the event chain: `refs` carries the predecessor
   event id, not a wall-clock time. `based_on` stays a git sha (what the event
   was computed against). Do not order the sprint by timestamps.
+- Relays keep the original event id and cite it in `refs`; record independent
+  observations separately but apply a material decision/control action once.
+  Mutable readiness/roster projections cite the evidence for each criterion,
+  not a blanket green inferred from a successful gate.
+- Control events distinguish deferred/ambiguous transport, received history
+  or queue, and verified action completion. Resource releases name holder and
+  exact resource/run id. Retirement state changes cite sanitized handoff/exit
+  receipts; private session content never enters the public ledger.
 - **Event kinds** include: `state-change`, `deviation`, `review-finding`,
   `lead-review`, `interpretation-filed`,
   `docs-bug`, `crystal-conflict`, `huddle-convened`/`-decided`/`-reconciled`,
