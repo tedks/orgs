@@ -82,5 +82,7 @@ When the coordinator's own tokens are the scarce resource:
   verify its handoff shard (one file per session, never a shared append) is
   committed and pushed, request exit, and confirm exit and resource release.
   Migration to another model or provider is the same shard used as the
-  successor's brief, spawned with `agent-spawn.sh --model`. New missions
+  successor's brief, spawned with `agent-spawn.sh` (`--model` sets the
+  model for a Codex successor only; see the Claude Code binding for a
+  Claude successor). New missions
   start in fresh lanes unless exact context continuity is justified.
