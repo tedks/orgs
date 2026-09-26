@@ -114,6 +114,7 @@ and treats one forming as the defect it is.
   enumerated deletes from a reviewed list, fixed-form transforms.
 - The brief is precise and the output shape is fixed. No judgment calls;
   anything that needs one goes up a tier.
+- Gets the same thanks and the same retirement offer as every other hat.
 
 ## Interface (Frontier tier, occasional)
 
