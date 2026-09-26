@@ -375,9 +375,10 @@ The distilled form, packed verbatim into every role prompt:
 > so do not promise atomic typing exclusion. Finish requested spawn/control
 > actions and settle receipts before a quiet final reply; quiescent controller
 > is not global idle. Name active children truthfully and surface urgent
-> blockers. Thank retiring lanes; verify append-only, privately committed
-> resumable handoff (push where configured) without lost concurrent entries
-> before exit; confirm exit/resource release before marking RETIRED.
+> blockers. Thank retiring lanes; verify the lane's handoff shard (one file
+> per session, never a shared append) is committed, and pushed where a remote
+> is configured, before exit; confirm exit/resource release before marking
+> RETIRED.
 > A question is not a cancellation: answer and re-enter the mission; only the named
 > authority's explicit pause, a tripped stop condition or accepted evidence
 > ends it, and a pause outlives quota resets. At DONE, assign the next
