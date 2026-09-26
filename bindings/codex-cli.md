@@ -24,16 +24,17 @@ this document.
 | Standup heartbeat | Event-driven only. No scheduler for Codex lanes exists today, so a standup is a message the coordinator sends when an event or its own cadence calls for one. Do not claim a timer that is not running. |
 | Deterministic fan-out | No Codex equivalent of a workflow runner is bound. Enumerated work goes to bounded subagents or spawned sessions briefed from a file. |
 | Team isolation | Git worktrees per team or branch (bare-repo layout); packing lists via prompt assembly. |
-| Compaction | Bare `/compact` delivered into the pane by a peer over `tmux-message`, after durable state is saved. `/compact` takes no inline argument; step-specific focus goes through the `experimental_compact_prompt_file` config override, as the fork launcher does. Completion is a new compaction record or a visible `Context compacted` event. `remote_compaction = true` is set in config, but 0.157.1 does not list that flag, so its effect is **unverified**. |
+| Compaction | Bare `/compact` delivered into the pane by a peer over `tmux-message`, after durable state is saved. `/compact` takes no inline argument; step-specific focus goes through the `experimental_compact_prompt_file` config override, as the fork launcher does. Completion is a new compaction record or a visible `Context compacted` event. `remote_compaction = true` is set in config, but 0.157.1 warns at startup that `features.remote_compaction` is ignored, so it has no effect. |
 | Harness self-control | **Pending** the harness-control MCP (session-targeted compact, status, usage and exit with typed results). Until it lands, a session cannot compact or exit itself; it asks a peer with `COMPACT ME`. |
 | Skills | `~/.codex/skills/<name>` symlinks installed by the dotfiles `install-codex-config` script. Shared skills resolve to the same `SKILL.md` Claude Code reads; never copy them. |
 | Trust | `[projects."<path>"] trust_level = "trusted"` in `~/.codex/config.toml`. An interactive spawn into an untrusted directory stops at a trust prompt; never answer it with a task's Enter (modal behavior **unverified** for this document; the `codex exec` refusal is documented in `council-review`). |
 | Sessions and resume | Rollouts are JSONL under `~/.codex/sessions/YYYY/MM/DD/rollout-<timestamp>-<uuid>.jsonl`. Resume interactively with `codex resume <id>`, headless with `codex exec resume <id>`. Record the id in the roster at spawn. |
 
 Config flags named in older notes, as seen by 0.157.1: `multi_agent` is
-stable and on; `steer` is listed as removed; `child_agents_md` and
-`remote_compaction` are set in config but not listed. Treat the unlisted and
-removed flags as no-ops until a release documents them.
+stable and on; `steer` is listed as removed by `codex features list`;
+`child_agents_md` and `remote_compaction` are set in config, and every
+0.157.1 startup prints a warning that each is ignored. Recheck after an
+upgrade.
 
 Prompt assembly is the same as every binding: the DOCTRINE.md prompt block
 verbatim, then the role's hat from ROLES.md, then the context manifest.
