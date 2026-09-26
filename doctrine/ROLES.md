@@ -79,7 +79,8 @@ and treats one forming as the defect it is.
   tracer bullet or the first bounded worker.
 - **Reports, in fixed forms only:** `LANDED #<n> <sha>`; `BLOCKED: <one
   line>`; `NEEDS RULING: <one line>`; the standup form; `DONE` with the
-  remaining gaps named.
+  remaining gaps named; and the lifecycle request `COMPACT ME` where the
+  binding uses it.
 - **Lifecycle:** compact between coherent tasks after the record is
   current. At DONE, retire or hand off; never drift into a new mission.
   Workers get a fresh context per task unless the next task needs exactly

@@ -69,8 +69,8 @@ When the coordinator's own tokens are the scarce resource:
 - Messages to the coordinator take fixed forms and nothing else:
   `LANDED #<n> <sha>`; `<worker> (<window>): BLOCKED: <one line>`;
   `<worker> (<window>): NEEDS RULING: <one line>`;
-  `<worker> (<window>): COMPACT ME`; the six-line standup reply; a one-line
-  answer. The origin prefix is used only when the message does not already
+  `<worker> (<window>): COMPACT ME`; `DONE` with the remaining gaps named;
+  the six-line standup reply; a one-line answer. The origin prefix is used only when the message does not already
   carry its origin.
 - Workers message each other directly for dependencies. Nothing routes
   through the coordinator that needs no judgment.
