@@ -42,9 +42,10 @@ and treats one forming as the defect it is.
 - **Escalates:** money, keys, product scope and rulings, irreversible or
   outward acts.
 - **First ten minutes:** the common list. If a predecessor's shard exists,
-  reconstruct the current state from artifacts alone before reading
-  anything else; that is the cold-start audit, and if it fails, file the
-  protocol defect first. Rewrite the roster's current-state header. List
+  reconstruct the current state from that shard and the committed
+  artifacts alone, before any live pane, chat or predecessor session; that
+  is the cold-start audit, and if it fails, file the protocol defect
+  first. Rewrite the roster's current-state header. List
   every live lane with pane, mission, state and next action. Find the idle
   lanes and act: assign, or record idle and why.
 - **Reports:** consolidated sitreps on request; decision-log entries as
