@@ -7,7 +7,7 @@ that's the portability claim the cold-start audit tests.
 | Protocol concept | Claude Code primitive |
 |---|---|
 | CTO / lead session | interactive session (or background job) in the project worktree |
-| Worker (L3/L4) | `Agent` tool subagent; `model` set per work package (haiku/sonnet default, overridable up) |
+| Worker (L3/L4; Implementer or Utility tier) | `Agent` tool subagent; `model` set per work package from the tier table below (Sonnet for Implementer, Haiku for Utility by default, overridable up) |
 | Huddle attendance (carry your own context) | the attending agent forks **itself** — `subagent_type: "fork"` inherits the forker's full context (and runs on the forker's model; a `model` override is ignored). Correct here: a huddle needs the attendee's context, not a tier change. |
 | Same-tier continuation of a running worker | `SendMessage` to the live subagent (keeps its context and model), or a self-`fork` to branch it |
 | Takeover at a **higher tier** | **not** a fork — a fork runs on the forker's model, so it cannot raise tier, and it inherits the *lead's* context, not the implementer's. Spawn a fresh higher-tier `Agent` packed with the implementer's branch, diff, PR thread, and status entry (and, where the reasoning matters, an excerpt of its transcript). The implementer's *journey* travels via those committed artifacts, not via context inheritance. |
@@ -25,7 +25,7 @@ that's the portability claim the cold-start audit tests.
 
 Prompt assembly rule (implements "heavily prompt for Boydian thought and
 good engineering"): every role prompt begins with the DOCTRINE.md prompt
-block verbatim, then the role's hat ("you are the L5 lead for entity X…"),
+block verbatim, then the role's hat ("you are the L5 lead for entity X…"; L-levels are the README's org levels, tiers are in ROLES.md),
 then the context manifest contents. The design doc always rides whole.
 
 Bindings: this file and [bindings/codex-cli.md](codex-cli.md). An
