@@ -381,7 +381,7 @@ The distilled form, packed verbatim into every role prompt:
 > is not global idle. Name active children truthfully and surface urgent
 > blockers. Thank retiring lanes; verify the lane's handoff shard (one file
 > per session, never a shared append) is privately committed, and pushed
-> only to a private remote, before exit; confirm exit/resource release before marking
+> where a private remote is configured, never to a public remote, before exit; confirm exit/resource release before marking
 > RETIRED.
 > A question is not a cancellation: answer and re-enter the mission; only the named
 > authority's explicit pause, a tripped stop condition or the acceptance
