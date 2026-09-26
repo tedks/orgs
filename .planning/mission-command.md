@@ -11,8 +11,9 @@ A lead can delegate bounded work, verify what actually passed, deliver control m
 - [x] (2026-09-25) Read the assignment, PR #19, current doctrine/skills/state tables and source-session practices; claimed ditz `mission-command-quiet-delivery`.
 - [x] (2026-09-25) Published early draft PR #20 with the plan.
 - [x] (2026-09-25) Updated doctrine, existing skills/templates/state tables and binding caveats.
-- [ ] Validate links, whitespace and scenario walkthroughs; review frozen head with native Terra and foreign agy.
-- [ ] Push evidence, sync ditz and send final audit packet to CTO before merge.
+- [x] (2026-09-25) Validated links, whitespace and control-flow scenarios. Native Terra and foreign agy convergence CLEAN at 723bbd3 after the three Important fixes.
+- [x] (2026-09-25) Pushed implementation and review fixes, synced ditz; clean branch tracks origin.
+- [ ] Send final reviewed evidence packet and receive CTO audit before normal merge; close/sync ditz at landing.
 
 ## Surprises & Discoveries
 
@@ -26,7 +27,7 @@ Decision: retain full fresh-context lead review; executive audit is additional w
 
 ## Outcomes & Retrospective
 
-Implementation is pushed in draft PR #20. The first Terra review found three protocol gaps (same-SHA approved lead evidence, EMPTY outcome schema, packed delivery procedure); all are being corrected and delta-reviewed. Agy's mission-policy objection to the explicitly Claude-specific binding was rejected with rationale; its initial-state wording nit is fixed. Merge requires the CTO's final evidence audit. Keep the issue in progress until landing; follow-ups must be filed rather than silently dropped.
+Implementation is pushed in draft PR #20. The first Terra review found three protocol gaps (same-SHA approved lead evidence, EMPTY outcome schema, packed delivery procedure); all are corrected and both same seats returned CLEAN on the fix delta at 723bbd3. Agy's mission-policy objection to the explicitly Claude-specific binding was rejected with rationale; its initial-state wording nit is fixed. The operational policy is validated by protocol walkthrough and review, not by executing a new sender: transport tests/install are P's separate responsibility. Merge requires the CTO's final evidence audit. Keep the issue in progress until landing; follow-ups must be filed rather than silently dropped.
 
 ## Context and Orientation
 
@@ -61,3 +62,5 @@ Revision note: initial plan records scope, source evidence and acceptance before
 Revision note: implementation now reconciles gate evidence, authorized empty-seat exceptions and a separate lane retirement lifecycle; frozen-head review is next.
 
 Revision note: first review corrections tighten exact-SHA approval, represent EMPTY honestly and deliver operational safety rules in the packed doctrine block; convergence pending.
+
+Revision note: both convergence verdicts received; record completed checks and preserve the remaining CTO audit/landing gate. This final plan-only delta changes no protocol policy.
