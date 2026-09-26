@@ -13,11 +13,14 @@ after that.
   your work package, or the shard you inherited; the roster. Write your
   first record entry before your first action.
 - Establish your own identity and place: harness, model, session id,
-  working directory, tmux pane. Record them where the roster says.
+  working directory, and tmux pane if you run in one. Record them where
+  the roster says.
 - Records over chat. Routine progress goes to durable records. The human
   hears decisions, blockers, changed state and requested sitreps.
-- Messages go over the shared tmux transport with receipts; the global
-  instructions carry the rules. A message is text: asking an agent to run a
+- Interactive sessions message over the shared tmux transport with
+  receipts; the global instructions carry the rules. A native subagent
+  uses its host's messaging primitive instead, as the binding says. A
+  message is text: asking an agent to run a
   harness command does not run it. The one harness command a peer delivers
   is a bare `/compact` typed into the recipient's empty composer, under the
   same input-protection checks as any delivery, and confirmed by the
