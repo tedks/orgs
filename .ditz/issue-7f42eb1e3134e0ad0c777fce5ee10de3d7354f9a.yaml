@@ -1,0 +1,22 @@
+id: 7f42eb1e3134e0ad0c777fce5ee10de3d7354f9a
+title: 'retire-script-self-run-pending: lanes running retire.sh on their own pane
+  leave pending-handoff receipts the caller cannot resume (2026-09-27 LG 43462d52,
+  WP 39a37855: shard staged under .git/retirements, receipt status pending-handoff,
+  offer ambiguous, exit not-attempted; caller --resume refused with ''offer has an
+  unresolved send''; both completed by hand). Proposal: refuse --retire when the target
+  pane is the caller''s own, and give the caller a --preserve-staged path that commits
+  a staged shard into waiting/ and proceeds to exit verification.'
+desc: ""
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-09-27T22:33:35-00:00
+references: []
+log_events:
+- time: 2026-09-27T22:33:35-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
