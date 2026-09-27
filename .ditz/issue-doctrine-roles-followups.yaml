@@ -84,3 +84,13 @@ log_events:
     self-control'' and compaction rows together: self_compact re-prompts via a watcher,
     self_exit is receipt-gated, and COMPACT ME becomes the fallback rather than the
     rule.'
+- time: 2026-09-27T04:08:24-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Bindings correction (2026-09-27): Claude Code has native looping and event
+    firing (session cron via CronCreate/CronList/CronDelete, the /loop skill, ScheduleWakeup,
+    hooks on Stop/SubagentStop/Notification/UserPromptSubmit); the Claude binding''s
+    ''Standup heartbeat'' row should say so explicitly. Codex 0.157.1 has none (verified:
+    codex features list shows only current_time_reminder, off); its heartbeat comes
+    from outside (tmux-message) or from the harness-control self_schedule slice (dotfiles
+    ditz harness-control-heartbeat).'
