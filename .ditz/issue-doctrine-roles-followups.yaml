@@ -94,3 +94,12 @@ log_events:
     codex features list shows only current_time_reminder, off); its heartbeat comes
     from outside (tmux-message) or from the harness-control self_schedule slice (dotfiles
     ditz harness-control-heartbeat).'
+- time: 2026-09-27T16:57:39-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Ruling 2026-09-27 (interface): exit receipt for both bindings = pinned
+    original process ended AND the harness''s own exit notice naming the same session
+    id observed after the request (Codex: ''codex resume <UUID>'' in its Token usage
+    banner; Claude: ''Resume this session with: claude --resume <UUID>''). Codex''s
+    transient ''Shutting down...'' is optional evidence, not required (10 ms sampling
+    misses it). Update the bindings'' exit rows accordingly.'
