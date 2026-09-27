@@ -1,0 +1,22 @@
+id: retire-script-legacy-records
+title: 'retire-agent retire.sh (dotfiles, landed 2026-09-27) stops with ''malformed
+  retirement state field: id'' on three legacy JSON records in off-duty/.git/retirements/
+  written earlier the same day by other lanes (lane-t-retire-ready-20260927.receipt.json,
+  lane-v-20260927-private-publication.json, lane-w-20260927-receipt.json). The script
+  should ignore or migrate records it did not write (schema versioning), and the manual
+  shard path (own file in waiting/, commit, push, READY, peer-typed /exit) remains
+  the doctrine fallback; document that fallback in the skill.'
+desc: ""
+type: bugfix
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-09-27T15:07:33-00:00
+references: []
+log_events:
+- time: 2026-09-27T15:07:33-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
