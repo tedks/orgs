@@ -194,12 +194,17 @@ only the first. A component READY is not a launch READY, a passing source
 gate is not runtime proof, and a log without its tested commit is not
 evidence.
 
-Before control delivery, inspect for human or unknown unsent input and modals.
-Defer with bounded backoff and a stated timeout; recheck immediately before
-paste. Streaming agent output with an empty composer permits delivery. If
-input becomes mixed or ambiguous, do not submit, clear, overwrite or blindly
-repaste it. Preserve the outgoing payload privately for deliberate retry;
-never record unfinished human text or keys. Screen inspection has races;
+Before control delivery, inspect the composer twice, one settle window
+apart. Input that is changing means someone is typing: defer with bounded
+backoff and a stated timeout. Input that is unchanged is a stale draft: never
+clear or overwrite it, but do not wait on it either; append the payload
+after it and submit both, recording that a draft was co-submitted (its
+length, never its contents). Two messages landing back to back is
+acceptable; a delivery blocked for hours behind a stale line is not. A modal
+still defers. Streaming agent output with an empty composer permits
+delivery. If input becomes ambiguous after a paste, do not submit, clear,
+overwrite or blindly repaste it. Preserve the outgoing payload privately for
+deliberate retry; never record unfinished human text or keys. Screen inspection has races;
 bindings must state their limits and cannot promise atomic typing exclusion.
 Transport exit zero is not application receipt: verify submitted history or
 an explicit pending queue for the exact message. A queued message is received,
@@ -374,10 +379,12 @@ The distilled form, packed verbatim into every role prompt:
 > the source, file the docs bug. Write what you can defend. Delegate explicit
 > authority and stop conditions; bound workers and review each task's diff.
 > Tie acceptance to source/head evidence. Protect human input before control
-> delivery: human/unknown composer input or a modal means defer with bounded
-> backoff and a timeout; recheck before paste. Streaming output with an empty
-> composer permits delivery. Mixed/ambiguous input means stop: never submit,
-> clear, overwrite or blindly repaste. Keep the outgoing payload private;
+> delivery: input that is changing between two looks means someone is
+> typing, so defer with bounded backoff and a timeout; input that is
+> unchanged is a stale draft, so append your payload and submit both, never
+> clearing or overwriting it; a modal defers. Streaming output with an empty
+> composer permits delivery. Ambiguous input after a paste means stop: never
+> submit, clear, overwrite or blindly repaste. Keep the outgoing payload private;
 > never log unfinished human input. Transport success is not receipt: verify
 > the exact message in submitted history or an explicit pending queue. A
 > queue receipt is not action completion. Retry submission only for exact
