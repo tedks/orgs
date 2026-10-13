@@ -42,6 +42,14 @@ work. Harness bindings map both to real primitives:
 [bindings/codex-cli.md](bindings/codex-cli.md). Specs start from
 [docs/spec-template.md](docs/spec-template.md).
 
+The shared `ask-agent`, `initialize-repo`, `spawn-agent`, and `stacked-prs`
+entries under `.claude/skills/` are one-line pointers to the installed skills
+at `~/.claude/skills/<name>/SKILL.md`. Install the shared skills through the
+dotfiles configuration installers before using those entries. Read the
+installed skill and resolve its relative references from its installed
+directory. The pointers contain no embedded scripts or templates and use
+home-relative text so they work across users and checkouts.
+
 ## License
 
 [AGPL-3.0](LICENSE).

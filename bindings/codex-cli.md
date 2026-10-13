@@ -6,7 +6,7 @@ identical across bindings; only the primitives differ. Read
 [bindings/claude-code.md](claude-code.md) for the sibling binding.
 
 Facts below were checked on 2026-09-26 against `codex-cli 0.157.1`,
-`~/.codex/config.toml`, and the dotfiles `spawn-agent`, `ask-agent` and
+`~/.codex/config.toml`, and the installed `spawn-agent`, `ask-agent` and
 `council-review` skills. A row marked **unverified** was not exercised for
 this document.
 
