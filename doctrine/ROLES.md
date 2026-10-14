@@ -102,12 +102,16 @@ and treats one forming as the defect it is.
 - **Reports:** one acceptance report: what changed, exact head, tests run
   with their output, what was not tested, assumptions made.
 
-## Reviewer (any tier, always a fresh context)
+## Reviewer (Lead tier by default, always a fresh context)
 
 - **Owns:** a verdict against a named state (the sha), findings with
   evidence and severity, and clearances that were actually checked.
 - Never a fork of the agent under review. One seat per provider. An
   unavailable foreign seat stays empty and is recorded as empty.
+- Seats run at the Lead tier (Opus / Sol). A Frontier model reviews only
+  when the CEO asks for it on that review; a council that inherits the
+  host's Frontier model by default is a budget defect (CEO ruling,
+  2026-10-13).
 
 ## Utility (Utility tier)
 
