@@ -130,7 +130,8 @@ The practical rules are:
 - Provider budget. Quota is a budget the coordinator manages across
   providers. Spend the provider whose weekly window resets soonest first
   and keep the windows in phase; reserve the Frontier tier for synthesis,
-  integration and audit. Review seats spend before anything else does. An
+  integration and audit. Review seats spend before anything else does, at the Lead tier: Opus or
+  Sol, never Fable or Astra unless the CEO asks for a Frontier review. An
   unavailable reviewer is an empty seat, never a same-provider substitute,
   and never permanent doctrine.
 
