@@ -1,5 +1,5 @@
 {
-  "commit": "35a08e3ca848aa85f9dbf8db53d9e8ad7838af54",
+  "commit": "5b1919e723a92b1c90f2ae8495f594e651125564",
   "files": {
     "LICENSE": {
       "mode": "100644",
@@ -39,7 +39,7 @@
     },
     "skills/initialize-repo/SKILL.md": {
       "mode": "100644",
-      "sha256": "609758393fa818d000a20426095fddf48acf0dda6f5e38c21f756bce5015b4d2"
+      "sha256": "4e0d5e58d83fbfa5a7e182d11625149488ef4d70f79f6df581b021e8b9cd5679"
     },
     "skills/initialize-repo/scripts/sync-check.sh": {
       "mode": "100755",

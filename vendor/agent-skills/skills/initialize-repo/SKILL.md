@@ -188,6 +188,11 @@ python3 ~/.claude/skills/_shared/agent_skills_config.py get projects_root
 python3 ~/.claude/skills/_shared/agent_skills_config.py get github.owner
 ```
 
+If the loader is missing, including from a pre-cutover legacy installation,
+stop and ask the operator to install the shared skills or provide
+`projects_root` and `github.owner` explicitly. Do not guess these values or
+silently bypass the loader.
+
 ## Instructions
 
 When this skill is invoked, follow the steps in order: Part 1 (base), then Part 2 (type-specific, skip for `bare`), then Part 3 (finalization).
