@@ -45,7 +45,11 @@ Record the model actually selected in the roster.
 
 Review seats are one per provider: Anthropic through the host's native
 subagent, OpenAI through `ask-agent codex`, Google through `ask-agent agy`.
-An unavailable foreign seat stays empty and is recorded as empty.
+An unavailable foreign seat stays empty and is recorded as empty. Seats run at
+the Lead tier: the native seat is spawned with the Lead model explicitly
+(Claude: `model: opus`; Codex: gpt-6-sol), foreign seats with `ask-agent
+<cli> -m <lead model>`; a host must never let a seat inherit its own
+Frontier model (CEO ruling, 2026-10-13).
 
 Quota rule (doctrine, *Provider budget*): spend first on the provider whose
 weekly window resets soonest, and keep the providers' windows in phase.

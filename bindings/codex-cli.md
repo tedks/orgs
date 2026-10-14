@@ -52,7 +52,11 @@ Tiers are capabilities; the models are today's mapping, dated 2026-09-26.
 
 Review seats are one per provider: Anthropic through `ask-agent claude`,
 OpenAI through the host's native subagent, Google through `ask-agent agy`. An
-unavailable foreign seat stays empty and is recorded as empty.
+unavailable foreign seat stays empty and is recorded as empty. Seats run at
+the Lead tier: the native seat is spawned with the Lead model explicitly
+(Claude: `model: opus`; Codex: gpt-6-sol), foreign seats with `ask-agent
+<cli> -m <lead model>`; a host must never let a seat inherit its own
+Frontier model (CEO ruling, 2026-10-13).
 
 Quota rule (doctrine, *Provider budget*): spend first on the provider whose
 weekly window resets soonest, and keep the providers' windows in phase.
