@@ -40,6 +40,27 @@ agent genuinely needs divergent instructions.
 - `LESSONS.md` — lessons-learned memory
 - `.planning/PLANS.md` — ExecPlan format guide for non-trivial work
 
+## Shared skill snapshot
+
+For this repository, use the four shared skills in
+`vendor/agent-skills/skills/` through the local `.claude/skills/` entries
+(Codex also discovers `.agents/skills/`). Read and execute their local files,
+even when an installed skill with the same name exists. Resolve relative
+references beside the vendored `SKILL.md`. In upstream examples, translate
+`~/.claude/skills/` to this checkout's `vendor/agent-skills/skills/` and
+`tmux-message` / `~/.bin/tmux-message` to the vendored
+`spawn-agent/scripts/tmux-message.sh`. Do not fetch a skill during normal use.
+Prefix each vendored helper command with `PYTHONDONTWRITEBYTECODE=1` (or
+export it in the same shell call) so Python imports do not create bytecode
+caches inside the verified snapshot.
+
+Preserve the snapshot verbatim. Use `tools/vendor-skills/vendor_skills.py`
+for verification and explicit commit-pinned refreshes; see
+[its guide](tools/vendor-skills/README.md). The upstream `allowed-tools`
+patterns still name global installed paths, so they do not grant permission
+to local script paths; use the harness's ordinary approval rules. Do not
+change global permissions to make a vendored command run.
+
 ## Environment
 
 No special environment. This is a `bare`-type repo (no language runtime,

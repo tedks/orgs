@@ -42,6 +42,16 @@ work. Harness bindings map both to real primitives:
 [bindings/codex-cli.md](bindings/codex-cli.md). Specs start from
 [docs/spec-template.md](docs/spec-template.md).
 
+The shared `ask-agent`, `initialize-repo`, `spawn-agent`, and `stacked-prs`
+skills are a commit-pinned snapshot under `vendor/agent-skills/`, including
+its `_shared` helpers and component license. Relative links under
+`.claude/skills/` and `.agents/skills/` expose this local snapshot to Claude
+Code and Codex. A fresh clone contains the skill instructions, scripts, and
+templates; using them never fetches or installs skill source.
+
+See [the vendor maintenance guide](tools/vendor-skills/README.md) for local
+command paths, permissions, provenance, verification, and explicit updates.
+
 ## License
 
 [AGPL-3.0](LICENSE).

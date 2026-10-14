@@ -1,0 +1,5 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "how do I log an error?"
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  actor@buildhost0:~/Projects/example1/control-delivery-upstream control-delivery-upstream Opus 5…
+  ⏵⏵ bypass permissions on (shift+tab to cycle)
