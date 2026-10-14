@@ -17,7 +17,8 @@ for unrelated orgs content; the root license is unchanged.
 
 `.claude/skills/<name>` points relatively into the vendor tree; `_shared`
 also has a local link so sibling references resolve. `.agents/skills` aliases
-`.claude/skills` for Codex discovery. These are committed Git symlinks, so a
+`.claude/skills` for Codex discovery; future entries in that directory are
+therefore shared by both harnesses. These are committed Git symlinks, so a
 checkout must support symlinks (`core.symlinks=true`). Both
 [Claude Code](https://code.claude.com/docs/en/skills#choose-where-skills-load)
 and [Codex](https://learn.chatgpt.com/docs/build-skills) document support for
@@ -71,7 +72,10 @@ agents or require a network connection.
 
 ## Refresh explicitly
 
-Obtain and review the desired source commit separately. Then supply its full
+Obtain and review the desired source commit separately, confirming that it
+is reachable from the canonical repository named in the lock. The tool
+checks committed content, not remote identity. An explicit pin may move
+forward or backward; review the commit change in either direction. Then supply its full
 40-character SHA and an explicit local checkout (no branch names or implicit
 HEAD):
 

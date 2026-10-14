@@ -11,12 +11,12 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-NAMES = ('ask-agent', 'initialize-repo', 'spawn-agent', 'stacked-prs', '_shared')
+SKILLS = ('ask-agent', 'initialize-repo', 'spawn-agent', 'stacked-prs')
 SHARED = ('skills/_shared/agent_skills_config.py', 'skills/_shared/config.sh', 'skills/_shared/configuration.md')
 REPOSITORY = 'https://github.com/tedks/agent-skills'
 VENDOR = Path('vendor/agent-skills')
 LOCK = Path('vendor/agent-skills.lock.json')
-LINKS = {f'.claude/skills/{name}': f'../../vendor/agent-skills/skills/{name}' for name in NAMES}
+LINKS = {f'.claude/skills/{name}': f'../../vendor/agent-skills/skills/{name}' for name in (*SKILLS, '_shared')}
 LINKS['.agents/skills'] = '../.claude/skills'
 
 
@@ -31,7 +31,7 @@ def contained_path(name):
     parts = PurePosixPath(name).parts
     if name != str(PurePosixPath(name)) or '..' in parts or name.startswith('/'):
         fail(f'Invalid snapshot path: {name!r}')
-    if name != 'LICENSE' and name not in SHARED and not (len(parts) >= 3 and parts[0] == 'skills' and parts[1] in NAMES[:-1]):
+    if name != 'LICENSE' and name not in SHARED and not (len(parts) >= 3 and parts[0] == 'skills' and parts[1] in SKILLS):
         fail(f'Path outside snapshot scope: {name}')
     return name
 
@@ -48,7 +48,9 @@ def regular_parents(path):
 
 
 def git(checkout, *args):
-    env = dict(os.environ, GIT_NO_LAZY_FETCH='1', GIT_NO_REPLACE_OBJECTS='1', GIT_TERMINAL_PROMPT='0')
+    env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+    env.update(GIT_NO_LAZY_FETCH='1', GIT_NO_REPLACE_OBJECTS='1', GIT_TERMINAL_PROMPT='0',
+               GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
     result = subprocess.run(['git', '-C', str(checkout), *args], capture_output=True, env=env)
     if result.returncode:
         fail(f'Local Git read failed: {result.stderr.decode(errors="replace").strip()}')
@@ -60,7 +62,7 @@ def source_snapshot(checkout, commit):
         fail('--commit must be a full, lowercase 40-character Git commit ID')
     if git(checkout, 'cat-file', '-t', commit).strip() != b'commit':
         fail('--commit must identify a commit object')
-    raw = git(checkout, 'ls-tree', '-rz', commit, '--', 'LICENSE', *(f'skills/{name}' for name in NAMES[:-1]), *SHARED)
+    raw = git(checkout, 'ls-tree', '-rz', commit, '--', 'LICENSE', *(f'skills/{name}' for name in SKILLS), *SHARED)
     files, content = {}, {}
     for entry in raw.split(b'\0'):
         if not entry:
@@ -73,7 +75,7 @@ def source_snapshot(checkout, commit):
         data = git(checkout, 'cat-file', 'blob', oid)
         content[name] = data
         files[name] = {'mode': mode, 'sha256': hashlib.sha256(data).hexdigest()}
-    required = ['LICENSE', *(f'skills/{name}/SKILL.md' for name in NAMES[:-1]), *SHARED]
+    required = ['LICENSE', *(f'skills/{name}/SKILL.md' for name in SKILLS), *SHARED]
     if any(name not in files for name in required):
         fail('Source commit lacks LICENSE, one of the four skills, or _shared')
     if b'GNU AFFERO GENERAL PUBLIC LICENSE' not in content['LICENSE'] or b'Version 3' not in content['LICENSE']:
@@ -94,7 +96,7 @@ def read_lock():
                 or entry['mode'] not in ('100644', '100755') or not isinstance(entry['sha256'], str)
                 or not re.fullmatch(r'[0-9a-f]{64}', entry['sha256'])):
             fail(f'Invalid manifest entry: {name}')
-    required = ['LICENSE', *(f'skills/{name}/SKILL.md' for name in NAMES[:-1]), *SHARED]
+    required = ['LICENSE', *(f'skills/{name}/SKILL.md' for name in SKILLS), *SHARED]
     if any(name not in data['files'] for name in required):
         fail('Incomplete snapshot manifest')
     return data

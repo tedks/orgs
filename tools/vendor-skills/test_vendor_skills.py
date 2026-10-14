@@ -17,6 +17,8 @@ class VendorTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix='orgs-vendor-test-')
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
+        self.env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+        self.env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
         self.source = self.base / 'source with spaces'
         self.root = self.base / 'orgs'
         self.source.mkdir()
@@ -42,7 +44,7 @@ class VendorTests(unittest.TestCase):
         self.command = ['python3', str(self.root / 'tools/vendor-skills/vendor_skills.py')]
 
     def git(self, cwd, *args):
-        return subprocess.check_output(['git', '-C', str(cwd), *args], stderr=subprocess.STDOUT, text=True).strip()
+        return subprocess.check_output(['git', '-C', str(cwd), *args], stderr=subprocess.STDOUT, text=True, env=self.env).strip()
 
     def source_commit(self, message):
         self.git(self.source, 'add', '.')
@@ -50,7 +52,7 @@ class VendorTests(unittest.TestCase):
         return self.git(self.source, 'rev-parse', 'HEAD')
 
     def run_tool(self, *args, ok=True):
-        result = subprocess.run(self.command + list(args), text=True, capture_output=True)
+        result = subprocess.run(self.command + list(args), text=True, capture_output=True, env=self.env)
         if ok:
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         else:
@@ -131,6 +133,33 @@ class VendorTests(unittest.TestCase):
         lock.write_text(json.dumps(data))
         self.run_tool('verify', ok=False)
 
+    def test_extra_directory_and_interrupted_update_are_drift(self):
+        self.sync()
+        empty = self.root / 'vendor/agent-skills/empty'
+        empty.mkdir()
+        self.run_tool('verify', ok=False)
+        self.sync(ok=False)
+        empty.rmdir()
+        # Simulate a process stopped after writing a file but before its lock.
+        target = self.root / 'vendor/agent-skills/skills/ask-agent/SKILL.md'
+        target.write_text('partially refreshed\n')
+        self.run_tool('verify', ok=False)
+        self.sync(ok=False)
+
+    def test_existing_discovery_directory_is_preserved(self):
+        directory = self.root / '.claude/skills/ask-agent'
+        directory.mkdir(parents=True)
+        marker = directory / 'SKILL.md'
+        marker.write_text('local work\n')
+        self.sync(ok=False)
+        self.assertEqual(marker.read_text(), 'local work\n')
+        self.assertFalse((self.root / 'vendor').exists())
+
+    def test_sync_ignores_ambient_git_repository_selection(self):
+        self.env.update(GIT_DIR=str(self.base / 'wrong.git'), GIT_WORK_TREE=str(self.base))
+        self.sync()
+        self.run_tool('verify')
+
     def test_unrelated_shared_helpers_are_excluded(self):
         extra = self.source / 'skills/_shared/native/retirement.sh'
         extra.parent.mkdir()
@@ -158,7 +187,7 @@ class VendorTests(unittest.TestCase):
         self.git(self.base, 'clone', '-q', '--no-local', str(self.root), str(clone))
         empty_home = self.base / 'empty home'
         empty_home.mkdir()
-        env = dict(os.environ, HOME=str(empty_home), PYTHONDONTWRITEBYTECODE='1')
+        env = dict(self.env, HOME=str(empty_home), PYTHONDONTWRITEBYTECODE='1')
         result = subprocess.run(['python3', str(clone / 'tools/vendor-skills/vendor_skills.py'), 'verify'], env=env, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for entry in ('.claude/skills', '.agents/skills'):
