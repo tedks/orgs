@@ -43,12 +43,14 @@ work. Harness bindings map both to real primitives:
 [docs/spec-template.md](docs/spec-template.md).
 
 The shared `ask-agent`, `initialize-repo`, `spawn-agent`, and `stacked-prs`
-entries under `.claude/skills/` are one-line pointers to the installed skills
-at `~/.claude/skills/<name>/SKILL.md`. Install the shared skills through the
-dotfiles configuration installers before using those entries. Read the
-installed skill and resolve its relative references from its installed
-directory. The pointers contain no embedded scripts or templates and use
-home-relative text so they work across users and checkouts.
+skills are a commit-pinned snapshot under `vendor/agent-skills/`, including
+its `_shared` helpers and component license. Relative links under
+`.claude/skills/` and `.agents/skills/` expose this local snapshot to Claude
+Code and Codex. A fresh clone contains the skill instructions, scripts, and
+templates; using them never fetches or installs skill source.
+
+See [the vendor maintenance guide](tools/vendor-skills/README.md) for local
+command paths, permissions, provenance, verification, and explicit updates.
 
 ## License
 
