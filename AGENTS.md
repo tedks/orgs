@@ -49,9 +49,10 @@ even when an installed skill with the same name exists. Resolve relative
 references beside the vendored `SKILL.md`. In upstream examples, translate
 `~/.claude/skills/` to this checkout's `vendor/agent-skills/skills/` and
 `tmux-message` / `~/.bin/tmux-message` to the vendored
-`spawn-agent/scripts/tmux-message.sh`. Do not fetch a skill during normal use. Export
-`PYTHONDONTWRITEBYTECODE=1` before running vendored helpers so Python imports
-do not create bytecode caches inside the verified snapshot.
+`spawn-agent/scripts/tmux-message.sh`. Do not fetch a skill during normal use.
+Prefix each vendored helper command with `PYTHONDONTWRITEBYTECODE=1` (or
+export it in the same shell call) so Python imports do not create bytecode
+caches inside the verified snapshot.
 
 Preserve the snapshot verbatim. Use `tools/vendor-skills/vendor_skills.py`
 for verification and explicit commit-pinned refreshes; see

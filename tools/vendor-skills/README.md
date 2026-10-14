@@ -29,9 +29,8 @@ snapshot. Read relative references next to the resolved `SKILL.md`. Run
 scripts from the local tree; for example, from the orgs root:
 
 ```bash
-export PYTHONDONTWRITEBYTECODE=1
-python3 vendor/agent-skills/skills/_shared/agent_skills_config.py validate
-vendor/agent-skills/skills/spawn-agent/scripts/tmux-message.sh --help
+PYTHONDONTWRITEBYTECODE=1 python3 vendor/agent-skills/skills/_shared/agent_skills_config.py validate
+PYTHONDONTWRITEBYTECODE=1 vendor/agent-skills/skills/spawn-agent/scripts/tmux-message.sh --help
 ```
 
 The snapshot retains upstream text verbatim. Translate global skill paths
@@ -67,7 +66,8 @@ running its Python helpers.
 The integration tests build disposable local Git repositories and a fresh
 clone with an empty home. They check link/path discovery, a local executable,
 deterministic refresh, source worktree isolation, repinning, drift refusal,
-containment, missing license/commit, and removal refusal. They do not launch
+containment, missing license/commit, removal refusal, extra directories,
+interrupted refreshes, and ambient Git variable isolation. They do not launch
 agents or require a network connection.
 
 ## Refresh explicitly
@@ -75,8 +75,9 @@ agents or require a network connection.
 Obtain and review the desired source commit separately, confirming that it
 is reachable from the canonical repository named in the lock. The tool
 checks committed content, not remote identity. An explicit pin may move
-forward or backward; review the commit change in either direction. Then supply its full
-40-character SHA and an explicit local checkout (no branch names or implicit
+forward or backward; review the commit change in either direction. Use a
+source checkout owned by your current user: global `safe.directory`
+exceptions are intentionally not loaded. Then supply its full 40-character SHA and an explicit local checkout (no branch names or implicit
 HEAD):
 
 ```bash
