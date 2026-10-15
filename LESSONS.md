@@ -221,3 +221,34 @@
   doctrine as "Host resources and hygiene".
 - **Reconsider when:** hosts enforce resource isolation (cgroups, per-lane
   VMs), so a reservation does guarantee capacity.
+
+## 2026-10-15 — Meters in whole-percent steps defeat a short-window fit
+
+- **What happened:** the token-tripwire calibration was meant to fit
+  per-class token weights (cached, uncached, output) against the provider
+  quota meters. Those meters move in whole-percent steps, so a ten-minute rise
+  is almost always 0 or 1, and the first fit could never pass its own gate.
+  A cumulative refit (rise since the window began against tokens since then)
+  scored R² 0.997 on a simulated meter that had nothing to do with the tokens:
+  two running totals always correlate, so the gate passed on an absence.
+  Further simulation showed three more ways weights could look measured
+  without being so:
+  - backward elimination let one class absorb a correlated class's share
+    (+49%);
+  - background burn from other hosts was read as an uncached weight;
+  - a weight that changed mid-history passed a split-half check that mixed
+    both periods.
+- **Evidence:** dotfiles PR #189 (`scripts/usage/calibrate.py` and its tests,
+  which simulate whole-percent fleets: independent, lockstep, correlated,
+  unrelated, drifting and background-burn), with council rounds 1–3 recorded
+  on the PR.
+- **Applies when:** fitting any cost model against a coarse or account-wide
+  meter. Fit increments over spans long enough for the quantum to be small
+  against the rise (at least three hours here). Report only token classes that
+  can be told apart: drop those that add nothing, and withhold the fit when a
+  dropped class moves with a kept one. Fit elapsed time alongside, to absorb
+  burn from elsewhere. Require agreement between alternate halves and between
+  earlier and later halves. Otherwise report raw numbers and say why. A gate
+  that passes must also be shown to fail on data with no relationship.
+- **Reconsider when:** providers expose fractional or per-request quota
+  accounting, so the meter's quantum no longer dominates the signal.
