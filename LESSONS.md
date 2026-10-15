@@ -228,28 +228,39 @@
   per-class token weights (cached, uncached, output) against the provider
   quota meters. Those meters move in whole-percent steps, so a ten-minute rise
   is almost always 0 or 1, and the first fit could never pass its own gate.
-  A cumulative refit (rise since the window began against tokens since then)
-  scored R² 0.997 on a simulated meter that had nothing to do with the tokens:
-  two running totals that both rise over time can correlate strongly whatever
-  drives them, and here the gate passed on an absence.
-  Further simulation showed three more ways weights could look measured
-  without being so:
+  A cumulative refit scored R² 0.997 on a simulated meter that had nothing to
+  do with the tokens (rise since the window began, against tokens since
+  then). Two running totals that both rise over time can correlate strongly
+  whatever drives them, and here the gate passed on an absence. Each later
+  gate found a way weights could look measured without being so:
   - backward elimination let one class absorb a correlated class's share
     (+49%);
-  - background burn from other hosts was read as an uncached weight;
+  - burn from other hosts was read as an uncached weight;
   - a weight that changed mid-history passed a split-half check that mixed
-    both periods.
-- **Evidence:** dotfiles PR #189 (`scripts/usage/calibrate.py` and its tests,
-  which simulate whole-percent fleets: independent, lockstep, correlated,
-  unrelated, drifting and background-burn), with council rounds 1–3 recorded
-  on the PR.
+    both periods;
+  - a single split-half draw agreed by chance while the weights were 25–38%
+    off.
+  The opposite failure also happened: withholding whenever a dropped class
+  correlated with a kept one (|r| ≥ 0.5) refused every correct fit, because
+  on a real host every token class rises with activity.
+- **Evidence:** dotfiles PR #189: `scripts/usage/calibrate.py`, its README
+  section, and tests that simulate whole-percent fleets (independent,
+  activity-driven, lockstep, correlated, unrelated, drifting,
+  background-burn). Council rounds 1–4 are recorded on the PR.
 - **Applies when:** fitting any cost model against a coarse or account-wide
-  meter. Fit increments over spans long enough for the quantum to be small
-  against the rise (at least three hours here). Report only token classes that
-  can be told apart: drop those that add nothing, and withhold the fit when a
-  dropped class moves with a kept one. Fit elapsed time alongside, to absorb
-  burn from elsewhere. Require agreement between alternate halves and between
-  earlier and later halves. Otherwise report raw numbers and say why. A gate
-  that passes must also be shown to fail on data with no relationship.
+  meter.
+  - Fit increments over spans long enough for the quantum to be small
+    against the rise (at least three hours here).
+  - Report only classes that can be told apart. Drop a class that adds
+    nothing; withhold the fit when restoring a dropped class moves a kept
+    weight, or when the two move almost in step (|r| ≥ 0.9).
+  - Gate each weight on its own standard errors, not on one split.
+  - Fit elapsed time alongside; it absorbs only constant-rate burn from
+    elsewhere, and burn that follows the same hours still biases the
+    weights.
+  - Otherwise report raw numbers and say why, and show that every gate
+    fails on data with no relationship.
+  - Expect the honest answer to be "raw only" for months, and forever for
+    classes the meter cannot separate.
 - **Reconsider when:** providers expose fractional or per-request quota
   accounting, so the meter's quantum no longer dominates the signal.

@@ -129,7 +129,9 @@ The practical rules are:
   continuity when the interface knowledge is the asset; never by turn count.
 - A lane's turn rate and context size are watched, and crossing the tripwire
   (too many turns or cached tokens an hour, or a large context sustained)
-  triggers the task-boundary ritual.
+  triggers the task-boundary ritual: the alert goes to the owning CTO, who
+  has the lead run it. It watches a rate, not a count; the ritual still
+  chooses whether to continue, compact, hand off or retire.
 - Provider budget. Quota is a budget the coordinator manages across
   providers. Spend the provider whose weekly window resets soonest first
   and keep the windows in phase; reserve the Frontier tier for synthesis,
