@@ -230,7 +230,8 @@
   is almost always 0 or 1, and the first fit could never pass its own gate.
   A cumulative refit (rise since the window began against tokens since then)
   scored R² 0.997 on a simulated meter that had nothing to do with the tokens:
-  two running totals always correlate, so the gate passed on an absence.
+  two running totals that both rise over time can correlate strongly whatever
+  drives them, and here the gate passed on an absence.
   Further simulation showed three more ways weights could look measured
   without being so:
   - backward elimination let one class absorb a correlated class's share
