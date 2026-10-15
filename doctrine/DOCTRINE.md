@@ -127,6 +127,9 @@ The practical rules are:
   compact while the handoff can still stand alone; low context is a signal
   to prepare, not to hurry. Fresh agent when the mission changes;
   continuity when the interface knowledge is the asset; never by turn count.
+- A lane's turn rate and context size are watched, and crossing the tripwire
+  (too many turns or cached tokens an hour, or a large context sustained)
+  triggers the task-boundary ritual.
 - Provider budget. Quota is a budget the coordinator manages across
   providers. Spend the provider whose weekly window resets soonest first
   and keep the windows in phase; reserve the Frontier tier for synthesis,
