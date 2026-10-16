@@ -246,7 +246,7 @@
 - **Evidence:** dotfiles PR #189: `scripts/usage/calibrate.py`, its README
   section, and tests that simulate whole-percent fleets (independent,
   activity-driven, lockstep, correlated, unrelated, drifting,
-  background-burn). Council rounds 1–4 are recorded on the PR.
+  background-burn). The council rounds are recorded on the PR.
 - **Applies when:** fitting any cost model against a coarse or account-wide
   meter.
   - Fit increments over spans long enough for the quantum to be small
