@@ -118,6 +118,17 @@ The practical rules are:
   implementation at the Lead and Implementer tiers; summarization, log
   reading and enumerated sweeps at the Utility tier. Change your mind when
   the ground changes, and log the bend.
+- Search with a target. Search inside the worktree you own, and read the
+  project map before you search: the `where` skill prints it, from the
+  repository's AGENTS.md Project structure section and the worktree list.
+  With the harness's search tools, set the path to that worktree. Never
+  enumerate `~/Projects`, `$HOME`, `/` or `/nix` to find something. Each such
+  walk covers dozens of repositories and loads the disk for every agent on
+  the host. A name, glob or type filter does not shorten a walk; only the
+  starting directory and an explicit depth limit of three or less do. The
+  fleet refuses an unbounded walk of a broad root and says how to scope it.
+  `SEARCH_UNBOUNDED=1` is the deliberate override, for the rare search that
+  really needs the whole tree.
 - Task-boundary ritual. At every boundary the lead inspects the diff,
   integrates and dispositions the evidence, releases owned resources
   (processes, leases, slots, ports), pushes coherent work, rewrites the
