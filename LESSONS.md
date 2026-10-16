@@ -254,7 +254,10 @@
   - Report only classes that can be told apart. Drop a class that adds
     nothing; withhold the fit when restoring a dropped class moves a kept
     weight, or when the two move almost in step (|r| ≥ 0.9).
-  - Gate each weight on its own standard errors, not on one split.
+  - Gate each weight on its own standard errors and on agreement between
+    alternate halves and between earlier and later halves: one split alone
+    can agree by chance, and only the earlier/later split catches a weight
+    that changed mid-history.
   - Fit elapsed time alongside; it absorbs only constant-rate burn from
     elsewhere, and burn that follows the same hours still biases the
     weights.
