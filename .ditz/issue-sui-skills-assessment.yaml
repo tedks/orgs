@@ -34,3 +34,10 @@ log_events:
     owns tools/sui-usage/ and corpus_inventory owns docs/assessments/sui-usage-corpus-inventory.md.
     No external project has been changed. The CTO acknowledgement was visibly queued
     in pane %321 after an ambiguous sender result; it was not replayed.'
+- time: 2026-10-18T06:25:01-00:00
+  who: Ted Smith
+  what: commented
+  comment: '2026-10-18 06:25 UTC correction to the previous acknowledgement state:
+    a targeted check of the CTO session log recorded SUISKILLS-ACK enqueued at 06:18:54Z
+    and removed as absorbed_mid_turn at 06:19:08Z. Delivery is verified; acknowledgement
+    or task disposition by the CTO is not inferred. No resend occurred.'
