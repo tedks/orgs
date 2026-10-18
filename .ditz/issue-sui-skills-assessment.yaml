@@ -26,3 +26,11 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-10-18T06:21:10-00:00
+  who: Ted Smith
+  what: commented
+  comment: '2026-10-18 06:21 UTC: Lead %749 on branch sui-skills-assessment opened
+    draft PR #30 at c32b546. Deliverable 1 is active with bounded workers: usage_parser
+    owns tools/sui-usage/ and corpus_inventory owns docs/assessments/sui-usage-corpus-inventory.md.
+    No external project has been changed. The CTO acknowledgement was visibly queued
+    in pane %321 after an ambiguous sender result; it was not replayed.'
