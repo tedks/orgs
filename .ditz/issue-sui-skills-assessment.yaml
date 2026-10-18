@@ -1,0 +1,24 @@
+id: sui-skills-assessment
+title: Assess Sui development agent skills against fleet usage
+desc: 'Lead mission, 2026-10-18. Measure Sui/Move/Walrus agent usage across framework0,
+  tower0 and splinter1 for 2026-09-26 through 2026-10-18, then survey candidate skills,
+  run bounded offline spot-checks, and recommend which to integrate. Evidence and
+  reproducible fixture-tested measurement script land in docs/assessments/sui-skills-2026-10.md
+  and tools/sui-usage/ on branch sui-skills-assessment. CTO owns integration decision;
+  Ted owns third-party vendoring and product rulings. Read-only on other projects
+  and logs; no network transactions or key export. Acceptance: report with source/version/license/cost/coverage
+  matrix, anonymized usage counts and limitations, ranked shortlist, draft PR and
+  local gates.'
+type: task
+component: research
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T06:19:22-00:00
+references: []
+log_events:
+- time: 2026-10-18T06:19:22-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
