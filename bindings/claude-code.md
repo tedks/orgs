@@ -77,7 +77,7 @@ When the coordinator's own tokens are the scarce resource, the binding tightens:
   retirement from the sender's exit code. This stays until the
   harness-control MCP lands. New missions start in fresh lanes
   unless exact context continuity is explicitly justified.
-- Retirement shards and receipts are pushed from a temporary worktree at fetched `origin/master`, never committed in the shared checkout, and verified after fetching `origin/master`.
+- Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.
 - The local vendored `spawn-agent` delivery helper owns typing protection,
   bounded backoff and submission mechanics. Follow its documented outcomes;
   inspect application receipt separately. Before sending, protect human or

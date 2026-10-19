@@ -35,7 +35,7 @@ after that.
   off or retire explicitly. At hand-off or retirement, every open product
   question becomes a tracker issue under `open-questions` first.
 - A question is not a cancellation. Answer it and re-enter the mission.
-- Retirement shards and receipts are pushed from a temporary worktree at fetched `origin/master`, never committed in the shared checkout, and verified after fetching `origin/master`.
+- Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.
 
 ## CEO (the human)
 
