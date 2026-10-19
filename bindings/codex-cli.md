@@ -101,3 +101,4 @@ When the coordinator's own tokens are the scarce resource:
   model for a Codex successor only; see the Claude Code binding for a
   Claude successor). New missions
   start in fresh lanes unless exact context continuity is justified.
+- Retirement shards and receipts are pushed from a temporary worktree at fetched `origin/master`, never committed in the shared checkout, and verified after fetching `origin/master`.
