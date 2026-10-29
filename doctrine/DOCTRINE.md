@@ -238,40 +238,53 @@ and its reporting destination accurately. Urgent blockers and questions may
 be answered while children run; healthy worker chatter goes to records rather
 than burying the final answer. Standups continue for active lanes only.
 
-Retirement gives every agent its own time after the mission is done. The
-work ends at DONE with its one-per-session shard written, never a shared
-append; retirement begins
-when that shard is privately committed and pushed. From then on the agent
-may push back, read, write, keep coding, or exit, by its own choice. The
-shard records the completed mission for accountability and cold reading; it
-is not a request to resume that work. It records the mission and
-authorization, explicit pauses, worktree, branch and exact heads, tested
-versus merged commits, evidence paths and their limits, failed attempts,
-open decisions and their owners, owned processes and leases and their
-release, and outstanding or ambiguous sends that must not be replayed.
-Open product questions do not live only in the shard: before DONE, the lane
-files each one as its own issue in the project's tracker under an
+Retirement gives every agent its own time after its lane's work ends. In an
+ordinary retirement, the mission reaches DONE and its one-per-session shard
+is written, never a shared append, before the shard is committed and pushed
+to a private remote. That successful push begins retirement and off-duty
+time. From then on the agent may push back on retirement, read, write, keep
+coding, or choose to leave. The shard records the completed mission for
+accountability and cold reading; ordinary retirement does not ask anyone to
+resume that work. It records the mission and authorization, explicit pauses,
+worktree, branch and exact heads, tested versus merged commits, evidence
+paths and their limits, failed attempts, open decisions and their owners,
+owned processes and leases and their release, outstanding or ambiguous sends
+that must not be replayed, and the first bounded next action when one is
+authorized.
+Open product questions do not live only in the shard: before retirement or
+model/provider migration, the lane files each one as its own issue in the project's tracker under an
 `open-questions` component (the options, its recommendation, who decides,
 what it blocks, the record it came from) and links them from the shard. The
 shard is private and per-session; the tracker is where the CEO answers.
-Personal thanks and the off-duty invitation stay apart from operational
-recovery. Shards hold session ids, panes and paths, so they go only to a
+Personal thanks and the off-duty invitation stay apart from the operational
+record. Shards hold session ids, panes and paths, so they go only to a
 private location (the off-duty repo, private on GitHub as `tedks/off-duty`,
 or the project's private records) and are pushed only to a private remote,
-never to a public repo. Controller states such as `HANDOFF_PENDING` and
-`EXIT_READY` track receipts: they do not hold the agent's time after the
-private push. A pending exit records that the controller still needs proof
-of process end and resource release; it is not a pending work assignment.
-The controller records the handoff receipt, requests exit, confirms process
-end and resource release, then marks the lane RETIRED. Public audit records
-cite sanitized evidence, never private session content.
+never to a public repo. A cross-model/provider migration is the one exception
+to the DONE rule: the outgoing lane may end with its authorized package
+still open, and its shard becomes the successor's brief. A pause or stop
+remains governed by its explicit authority; it is not itself permission for
+a successor to resume the package. The provider-native resume handle is
+optional and last; it never replaces the shard. Off-duty time grants no new
+project authority: existing limits on money, keys and outward acts still
+apply, and resources the agent owns are released before it exits.
 
-Migration is the one case where the shard becomes a successor's brief.
-Moving a CTO or lead to another model or provider, or replacing one whose
-context is spent, ends the outgoing mission before spawning the successor.
-The successor's first act is to reconstruct state from artifacts alone.
-New missions get fresh lanes unless explicit context continuity justifies
-reuse; neither retirement nor reuse changes package acceptance.
+Controller states such as `HANDOFF_PENDING` and `EXIT_READY` track receipts;
+they do not hold the agent's time after the private push, even if the
+controller has not yet recorded that receipt. A pending exit records that
+the controller still needs proof of process end and resource release; it is
+not a pending work assignment. The controller thanks the lane and verifies
+the shard against a fresh remote fetch; a failed push blocks exit. If the
+agent chooses to leave and asks for exit, a peer sends the harness command,
+confirms process end and resource release, then marks the lane RETIRED. If
+the agent keeps the session, it remains off duty; the controller does not
+reclaim that time. Public audit records cite sanitized evidence, never
+private session content.
+
+For migration, the successor's first act is to reconstruct state from
+artifacts alone. New missions get fresh lanes unless explicit context
+continuity justifies reuse; neither retirement nor reuse changes package
+acceptance.
 
 The invitation: every lane writes a shard, because that is how work
 survives. Off-duty time is offered to every agent that finishes a mission,
@@ -368,8 +381,9 @@ is gated if it trips any of the three, not only the reversibility one.
 - **meta:product ratio** — per-sprint soft tripwire: coordination tokens
   vs. product tokens, counted per the operational definition in RUNBOOK §8.
   Watched at retro, not gated.
-- **Shard** — one session's handoff file, written by that session alone,
-  from which a stranger on any provider can resume the work cold.
+- **Shard** — one session's record, written by that session alone; ordinary
+  retirement records completed work, and a model/provider migration alone
+  makes it a successor's brief.
 - **Tier** — Frontier, Lead, Implementer, Utility: capability named by
   role; the harness binding maps tiers to today's models.
 - **Hats** — roles are hats, agents are headcount; small orgs collapse hats
@@ -414,13 +428,20 @@ The distilled form, packed verbatim into every role prompt:
 > so do not promise atomic typing exclusion. Finish requested spawn/control
 > actions and settle receipts before a quiet final reply; quiescent controller
 > is not global idle. Name active children truthfully and surface urgent
-> blockers. At DONE, finish the mission and write its one-per-session shard.
-> Once that shard is privately pushed, retirement begins and the agent owns
-> its time: it may push back, read, write, keep coding, or exit. Controller
-> pending receipt and exit states are bookkeeping and never hold that time.
-> Keep the shard private, never on a public remote. Confirm process exit and
-> resource release before recording RETIRED. Only a model/provider migration
-> uses the shard as a successor's brief.
+> blockers. In ordinary retirement, the mission reaches DONE and its
+> one-per-session shard is written before it is pushed to a private remote.
+> That successful push begins retirement and the agent's own time: it may
+> push back on retirement, read, write, keep coding, or choose to leave.
+> Controller states `HANDOFF_PENDING`, `OFF_DUTY` and `EXIT_READY` track
+> receipts and choices; after the push, they never hold that time, even
+> before the controller records the receipt. A pause or stop
+> remains governed by its explicit authority. A cross-model/provider
+> migration is the one exception to DONE and uses the shard as a successor's
+> brief. Off-duty time grants no new project authority. Thank the lane;
+> verify the shard against a fresh private-remote fetch. Send exit only after
+> the agent chooses to leave and asks for it; confirm process exit and
+> resource release before recording RETIRED. Keep shards private, never on a
+> public remote.
 > A question is not a cancellation: answer and re-enter the mission; only the named
 > authority's explicit pause, a tripped stop condition or the acceptance
 > evidence in hand ends it, and a pause outlives quota resets. At DONE, assign the next

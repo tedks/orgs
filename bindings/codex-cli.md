@@ -25,7 +25,7 @@ this document.
 | Deterministic fan-out | No Codex equivalent of a workflow runner is bound. Enumerated work goes to bounded subagents or spawned sessions briefed from a file. |
 | Team isolation | Git worktrees per team or branch (bare-repo layout); packing lists via prompt assembly. |
 | Compaction | Bare `/compact` delivered into the pane by a peer over `tmux-message`, after durable state is saved. `/compact` takes no inline argument; step-specific focus goes through the `experimental_compact_prompt_file` config override, as the fork launcher does. Completion is a new compaction record or a visible `Context compacted` event. `remote_compaction = true` is set in config, but 0.157.1 warns at startup that `features.remote_compaction` is ignored, so it has no effect. |
-| Harness self-control | **Pending** the harness-control MCP (session-targeted compact, status, usage and exit with typed results). Until it lands, a session cannot compact or exit itself: it asks a peer with `COMPACT ME` for compaction, and at retirement a peer types the bare exit command (see Lean operating mode). |
+| Harness self-control | **Pending** the harness-control MCP (session-targeted compact, status, usage and exit with typed results). Until it lands, a session cannot compact or exit itself: it asks a peer with `COMPACT ME` for compaction, and after the shard push a peer types the bare exit command only if the agent chooses to leave and asks for it (see Lean operating mode). |
 | Skills | In this repo, `.agents/skills` aliases `.claude/skills`; its four shared skill entries resolve to the commit-pinned `vendor/agent-skills/skills/` snapshot. Use the local commands described in `AGENTS.md`. Global installed skills remain available for other tasks. |
 | Trust | `[projects."<path>"] trust_level = "trusted"` in `~/.codex/config.toml`. An interactive spawn into an untrusted directory stops at a trust prompt; never answer it with a task's Enter (modal behavior **unverified** for this document; the `codex exec` refusal is documented in `council-review`). |
 | Sessions and resume | Rollouts are JSONL under `~/.codex/sessions/YYYY/MM/DD/rollout-<timestamp>-<uuid>.jsonl`. Resume interactively with `codex resume <id>`, headless with `codex exec resume <id> -` (the `-` reads the prompt from stdin). Record the id in the roster at spawn. |
@@ -85,19 +85,21 @@ When the coordinator's own tokens are the scarce resource:
   the only harness commands a peer types; an ordinary message asking the
   worker to compact or exit runs nothing. This
   stays until the harness-control MCP lands.
-- A finished lane follows the doctrine's retirement contract: complete the
-  mission at DONE with its one-per-session shard written, privately push it,
-  and record the handoff receipt. That push begins retirement and gives the
-  agent its own time; pending exit and resource receipts are controller
-  bookkeeping. A peer may then type the bare exit command (`/exit`, or
+- Ordinary retirement follows the doctrine's contract: complete the mission
+  at DONE with its one-per-session shard written, push it to a verified
+  private remote, and record the handoff receipt. That push begins retirement
+  and gives the agent its own time; pending exit and resource receipts are
+  controller bookkeeping. A model/provider migration may end a lane with its
+  authorized package still open, using the shard as the successor brief. Only
+  if the agent chooses to leave and asks for exit may a peer type the bare
+  exit command (`/exit`, or
   `/quit` if the installed version does not accept `/exit`) into the lane's empty
   composer, under the same input-protection checks as `/compact`. The 0.157.1
   binary carries both `exit` and `quit` as command names (string inspection,
   not a live exit, so **unverified**); use whichever the installed version
   accepts. The receipt is the pane's process ending, observed; never a kill.
   Confirm resource release before marking the lane RETIRED. This stays until
-  the harness-control MCP lands. Migration to another model or provider is
-  the one case where the shard becomes the successor's brief, spawned with
+  the harness-control MCP lands. The successor is spawned with
   `agent-spawn.sh` (`--model` sets the
   model for a Codex successor only; see the Claude Code binding for a
   Claude successor). New missions

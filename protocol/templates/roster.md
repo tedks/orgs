@@ -37,4 +37,4 @@ Track file/host leases by exact scope, holder and resource/run id, with peer
 agreement before acquisition and an explicit release receipt. A request or
 silence does not transfer a lease. Resumption reconciles stale leases with
 the holder before reuse. Retired lanes leave the active cadence roster;
-private completed-work shards are referenced only by sanitized receipts.
+private session shards are referenced only by sanitized receipts.

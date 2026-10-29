@@ -26,9 +26,10 @@ after that.
   under the same input-protection checks as any delivery. `/compact` is
   confirmed by the compaction event; exit is requested only after the
   private shard push is verified, and is confirmed by observing the pane's
-  process end, never by the send and never by a kill. The mission ends at
-  DONE with its shard written. The successful private push begins retirement
-  and gives the agent its own time. Until process end is observed, the
+  process end, never by the send and never by a kill. In ordinary retirement,
+  the mission ends at DONE with its shard written. The successful private
+  push begins retirement and gives the agent its own time. A peer sends exit
+  only if the agent chooses to leave and asks for it. Until process end is observed, the
   controller's pending-exit state tracks its receipt; it does not ask the
   agent to wait or resume work. This stays until the harness-control MCP
   lands.
@@ -134,11 +135,9 @@ monitor them; it dispatches, verifies receipts, and goes quiet.
 
 ## Handoff and migration (any hat)
 
-Switching an agent's model or provider, or replacing a CTO or lead whose
-context is spent, is a retirement followed by a spawn. The outgoing agent
-completes its mission and writes its shard before retirement begins. This
-migration is the one case where the shard becomes the successor's brief;
-ordinary retirement records completed work and does not ask anyone to
-resume it. The successor reconstructs state from artifacts alone and
-writes its first record entry before acting. Neither retirement nor reuse
-changes package acceptance.
+Ordinary retirement follows a completed mission. Switching an agent's model
+or provider is the one exception: the outgoing lane may end with its
+authorized package still open, and the shard becomes the successor's brief.
+The successor reconstructs state from artifacts alone and writes its first
+record entry before acting. Neither retirement nor reuse changes package
+acceptance.
