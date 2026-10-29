@@ -168,8 +168,8 @@ the question is ruled. Before the outgoing lane pushes its shard, the controller
 records the intended successor provider and model argument and confirms the
 target differs from the outgoing lane by provider or normalized model argument.
 For a same-provider migration, an unobservable outgoing model argument fails
-closed; bare-family/versioned aliases of the same family count as the same
-selection.
+closed. An unversioned family selector and a versioned selector of that family
+count as the same model; two distinct versioned selectors remain different.
 After launch, before the successor receives the shard as a brief or a package
 mission, the controller confirms the live provider and selected model
 argument match that target and verifies the shard's exact bytes before

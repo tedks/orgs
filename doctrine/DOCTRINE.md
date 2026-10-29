@@ -277,8 +277,9 @@ question is ruled. Before the outgoing lane's push, the controller records
 the intended successor provider and model argument and confirms the target
 differs from the outgoing lane by provider or normalized model argument. For
 a same-provider migration, an unobservable outgoing model argument fails
-closed, and bare-family/versioned aliases of the same family count as the same
-selection. After launch, but before the successor receives the shard as a
+closed. An unversioned family selector and a versioned selector of that family
+count as the same model; two distinct versioned selectors remain different.
+After launch, but before the successor receives the shard as a
 brief or a package mission, the controller confirms the live provider and selected model
 argument match that target. The controller also verifies the shard's exact
 bytes with a fresh private-remote fetch before giving it to the successor. If
@@ -478,8 +479,9 @@ The distilled form, packed verbatim into every role prompt:
 > and model argument before the shard push, confirming the target differs
 > from the outgoing lane by provider or normalized model argument. For a
 > same-provider migration, an unobservable outgoing model argument fails
-> closed; bare-family/versioned aliases of the same family count as the same
-> selection. After launch,
+> closed. An unversioned family selector and a versioned selector of that
+> family count as the same model; two distinct versioned selectors remain
+> different. After launch,
 > confirm the live provider and selected model argument match the target and
 > verify exact shard bytes before giving the shard
 > as a brief or package mission. Otherwise do not use the shard as a brief; leave the package

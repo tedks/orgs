@@ -117,7 +117,7 @@ When the coordinator's own tokens are the scarce resource:
   `retire.sh --handoff AGENT MODEL`, which wraps the published
   `agent-spawn.sh` launcher. The launcher accepts `--model` for Claude and
   Codex successors. The workflow verifies the successor's live provider and
-  selected model argument before briefing. New
-  missions
+  selected model argument before briefing. Same-provider selector and alias
+  rules are in [DOCTRINE.md](../doctrine/DOCTRINE.md). New missions
   start in fresh lanes unless exact context continuity is justified.
 - Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.
