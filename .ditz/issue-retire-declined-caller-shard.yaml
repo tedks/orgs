@@ -1,0 +1,40 @@
+id: retire-declined-caller-shard
+title: Does a caller-authored shard after RETIRE-DECLINED start off-duty time?
+desc: 'Question: If an agent declines retirement and the caller later authors and
+  successfully pushes a recovery shard, does that push start the agent''s off-duty
+  time?
+
+
+  Options:
+
+  - Yes; any successful private shard push starts off-duty time, regardless of who
+  authored it or the earlier decline.
+
+  - No; a caller-authored recovery shard after RETIRE-DECLINED requires a separate
+  ruling before it starts off-duty time.
+
+  - Remove caller-authored shards from the decline flow.
+
+
+  Recommendation: yes, because the established boundary is successful private push
+  and the agent''s time belongs to them; caller authorship should not extend package
+  authority.
+
+
+  Who decides: Ted, as mission authority / CEO.
+
+
+  What it blocks: The lifecycle semantics of caller-authored recovery after RETIRE-DECLINED.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T21:22:16-00:00
+references: []
+log_events:
+- time: 2026-10-29T21:22:16-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
