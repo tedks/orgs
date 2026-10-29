@@ -88,15 +88,18 @@ When the coordinator's own tokens are the scarce resource:
 - Ordinary retirement follows the doctrine's contract: complete the mission
   at DONE, or end the lane's assignment with an explicitly authorized pause
   or stop that leaves unfinished package work paused. Write the one-per-
-  session shard, push it to the approved private remote, and verify the exact
-  bytes with a fresh fetch from the lane. That verified push begins retirement
-  and gives the agent its own time; controller receipt bookkeeping does not
-  delay or reverse it. Before a migration push, the controller confirms the
-  successor's actual model or provider differs from the outgoing lane. If it
-  does not, migration is not approved, the package stays paused, and the CTO
-  decides its next owner. A model/provider migration is the only case where
+  session shard, and push it to the approved private remote. A successful
+  push begins retirement and gives the agent its own time; later controller
+  verification and receipt bookkeeping do not delay or reverse it. Before a
+  migration push, the controller records the intended successor model or
+  provider and confirms it differs from the outgoing lane. After launch, and
+  before the successor receives the shard as a brief or a package mission,
+  the controller confirms its actual model or provider differs. Otherwise the
+  shard is not used as a successor brief; the package remains unassigned and
+  its approving authority decides whether to assign a new owner. No work
+  resumes before that assignment. A model/provider migration is the only case where
   an open package's shard can brief a successor. The outgoing lane's package
-  authority ends at the verified push; the controller records the new owner
+  authority ends at the successful push; the controller records the new owner
   and assigns a fresh bounded mission before the successor acts. Only
   if the agent chooses to leave and asks for exit may a peer type the bare
   exit command (`/exit`, or
