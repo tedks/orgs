@@ -132,24 +132,31 @@ packages. Record public evidence with sanitized references.
 
 | From | To | Who | Evidence required |
 |---|---|---|---|
-| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE, or approved cross-model/provider migration; shard written; thanks and push receipt pending; unresolved ownership named |
-| HANDOFF_PENDING | OFF_DUTY | coordinator, from lane's receipt | per-session shard verified against a fresh private-remote fetch; commit and successful push; receipt recorded |
+| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or explicitly authorized stop/pause of this lane; or CTO-approved cross-model/provider migration; shard written; unresolved ownership named |
+| HANDOFF_PENDING | OFF_DUTY | coordinator, from lane's receipt | exact per-session shard verified on the approved private remote; mission processes and leases released or transferred with accepted receipts; outgoing package authority revoked on migration |
 | OFF_DUTY | EXIT_READY | coordinator, from agent's request | agent explicitly chooses to leave and asks for exit; private push verified |
 | EXIT_READY | RETIRED | coordinator | exit confirmed; owned resources released with receipts; active roster/cadence updated |
 
-A successful private push begins retirement. Once it verifies the push, the
-controller records OFF_DUTY; the agent's time starts at the push, even if the
-controller has not yet recorded that receipt. The agent owns that time and
-may keep the session or choose to leave. EXIT_READY records the agent's
-explicit exit choice; process-end and resource receipts still belong to the
-controller. These states never hold the agent's time or create a work
-assignment. A failed push remains HANDOFF_PENDING; a failed exit remains
-EXIT_READY. Control transport success does not license either transition.
+A push to the approved private remote begins retirement once a fresh fetch
+verifies the exact shard bytes. The agent's time starts at that verified push,
+even if the controller has not yet recorded the receipt. The agent owns that
+time and may keep the session or choose to leave. EXIT_READY records the
+agent's explicit exit choice; process-end and resource receipts still belong
+to the controller. These states never hold the agent's time or create a work
+assignment. A failed verification means the push is incomplete and
+HANDOFF_PENDING remains; a failed exit remains EXIT_READY. Control transport
+success does not license either transition.
 Fresh missions use fresh lanes unless context continuity is explicitly
 justified and logged. A shard becomes a successor's brief only for a
 model/provider migration.
 
-An explicit pause or stop of unfinished work remains governed by that
-authority; it is not a retirement transition or permission for a successor
-to resume the package. A cross-model/provider migration is the exception
-that can end a lane while its authorized package remains open.
+An explicit pause or stop can end the lane's assignment, but it leaves
+unfinished package work paused under that authority and does not authorize a
+successor to resume it. A cross-model/provider migration is the exception
+that can end a lane while its authorized package remains open. On migration,
+the outgoing lane's package authority ends at the verified push. Before the
+successor acts, the controller records the new owner and gives it a fresh
+bounded mission; without that assignment the package remains paused. Low
+context alone does not authorize a successor brief: compact in the current
+lane when possible, or keep the package paused until its authority assigns a
+separate mission.

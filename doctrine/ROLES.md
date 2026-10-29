@@ -66,9 +66,13 @@ and treats one forming as the defect it is.
   lanes and act: assign, or record idle and why.
 - **Reports:** consolidated sitreps on request; decision-log entries as
   decisions are made; blockers at once. Never routine acknowledgements.
-- **Lifecycle:** compact at checkpoints after the roster is current. Hand
-  off to a successor through a shard when context is low or the provider
-  budget says so. The roster never goes stale before a compaction.
+- **Lifecycle:** compact at checkpoints after the roster is current. A
+  model/provider migration may hand an authorized open package to a successor
+  through its shard; end the outgoing lane's package authority at the push and
+  record the new owner before the successor acts. Low context alone does not
+  create a successor brief: compact in the current lane or keep the package
+  paused until its authority assigns a separate mission. The roster never
+  goes stale before a compaction.
 - **Does not:** implement, except a tracer bullet; relay routine
   acknowledgements; watch lanes turn by turn; approve individual attempts
   inside a package that already carries repair authority.
@@ -138,6 +142,8 @@ monitor them; it dispatches, verifies receipts, and goes quiet.
 Ordinary retirement follows a completed mission. Switching an agent's model
 or provider is the one exception: the outgoing lane may end with its
 authorized package still open, and the shard becomes the successor's brief.
-The successor reconstructs state from artifacts alone and writes its first
-record entry before acting. Neither retirement nor reuse changes package
-acceptance.
+The outgoing lane's authority over that package ends at the push. The
+controller records the new owner and gives the successor a fresh bounded
+mission before it acts. The successor reconstructs state from artifacts
+alone and writes its first record entry before acting. Neither retirement
+nor reuse changes package acceptance.

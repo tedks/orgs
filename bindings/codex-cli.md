@@ -90,7 +90,11 @@ When the coordinator's own tokens are the scarce resource:
   private remote, and record the handoff receipt. That push begins retirement
   and gives the agent its own time; pending exit and resource receipts are
   controller bookkeeping. A model/provider migration may end a lane with its
-  authorized package still open, using the shard as the successor brief. Only
+  authorized package still open, using the shard as the successor brief. The
+  outgoing lane's package authority ends at the verified push; the controller
+  records the new owner and assigns a fresh bounded mission before the
+  successor acts. The successor's actual model or provider must differ from
+  the outgoing lane's. Only
   if the agent chooses to leave and asks for exit may a peer type the bare
   exit command (`/exit`, or
   `/quit` if the installed version does not accept `/exit`) into the lane's empty
