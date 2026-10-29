@@ -91,12 +91,13 @@ When the coordinator's own tokens are the scarce resource:
   session shard, and push it to the approved private remote. A successful
   push begins retirement and gives the agent its own time; later controller
   verification and receipt bookkeeping do not delay or reverse it. Before a
-  migration push, the controller records the intended successor model or
-  provider and confirms it differs from the outgoing lane. A CTO's own
+  migration push, the controller records the intended successor provider and
+  model argument and confirms the target differs from the outgoing lane by
+  provider or selected model argument. A CTO's own
   migration waits on `orgs-cto-self-migration-approver`. After launch, and
   before the successor receives the shard as a brief or a package mission,
-  the controller confirms its actual model or provider differs and verifies
-  the shard's exact bytes. Otherwise the
+  the controller confirms the live provider and selected model argument match
+  that target and verifies the shard's exact bytes. Otherwise the
   shard is not used as a successor brief; the package remains unassigned and
   its approving authority decides whether to assign a new owner. No work
   resumes before that assignment. A model/provider migration is the only case where
@@ -112,9 +113,10 @@ When the coordinator's own tokens are the scarce resource:
   not a live exit, so **unverified**); use whichever the installed version
   accepts. The receipt is the pane's process ending, observed; never a kill.
   Confirm resource release before marking the lane RETIRED. This stays until
-  the harness-control MCP lands. The successor is spawned with
-  `agent-spawn.sh` (`--model` sets the
-  model for a Codex successor only; see the Claude Code binding for a
-  Claude successor). New missions
+  the harness-control MCP lands. The retirement workflow is
+  `retire.sh --handoff`, which wraps the published `agent-spawn.sh` launcher
+  and accepts `--model` for Claude and Codex successors. It verifies the
+  successor's live provider and selected model argument before briefing. New
+  missions
   start in fresh lanes unless exact context continuity is justified.
 - Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.

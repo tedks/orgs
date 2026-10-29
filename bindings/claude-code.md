@@ -18,7 +18,7 @@ that's the portability claim the cold-start audit tests.
 | Standup heartbeat | `/loop` (self-paced) or cron; event triggers convene directly |
 | Deterministic fan-out (enumerated sprint, fixed task list) | `Workflow` tool — only for the mechanical middle; decomposition and redirection stay with the live lead |
 | Team isolation | git worktrees per team/branch (bare-repo layout); packing lists via prompt assembly |
-| Handoff and migration | Ordinary retirement follows DONE; an explicitly authorized pause or stop can also end the lane's assignment, leaving unfinished package work paused. A model/provider migration is the only case where an open package's shard can brief a successor. A CTO's own migration waits on `orgs-cto-self-migration-approver`. Before the outgoing lane pushes its shard, the controller records the intended successor model or provider and confirms it differs from the outgoing lane. The controller confirms the launched successor's actual model or provider and verifies the shard's exact bytes before giving it the shard as a brief or assigning it the package. Otherwise the shard is not used as a successor brief; the package remains unassigned and its approving authority decides whether to assign a new owner. No work resumes before that assignment. The outgoing lane's package authority ends at the successful push; the controller records the new owner and assigns a fresh bounded mission before the successor acts. A tier mismatch still goes to the CTO, who decides tier per lane (ROLES.md), before briefing. Nobody fixes it by typing into the successor's pane. The published launcher accepts `--model` for Claude and Codex. Confirm the actual model before passing a migration shard; if the harness cannot verify it before briefing, do not assign the open package. See doctrine, *Quiet coordination and lifecycle*, and [doctrine/ROLES.md](../doctrine/ROLES.md). |
+| Handoff and migration | Ordinary retirement follows DONE; an explicitly authorized pause or stop can also end the lane's assignment, leaving unfinished package work paused. A model/provider migration is the only case where an open package's shard can brief a successor. A CTO's own migration waits on `orgs-cto-self-migration-approver`. Before the outgoing lane pushes its shard, the controller records the intended successor provider and model argument and confirms the target differs from the outgoing lane by provider or selected model argument. The `retire.sh --handoff` workflow launches without the shard, then confirms the live provider and selected model argument match that target. It verifies the shard's exact bytes before briefing. Otherwise the shard is not used as a successor brief; the package remains unassigned and its approving authority decides whether to assign a new owner. No work resumes before that assignment. The outgoing lane's package authority ends at the successful push; the controller records the new owner and assigns a fresh bounded mission before the successor acts. A tier mismatch still goes to the CTO, who decides tier per lane (ROLES.md), before briefing. Nobody fixes it by typing into the successor's pane. `retire.sh --handoff` wraps the published launcher, which accepts `--model` for Claude and Codex. See doctrine, *Quiet coordination and lifecycle*, and [doctrine/ROLES.md](../doctrine/ROLES.md). |
 | Harness self-control | **Pending** the harness-control MCP. Until it lands, a session cannot compact or exit itself: it asks with `COMPACT ME`, and a peer sends bare `/compact` over `tmux-message`; after the shard push, a peer types bare `/exit` only if the agent chooses to leave and asks for it (see Lean operating mode). |
 | Codex seat sessions | `codex exec resume <id> -` (append, single writer) / `codex exec fork <id> -` (non-mutating branch) |
 | agy seat sessions | `--conversation <id>` headless; ids via `--log-file` scrape or `~/.gemini/antigravity-cli/conversations/` |
@@ -73,16 +73,18 @@ When the coordinator's own tokens are the scarce resource, the binding tightens:
   remote. A successful push begins retirement and gives the agent its own
   time; later controller verification and receipt bookkeeping do not delay or
   reverse it. Verify exact bytes before sending a requested exit; this check
-  does not hold the agent's off-duty time. Before a migration push, the controller records the intended
-  successor model or provider and confirms it differs from the outgoing lane.
+  does not hold the agent's off-duty time. Before a migration push, the
+  controller records the intended successor provider and model argument and
+  confirms the target differs from the outgoing lane by provider or selected
+  model argument.
   After launch, and before the successor receives the shard as a brief or a
-  package mission, the controller confirms its actual model or provider
-  differs. Otherwise the shard is not used as a successor brief; the package
+  package mission, the controller confirms the live provider and selected
+  model argument match the intended target. Otherwise the shard is not used as
+  a successor brief; the package
   remains unassigned and its approving authority decides whether to assign a
   new owner. No work resumes before that assignment. A model/provider migration
-  is the only case where an open package's shard can brief a successor. Only if the
-  agent chooses to leave and asks for exit, and exact shard bytes are verified
-  on the approved private remote, may a peer type bare `/exit` into
+is the only case where an open package's shard can brief a successor. Only if
+the agent chooses to leave and asks for exit may a peer type bare `/exit` into
   the lane's empty composer over `tmux-message`, under the same input-protection checks
   as `/compact`. The receipt is the pane's process ending, observed; never a
   kill. Confirm resource release before marking the

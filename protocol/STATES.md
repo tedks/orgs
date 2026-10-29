@@ -133,25 +133,27 @@ packages. Record public evidence with sanitized references.
 
 | From | To | Who | Evidence required |
 |---|---|---|---|
-| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or package authority's explicit stop/pause authorization (which the lane may request); or CTO-approved cross-model/provider migration; shard written; unresolved ownership named |
-| HANDOFF_PENDING | OFF_DUTY | coordinator, from lane's receipt | successful per-session shard push to the approved private remote; exact bytes verified by controller for receipt; mission processes and leases released or accepted-transferred before push; outgoing package authority ends on migration |
-| OFF_DUTY | EXIT_READY | coordinator, from agent's request | agent explicitly chooses to leave and asks for exit; controller fetch verifies exact shard bytes on the approved private remote |
+| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or package authority's explicit stop/pause authorization (which the lane may request); or CTO-approved cross-model/provider migration; shard written; unresolved ownership named; for migration, intended successor provider/model argument recorded and target differs from outgoing lane on one of those dimensions |
+| HANDOFF_PENDING | OFF_DUTY | coordinator, from lane's receipt | successful per-session shard push to the approved private remote; mission processes and leases released or accepted-transferred before push; outgoing package authority ends on migration |
+| OFF_DUTY | EXIT_READY | coordinator, from agent's request | agent explicitly chooses to leave and asks for exit; controller re-confirms exact shard bytes on the approved private remote before sending exit |
 | EXIT_READY | RETIRED | coordinator | exit confirmed; owned resources released with receipts; active roster/cadence updated |
 
 A successful push to the approved private remote begins retirement. The
 agent's time starts at that push, even if the controller has not yet verified
-or recorded its receipt; a later controller mismatch is a repair item and
-cannot take that time back. A rejected push means retirement has not started.
+the bytes or recorded its receipt; OFF_DUTY records the pushed-shard boundary,
+not the moment a later receipt is published. A later controller mismatch is a
+repair item and cannot take that time back. A rejected push means retirement
+has not started.
 Mission processes and leases must be released or accepted-transferred before
 the push, with receipts recorded in the shard. The agent owns that time and
 may keep the session or choose to leave. EXIT_READY records the
 agent's explicit exit choice; process-end and resource receipts still belong
 to the controller. These states never hold the agent's time or create a work
-assignment. A later verification mismatch is a controller repair item and
-may leave the roster at HANDOFF_PENDING; it does not take the agent's time
-back. Exact-byte verification is required before sending an exit command, but
-it does not hold the agent's off-duty time. A failed exit remains EXIT_READY. Control transport
-success does not license either transition.
+assignment. A later verification mismatch may leave the roster at
+HANDOFF_PENDING; it does not take the agent's time back. Exact-byte verification
+is required before sending an exit command, but it does not hold the agent's
+off-duty time. A failed exit remains EXIT_READY. Control transport success
+does not license any exit or receipt transition.
 Fresh missions use fresh lanes unless context continuity is explicitly
 justified and logged. A shard becomes a successor's brief only for a
 model/provider migration.
@@ -162,12 +164,13 @@ successor to resume it. A cross-model/provider migration is the only case
 that can end a lane while its authorized package remains open. Approval for
 a responsible CTO's own migration remains unresolved in
 `orgs-cto-self-migration-approver`; do not hand off that open package until
-the question is ruled. Before the
-outgoing lane pushes its shard, the controller records the intended successor
-model or provider and confirms it differs from the outgoing lane. After launch,
-before the successor receives the shard as a brief or a package mission, the
-controller confirms its actual model or provider differs and verifies the
-shard's exact bytes before briefing. Otherwise the shard
+the question is ruled. Before the outgoing lane pushes its shard, the controller
+records the intended successor provider and model argument and confirms the
+target differs from the outgoing lane by provider or selected model argument.
+After launch, before the successor receives the shard as a brief or a package
+mission, the controller confirms the live provider and selected model
+argument match that target and verifies the shard's exact bytes before
+briefing. Otherwise the shard
 is not used as a successor brief, the package remains unassigned and its
 approving authority decides whether to assign a new owner. No work resumes
 before that assignment. On migration, the outgoing lane's package authority ends at

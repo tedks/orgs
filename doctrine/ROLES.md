@@ -150,11 +150,12 @@ also end the lane's assignment, leaving unfinished package work paused.
 Switching an agent's model or provider is the only case where an open
 package's shard can brief a successor. A CTO's own migration waits on
 `orgs-cto-self-migration-approver`. Before the outgoing lane pushes its
-shard, the controller records the intended successor model or provider and
-confirms it differs from the outgoing lane. After launch, and before the
-successor receives the shard as a brief or a package mission, the controller
-confirms its actual model or provider differs and verifies the shard's exact
-bytes. Otherwise the shard is not
+shard, the controller records the intended successor provider and model
+argument and confirms the target differs from the outgoing lane by provider
+or selected model argument. After launch, and before the successor receives
+the shard as a brief or a package mission, the controller confirms the live
+provider and selected model argument match that target and verifies the
+shard's exact bytes. Otherwise the shard is not
 used as a successor brief; the package remains unassigned and its approving
 authority decides whether to assign a new owner. No work resumes before that
 assignment. The outgoing lane's authority over that package ends at the
