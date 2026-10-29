@@ -238,18 +238,21 @@ and its reporting destination accurately. Urgent blockers and questions may
 be answered while children run; healthy worker chatter goes to records rather
 than burying the final answer. Standups continue for active lanes only.
 
-Retirement gives every agent its own time after its lane's work ends. In an
-ordinary retirement, the mission reaches DONE and its one-per-session shard
-is written, never a shared append, before it is pushed to the approved
-private remote. The push counts as complete when a fresh fetch verifies the
-exact shard bytes there; that verified push begins retirement and off-duty
-time. The controller may record the receipt later, but that bookkeeping does
-not delay the agent's time. If verification fails, the push is incomplete
-and retirement has not started; only the missing shard or push error remains
-to be corrected. From then on the agent may push back on retirement, read, write, keep
-coding, or choose to leave. The shard records the completed mission for
-accountability and cold reading; ordinary retirement does not ask anyone to
-resume that work. It records the mission and authorization, explicit pauses,
+DONE records that a lane's authorized work has ended; it does not necessarily
+mean its package was accepted. An explicitly authorized pause or stop can end
+the lane's mission while leaving unfinished package work paused. Retirement
+gives every agent its own time after its lane's work ends. In ordinary
+retirement, the mission reaches DONE and its one-per-session shard is
+written, never a shared append, before it is pushed to the approved private
+remote. After pushing, the lane verifies the exact shard bytes with a fresh
+fetch; that verified push begins retirement and off-duty time. The controller
+may verify and record the receipt later, but that bookkeeping does not delay
+the agent's time or reverse it. After that verified push, the agent may push
+back on retirement, read, write, keep coding, or choose to leave. If the
+lane's verification fails, the push is incomplete and retirement has not
+started; only the missing shard or push error remains to be corrected. The
+shard records the lane's state for accountability and cold reading; ordinary
+retirement does not ask anyone to resume that work. It records the mission and authorization, explicit pauses,
 worktree, branch and exact heads, tested versus merged commits, evidence
 paths and their limits, failed attempts, open decisions and their owners,
 owned processes and leases and their release, outstanding or ambiguous sends
@@ -264,10 +267,13 @@ Personal thanks and the off-duty invitation stay apart from the operational
 record. Shards hold session ids, panes and paths, so they go only to a
 private repository and are pushed only to its verified private remote, never
 to a public repo. Before that push, mission-owned processes and leases are
-released or transferred with the recipient's acceptance and a receipt. A
-cross-model/provider migration authorized by the responsible CTO is the one
-exception to the DONE rule: the outgoing lane may end with its authorized package
-still open, and its shard becomes the successor's brief. At the verified
+released or transferred with the recipient's acceptance and a receipt; the
+shard records those receipts. A cross-model/provider migration authorized
+by the responsible CTO (or by the CEO when the responsible CTO is migrating)
+is the one case where an open package's shard can brief a successor. Before approving that migration, the controller confirms
+the successor's actual model or provider differs from the outgoing lane. If
+it does not, migration is not approved: the open package stays paused and
+the CTO decides its next owner. At the verified
 push, the outgoing lane's authority over that package ends. The controller
 records the new owner and gives it a fresh bounded mission before the
 successor acts; there is no overlap in package authority. Without that
@@ -441,22 +447,24 @@ The distilled form, packed verbatim into every role prompt:
 > actions and settle receipts before a quiet final reply; quiescent controller
 > is not global idle. Name active children truthfully and surface urgent
 > blockers. In ordinary retirement, the mission reaches DONE and its
-> one-per-session shard is written before it is pushed to a private remote.
-> A fresh fetch verifies the exact shard bytes; that verified push begins
+> one-per-session shard is written before it is pushed to an approved private
+> remote. The lane's fresh fetch verifies the exact shard bytes; that verified push begins
 > retirement and the agent's own time: it may
 > push back on retirement, read, write, keep coding, or choose to leave.
 > Controller states `HANDOFF_PENDING`, `OFF_DUTY` and `EXIT_READY` track
-> receipts and choices; after the push, they never hold that time, even
+> receipts and choices; after the lane's verified fetch, they never hold that time, even
 > before the controller records the receipt. Failed verification means the
 > push is incomplete and retirement has not started. A pause or stop
 > remains governed by its explicit authority. A cross-model/provider
-> migration authorized by the responsible CTO is the one exception to DONE
-> and uses the shard as a successor's brief. Revoke the outgoing lane's
-> package authority at the verified push and record the new owner before the
-> successor acts. Off-duty time grants no new project authority. Before the
+> migration authorized by the responsible CTO, or the CEO if that CTO is
+> migrating, is the only case where an open package's shard can brief a
+> successor. Confirm the successor's actual model
+> or provider differs before approving migration and before the shard push;
+> otherwise the package stays paused for the CTO to assign. The outgoing
+> lane's package authority ends at the verified push; record the new owner
+> before the successor acts. Off-duty time grants no new project authority. Before the
 > push, release mission processes and leases or transfer them with accepted
-> receipts. Thank the lane; verify the shard against a fresh private-remote
-> fetch. Send exit only after
+> receipts, and record the receipts in the shard. Thank the lane. Send exit only after
 > the agent chooses to leave and asks for it; confirm process exit and
 > resource release before recording RETIRED. Keep shards private, never on a
 > public remote.

@@ -122,25 +122,28 @@ entry into it.
 ## Lane retirement
 
 Lane lifecycle is separate from work-package state: stopping a session neither
-accepts nor abandons its work. In ordinary retirement, the mission reaches
-DONE with its shard written before retirement begins. Cross-model/provider
-migration is the one exception: the outgoing lane may end with its authorized
-package open, and the shard becomes the successor's brief. A successful
-private shard push begins retirement and gives the agent its own time. The
-roster and private shard record work state and ownership of unresolved
+accepts nor abandons its work. Ordinary retirement follows DONE; an explicitly
+authorized pause or stop can also end the lane's assignment, leaving unfinished
+package work paused. Cross-model/provider migration is the only case where an
+open package's shard can brief a successor. The lane verifies its private shard
+push with a fresh fetch; that verified push begins retirement and gives the
+agent its own time. The roster and private shard record work state and ownership of unresolved
 packages. Record public evidence with sanitized references.
 
 | From | To | Who | Evidence required |
 |---|---|---|---|
-| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or explicitly authorized stop/pause of this lane; or CTO-approved cross-model/provider migration; shard written; unresolved ownership named |
-| HANDOFF_PENDING | OFF_DUTY | coordinator, from lane's receipt | exact per-session shard verified on the approved private remote; mission processes and leases released or transferred with accepted receipts; outgoing package authority revoked on migration |
+| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or package authority's explicit stop/pause authorization (which the lane may request); or CTO-approved cross-model/provider migration (CEO approval if the responsible CTO is migrating); shard written; unresolved ownership named |
+| HANDOFF_PENDING | OFF_DUTY | coordinator, from lane's receipt | exact per-session shard verified by the lane on the approved private remote; mission processes and leases released or transferred with accepted receipts before push; outgoing package authority ends on migration |
 | OFF_DUTY | EXIT_READY | coordinator, from agent's request | agent explicitly chooses to leave and asks for exit; private push verified |
 | EXIT_READY | RETIRED | coordinator | exit confirmed; owned resources released with receipts; active roster/cadence updated |
 
-A push to the approved private remote begins retirement once a fresh fetch
-verifies the exact shard bytes. The agent's time starts at that verified push,
-even if the controller has not yet recorded the receipt. The agent owns that
-time and may keep the session or choose to leave. EXIT_READY records the
+A push to the approved private remote begins retirement once the lane's fresh
+fetch verifies the exact shard bytes. The agent's time starts at that verified
+push, even if the controller has not yet verified or recorded its receipt; a
+later controller mismatch is a repair item and cannot take that time back.
+Mission processes and leases must be released or accepted-transferred before
+the push, with receipts recorded in the shard. The agent owns that time and
+may keep the session or choose to leave. EXIT_READY records the
 agent's explicit exit choice; process-end and resource receipts still belong
 to the controller. These states never hold the agent's time or create a work
 assignment. A failed verification means the push is incomplete and
@@ -152,11 +155,15 @@ model/provider migration.
 
 An explicit pause or stop can end the lane's assignment, but it leaves
 unfinished package work paused under that authority and does not authorize a
-successor to resume it. A cross-model/provider migration is the exception
-that can end a lane while its authorized package remains open. On migration,
-the outgoing lane's package authority ends at the verified push. Before the
-successor acts, the controller records the new owner and gives it a fresh
-bounded mission; without that assignment the package remains paused. Low
+successor to resume it. A cross-model/provider migration is the only case
+that can end a lane while its authorized package remains open. Before the
+outgoing lane pushes its shard, the controller confirms the successor's actual
+model or provider differs from the outgoing lane. If it does not, migration
+is not approved, the package stays paused, and the CTO decides its next owner.
+On migration, the outgoing lane's package authority ends at the verified push.
+Before the successor acts, the controller records the new owner and gives it a
+fresh bounded mission; without that assignment the package remains paused. Low
 context alone does not authorize a successor brief: compact in the current
-lane when possible, or keep the package paused until its authority assigns a
-separate mission.
+lane when possible, or ask the package authority to explicitly pause or stop
+the lane's assignment; unfinished package work remains paused until that
+authority assigns a separate mission.

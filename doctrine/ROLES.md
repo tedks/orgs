@@ -26,9 +26,11 @@ after that.
   under the same input-protection checks as any delivery. `/compact` is
   confirmed by the compaction event; a peer sends exit only after the private
   shard push is verified and the agent asks to leave, and confirms it by
-  observing the pane's process end, never by the send and never by a kill. In ordinary retirement,
-  the mission ends at DONE with its shard written. The successful private
-  push begins retirement and gives the agent its own time. Until process end
+  observing the pane's process end, never by the send and never by a kill. In
+  ordinary retirement, the mission ends at DONE, or an explicitly authorized
+  pause or stop ends the lane's assignment with unfinished package work paused.
+  After the shard is pushed, the lane verifies it with a fresh fetch; that
+  verified push begins retirement and gives the agent its own time. Until process end
   is observed, the
   controller's pending-exit state tracks its receipt; it does not ask the
   agent to wait or resume work. This stays until the harness-control MCP
@@ -68,10 +70,12 @@ and treats one forming as the defect it is.
   decisions are made; blockers at once. Never routine acknowledgements.
 - **Lifecycle:** compact at checkpoints after the roster is current. A
   model/provider migration may hand an authorized open package to a successor
-  through its shard; end the outgoing lane's package authority at the push and
+  through its shard; end the outgoing lane's package authority at the verified push and
   record the new owner before the successor acts. Low context alone does not
   create a successor brief: compact in the current lane or keep the package
-  paused until its authority assigns a separate mission. The roster never
+  paused until its authority assigns a separate mission. If context is too
+  low to continue, ask that authority to explicitly pause or stop the lane's
+  assignment. The roster never
   goes stale before a compaction.
 - **Does not:** implement, except a tracer bullet; relay routine
   acknowledgements; watch lanes turn by turn; approve individual attempts
@@ -139,11 +143,15 @@ monitor them; it dispatches, verifies receipts, and goes quiet.
 
 ## Handoff and migration (any hat)
 
-Ordinary retirement follows a completed mission. Switching an agent's model
-or provider is the one exception: the outgoing lane may end with its
-authorized package still open, and the shard becomes the successor's brief.
-The outgoing lane's authority over that package ends at the push. The
-controller records the new owner and gives the successor a fresh bounded
-mission before it acts. The successor reconstructs state from artifacts
-alone and writes its first record entry before acting. Neither retirement
-nor reuse changes package acceptance.
+Ordinary retirement follows DONE; an explicitly authorized pause or stop can
+also end the lane's assignment, leaving unfinished package work paused.
+Switching an agent's model or provider is the only case where an open
+package's shard can brief a successor. Before the outgoing lane pushes its
+shard, the controller confirms the successor's actual model or provider
+differs from the outgoing lane. If it does not, migration is not approved,
+the package stays paused, and the CTO decides its next owner. The outgoing
+lane's authority over that package ends at the verified push. The controller
+records the new owner and gives the successor a fresh bounded mission before
+it acts. The successor reconstructs state from artifacts alone and writes
+its first record entry before acting. Neither retirement nor reuse changes
+package acceptance.
