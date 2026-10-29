@@ -34,6 +34,7 @@ after that.
   own, push, rewrite the current-state header, then continue, compact, hand
   off or retire explicitly. At hand-off or retirement, every open product
   question becomes a tracker issue under `open-questions` first.
+- At task boundaries and standups, read `token-usage incidents` and `token-usage posture` (or `get_usage`); CTOs choose the provider from posture.
 - A question is not a cancellation. Answer it and re-enter the mission.
 - Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.
 
