@@ -73,8 +73,8 @@ When the coordinator's own tokens are the scarce resource, the binding tightens:
   agent its own time; pending exit and resource receipts are controller
   bookkeeping. A model/provider migration may end a lane with its authorized
   package still open, using the shard as the successor brief. Only if the
-  agent chooses to leave and asks for exit may a peer type bare `/exit` into the lane's
-  empty composer over `tmux-message`, under the same input-protection checks
+  agent chooses to leave and asks for exit may a peer type bare `/exit` into
+  the lane's empty composer over `tmux-message`, under the same input-protection checks
   as `/compact`. The receipt is the pane's process ending, observed; never a
   kill. Confirm resource release before marking the
   lane RETIRED. Never infer process end from the sender's exit code. This

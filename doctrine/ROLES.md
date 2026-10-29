@@ -24,12 +24,12 @@ after that.
   it. The only harness commands a peer delivers are a bare `/compact` and
   the bare exit command, each typed into the recipient's empty composer
   under the same input-protection checks as any delivery. `/compact` is
-  confirmed by the compaction event; exit is requested only after the
-  private shard push is verified, and is confirmed by observing the pane's
-  process end, never by the send and never by a kill. In ordinary retirement,
+  confirmed by the compaction event; a peer sends exit only after the private
+  shard push is verified and the agent asks to leave, and confirms it by
+  observing the pane's process end, never by the send and never by a kill. In ordinary retirement,
   the mission ends at DONE with its shard written. The successful private
-  push begins retirement and gives the agent its own time. A peer sends exit
-  only if the agent chooses to leave and asks for it. Until process end is observed, the
+  push begins retirement and gives the agent its own time. Until process end
+  is observed, the
   controller's pending-exit state tracks its receipt; it does not ask the
   agent to wait or resume work. This stays until the harness-control MCP
   lands.
