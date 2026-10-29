@@ -1,0 +1,30 @@
+id: usage-posture-reset-doctrine
+title: Reconcile reset-first provider-budget prose with quota posture ruling
+desc: 'DOCTRINE.md and the global short form still say to spend the provider whose
+  weekly window resets soonest first. Ted''s 2026-10-29 quota posture ruling uses
+  normalized weighted pace first, with sooner reset only for near ties or stale observations.
+  ROLES.md now tells CTOs to use token-usage posture, but the older prose can lead
+  to a different choice.
+
+
+  Recommendation: once the posture command is merged and deployed, update the doctrine''s
+  provider-budget paragraph and packed prompt block to name posture as the decision
+  source and explain the sooner-reset tie/fallback rule. Keep the exact product formula
+  in the token-usage contract rather than duplicate it.
+
+
+  Source: docs-only council review of orgs PR #33. This is a documentation consistency
+  follow-up, not a new product ruling. It does not block PR #33.'
+type: task
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T18:48:47-00:00
+references: []
+log_events:
+- time: 2026-10-29T18:48:47-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
