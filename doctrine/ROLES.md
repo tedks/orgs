@@ -24,11 +24,14 @@ after that.
   it. The only harness commands a peer delivers are a bare `/compact` and
   the bare exit command, each typed into the recipient's empty composer
   under the same input-protection checks as any delivery. `/compact` is
-  confirmed by the compaction event; exit is sent only after the handoff
-  shard's receipt is recorded, and is confirmed by observing the pane's
-  process end, never by the send and never by a kill. Until that is
-  observed, retirement is pending exit. This stays until the harness-control
-  MCP lands.
+  confirmed by the compaction event; exit is requested only after the
+  private shard push is verified, and is confirmed by observing the pane's
+  process end, never by the send and never by a kill. The mission ends at
+  DONE with its shard written. The successful private push begins retirement
+  and gives the agent its own time. Until process end is observed, the
+  controller's pending-exit state tracks its receipt; it does not ask the
+  agent to wait or resume work. This stays until the harness-control MCP
+  lands.
 - Every task boundary runs the boundary ritual (doctrine, *Economy of
   context*): inspect the diff, disposition the evidence, release what you
   own, push, rewrite the current-state header, then continue, compact, hand
@@ -133,7 +136,9 @@ monitor them; it dispatches, verifies receipts, and goes quiet.
 
 Switching an agent's model or provider, or replacing a CTO or lead whose
 context is spent, is a retirement followed by a spawn. The outgoing agent
-writes its shard. The successor's brief is the shard plus this file. The
-successor reconstructs state from artifacts alone and writes its first
-record entry before acting. Neither retirement nor reuse changes package
-acceptance.
+completes its mission and writes its shard before retirement begins. This
+migration is the one case where the shard becomes the successor's brief;
+ordinary retirement records completed work and does not ask anyone to
+resume it. The successor reconstructs state from artifacts alone and
+writes its first record entry before acting. Neither retirement nor reuse
+changes package acceptance.

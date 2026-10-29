@@ -85,19 +85,20 @@ When the coordinator's own tokens are the scarce resource:
   the only harness commands a peer types; an ordinary message asking the
   worker to compact or exit runs nothing. This
   stays until the harness-control MCP lands.
-- A finished lane follows the doctrine's retirement contract: thank it,
-  verify its handoff shard (one file per session, never a shared append) is
-  committed and pushed per the doctrine's shard-privacy rule, and record the
-  handoff receipt. Only then a peer types the bare exit command (`/exit`, or
+- A finished lane follows the doctrine's retirement contract: complete the
+  mission at DONE with its one-per-session shard written, privately push it,
+  and record the handoff receipt. That push begins retirement and gives the
+  agent its own time; pending exit and resource receipts are controller
+  bookkeeping. A peer may then type the bare exit command (`/exit`, or
   `/quit` if the installed version does not accept `/exit`) into the lane's empty
   composer, under the same input-protection checks as `/compact`. The 0.157.1
   binary carries both `exit` and `quit` as command names (string inspection,
   not a live exit, so **unverified**); use whichever the installed version
   accepts. The receipt is the pane's process ending, observed; never a kill.
-  Until then retirement is pending exit. Confirm resource release before
-  marking the lane RETIRED. This stays until the harness-control MCP lands.
-  Migration to another model or provider is the same shard used as the
-  successor's brief, spawned with `agent-spawn.sh` (`--model` sets the
+  Confirm resource release before marking the lane RETIRED. This stays until
+  the harness-control MCP lands. Migration to another model or provider is
+  the one case where the shard becomes the successor's brief, spawned with
+  `agent-spawn.sh` (`--model` sets the
   model for a Codex successor only; see the Claude Code binding for a
   Claude successor). New missions
   start in fresh lanes unless exact context continuity is justified.

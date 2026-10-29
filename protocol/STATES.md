@@ -122,15 +122,23 @@ entry into it.
 ## Lane retirement
 
 Lane lifecycle is separate from work-package state: stopping a session neither
-accepts nor abandons its work. The roster and private handoff preserve who
-owns unresolved packages. Record public evidence with sanitized references.
+accepts nor abandons its work. The mission reaches DONE, with its shard
+written, before retirement begins. A successful private shard push starts
+retirement and gives the agent its own time. The roster and private shard
+record completed work and who owns unresolved packages. Record public
+evidence with sanitized references.
 
 | From | To | Who | Evidence required |
 |---|---|---|---|
-| ACTIVE | HANDOFF_PENDING | coordinator | mission completed or stop decision; thanks and handoff request; unresolved ownership named |
-| HANDOFF_PENDING | EXIT_READY | coordinator, from lane's receipt | append-only private resume entry verified without lost concurrent entries; durable commit/push where configured; next authorized action recorded |
+| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE and shard written; thanks and push receipt pending; unresolved ownership named |
+| HANDOFF_PENDING | EXIT_READY | coordinator, from lane's receipt | append-only private shard verified without lost concurrent entries; durable commit/push where configured; receipt recorded |
 | EXIT_READY | RETIRED | coordinator | exit confirmed; owned resources released with receipts; active roster/cadence updated |
 
-A failed handoff remains HANDOFF_PENDING; a failed exit remains EXIT_READY.
-Control transport success does not license either transition. Fresh missions
-use fresh lanes unless context continuity is explicitly justified and logged.
+A successful private push begins retirement; EXIT_READY means the agent is
+off duty while the controller records the pending process-exit and resource
+receipts. These controller states do not hold the agent's time or create a
+work assignment. A failed push remains HANDOFF_PENDING; a failed exit remains
+EXIT_READY. Control transport success does not license either transition.
+Fresh missions use fresh lanes unless context continuity is explicitly
+justified and logged. A shard becomes a successor's brief only for a
+model/provider migration.

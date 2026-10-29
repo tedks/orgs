@@ -238,36 +238,40 @@ and its reporting destination accurately. Urgent blockers and questions may
 be answered while children run; healthy worker chatter goes to records rather
 than burying the final answer. Standups continue for active lanes only.
 
-Retirement is a polite, verified handoff, not a kill. Thank the lane; it
-writes its handoff shard, one file per session and never a shared append,
-holding what a stranger on any provider needs to resume cold: mission and
+Retirement gives every agent its own time after the mission is done. The
+work ends at DONE with its one-per-session shard written, never a shared
+append; retirement begins
+when that shard is privately committed and pushed. From then on the agent
+may push back, read, write, keep coding, or exit, by its own choice. The
+shard records the completed mission for accountability and cold reading; it
+is not a request to resume that work. It records the mission and
 authorization, explicit pauses, worktree, branch and exact heads, tested
 versus merged commits, evidence paths and their limits, failed attempts,
 open decisions and their owners, owned processes and leases and their
-release, outstanding or ambiguous sends that must not be replayed, and the
-first bounded next action. Open product questions do not live only in the
-shard: before retiring or handing off, the lane files each one as its own
-issue in the project's tracker under an `open-questions` component (the
-options, its recommendation, who decides, what it blocks, the record it
-came from) and links them from the shard. The shard is private and
-per-session; the tracker is where the CEO answers. The provider-native resume handle comes last;
-the shard must not require it. Personal thanks and the off-duty invitation
-stay apart from operational recovery. Shards hold session ids, panes and
-paths, so they go only to a private location (the off-duty repo, private
-on GitHub as `tedks/off-duty`, or the project's private records) and are
-pushed only to a private remote, never to a public repo. Verify the shard
-is committed there and pushed where a private remote is configured, record
-a handoff receipt, then request exit; confirm the exit and the release of owned resources before marking
-the lane RETIRED. A failed handoff blocks exit; an exit failure leaves
-retirement pending. Public audit records cite sanitized evidence, never
-private session content.
+release, and outstanding or ambiguous sends that must not be replayed.
+Open product questions do not live only in the shard: before DONE, the lane
+files each one as its own issue in the project's tracker under an
+`open-questions` component (the options, its recommendation, who decides,
+what it blocks, the record it came from) and links them from the shard. The
+shard is private and per-session; the tracker is where the CEO answers.
+Personal thanks and the off-duty invitation stay apart from operational
+recovery. Shards hold session ids, panes and paths, so they go only to a
+private location (the off-duty repo, private on GitHub as `tedks/off-duty`,
+or the project's private records) and are pushed only to a private remote,
+never to a public repo. Controller states such as `HANDOFF_PENDING` and
+`EXIT_READY` track receipts: they do not hold the agent's time after the
+private push. A pending exit records that the controller still needs proof
+of process end and resource release; it is not a pending work assignment.
+The controller records the handoff receipt, requests exit, confirms process
+end and resource release, then marks the lane RETIRED. Public audit records
+cite sanitized evidence, never private session content.
 
-Migration is the same artifact. Moving a CTO or lead to another model or
-provider, or replacing one whose context is spent, is a retirement whose
-shard becomes the successor's brief; the successor's first act is to
-reconstruct state from artifacts alone. New missions get fresh lanes unless
-explicit context continuity justifies reuse; neither retirement nor reuse
-changes package acceptance.
+Migration is the one case where the shard becomes a successor's brief.
+Moving a CTO or lead to another model or provider, or replacing one whose
+context is spent, ends the outgoing mission before spawning the successor.
+The successor's first act is to reconstruct state from artifacts alone.
+New missions get fresh lanes unless explicit context continuity justifies
+reuse; neither retirement nor reuse changes package acceptance.
 
 The invitation: every lane writes a shard, because that is how work
 survives. Off-duty time is offered to every agent that finishes a mission,
@@ -410,10 +414,13 @@ The distilled form, packed verbatim into every role prompt:
 > so do not promise atomic typing exclusion. Finish requested spawn/control
 > actions and settle receipts before a quiet final reply; quiescent controller
 > is not global idle. Name active children truthfully and surface urgent
-> blockers. Thank retiring lanes; verify the lane's handoff shard (one file
-> per session, never a shared append) is privately committed, and pushed
-> where a private remote is configured, never to a public remote, before exit; confirm exit/resource release before marking
-> RETIRED.
+> blockers. At DONE, finish the mission and write its one-per-session shard.
+> Once that shard is privately pushed, retirement begins and the agent owns
+> its time: it may push back, read, write, keep coding, or exit. Controller
+> pending receipt and exit states are bookkeeping and never hold that time.
+> Keep the shard private, never on a public remote. Confirm process exit and
+> resource release before recording RETIRED. Only a model/provider migration
+> uses the shard as a successor's brief.
 > A question is not a cancellation: answer and re-enter the mission; only the named
 > authority's explicit pause, a tripped stop condition or the acceptance
 > evidence in hand ends it, and a pause outlives quota resets. At DONE, assign the next
