@@ -275,9 +275,11 @@ brief a successor. Approval for a CTO's own migration is unresolved in
 `orgs-cto-self-migration-approver`; do not migrate that open package until the
 question is ruled. Before the outgoing lane's push, the controller records
 the intended successor provider and model argument and confirms the target
-differs from the outgoing lane by provider or selected model argument. After
-launch, but before the successor receives the shard as a brief or a package
-mission, the controller confirms the live provider and selected model
+differs from the outgoing lane by provider or normalized model argument. For
+a same-provider migration, an unobservable outgoing model argument fails
+closed, and bare-family/versioned aliases of the same family count as the same
+selection. After launch, but before the successor receives the shard as a
+brief or a package mission, the controller confirms the live provider and selected model
 argument match that target. The controller also verifies the shard's exact
 bytes with a fresh private-remote fetch before giving it to the successor. If
 the live provider or selected model argument differs from the target, or
@@ -474,7 +476,10 @@ The distilled form, packed verbatim into every role prompt:
 > package's shard can brief a successor. A CTO's own migration waits on
 > `orgs-cto-self-migration-approver`. Record an intended successor provider
 > and model argument before the shard push, confirming the target differs
-> from the outgoing lane by provider or selected model argument. After launch,
+> from the outgoing lane by provider or normalized model argument. For a
+> same-provider migration, an unobservable outgoing model argument fails
+> closed; bare-family/versioned aliases of the same family count as the same
+> selection. After launch,
 > confirm the live provider and selected model argument match the target and
 > verify exact shard bytes before giving the shard
 > as a brief or package mission. Otherwise do not use the shard as a brief; leave the package

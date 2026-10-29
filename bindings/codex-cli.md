@@ -93,7 +93,7 @@ When the coordinator's own tokens are the scarce resource:
   verification and receipt bookkeeping do not delay or reverse it. Before a
   migration push, the controller records the intended successor provider and
   model argument and confirms the target differs from the outgoing lane by
-  provider or selected model argument. A CTO's own
+  provider or normalized model argument. A CTO's own
   migration waits on `orgs-cto-self-migration-approver`. After launch, and
   before the successor receives the shard as a brief or a package mission,
   the controller confirms the live provider and selected model argument match
@@ -113,10 +113,11 @@ When the coordinator's own tokens are the scarce resource:
   not a live exit, so **unverified**); use whichever the installed version
   accepts. The receipt is the pane's process ending, observed; never a kill.
   Confirm resource release before marking the lane RETIRED. This stays until
-  the harness-control MCP lands. The retirement workflow is
-  `retire.sh --handoff`, which wraps the published `agent-spawn.sh` launcher
-  and accepts `--model` for Claude and Codex successors. It verifies the
-  successor's live provider and selected model argument before briefing. New
+  the harness-control MCP lands. The migration workflow is
+  `retire.sh --handoff AGENT MODEL`, which wraps the published
+  `agent-spawn.sh` launcher. The launcher accepts `--model` for Claude and
+  Codex successors. The workflow verifies the successor's live provider and
+  selected model argument before briefing. New
   missions
   start in fresh lanes unless exact context continuity is justified.
 - Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.

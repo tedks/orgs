@@ -152,8 +152,10 @@ package's shard can brief a successor. A CTO's own migration waits on
 `orgs-cto-self-migration-approver`. Before the outgoing lane pushes its
 shard, the controller records the intended successor provider and model
 argument and confirms the target differs from the outgoing lane by provider
-or selected model argument. After launch, and before the successor receives
-the shard as a brief or a package mission, the controller confirms the live
+or normalized model argument. For a same-provider migration, an unobservable
+outgoing model argument fails closed; bare-family/versioned aliases of the same
+family count as the same selection. After launch, and before the successor
+receives the shard as a brief or a package mission, the controller confirms the live
 provider and selected model argument match that target and verifies the
 shard's exact bytes. Otherwise the shard is not
 used as a successor brief; the package remains unassigned and its approving

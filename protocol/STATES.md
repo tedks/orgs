@@ -133,8 +133,8 @@ packages. Record public evidence with sanitized references.
 
 | From | To | Who | Evidence required |
 |---|---|---|---|
-| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or package authority's explicit stop/pause authorization (which the lane may request); or CTO-approved cross-model/provider migration; shard written; unresolved ownership named; for migration, intended successor provider/model argument recorded and target differs from outgoing lane on one of those dimensions |
-| HANDOFF_PENDING | OFF_DUTY | coordinator, from lane's receipt | successful per-session shard push to the approved private remote; mission processes and leases released or accepted-transferred before push; outgoing package authority ends on migration |
+| ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or package authority's explicit stop/pause authorization (which the lane may request); or CTO-approved cross-model/provider migration; shard written; unresolved ownership named; for migration, intended successor provider/model argument recorded and target differs from outgoing lane by provider or normalized model selection |
+| HANDOFF_PENDING | OFF_DUTY | coordinator, after successful shard push | successful per-session shard push to the approved private remote; mission processes and leases released or accepted-transferred before push; outgoing package authority ends on migration |
 | OFF_DUTY | EXIT_READY | coordinator, from agent's request | agent explicitly chooses to leave and asks for exit; controller re-confirms exact shard bytes on the approved private remote before sending exit |
 | EXIT_READY | RETIRED | coordinator | exit confirmed; owned resources released with receipts; active roster/cadence updated |
 
@@ -149,9 +149,9 @@ the push, with receipts recorded in the shard. The agent owns that time and
 may keep the session or choose to leave. EXIT_READY records the
 agent's explicit exit choice; process-end and resource receipts still belong
 to the controller. These states never hold the agent's time or create a work
-assignment. A later verification mismatch may leave the roster at
-HANDOFF_PENDING; it does not take the agent's time back. Exact-byte verification
-is required before sending an exit command, but it does not hold the agent's
+assignment. A verification mismatch is a controller repair item and may
+block an exit transition; it does not reverse the agent's time or change the
+pushed-shard boundary. Exact-byte verification is required before sending an exit command, but it does not hold the agent's
 off-duty time. A failed exit remains EXIT_READY. Control transport success
 does not license any exit or receipt transition.
 Fresh missions use fresh lanes unless context continuity is explicitly
@@ -166,7 +166,10 @@ a responsible CTO's own migration remains unresolved in
 `orgs-cto-self-migration-approver`; do not hand off that open package until
 the question is ruled. Before the outgoing lane pushes its shard, the controller
 records the intended successor provider and model argument and confirms the
-target differs from the outgoing lane by provider or selected model argument.
+target differs from the outgoing lane by provider or normalized model argument.
+For a same-provider migration, an unobservable outgoing model argument fails
+closed; bare-family/versioned aliases of the same family count as the same
+selection.
 After launch, before the successor receives the shard as a brief or a package
 mission, the controller confirms the live provider and selected model
 argument match that target and verifies the shard's exact bytes before
