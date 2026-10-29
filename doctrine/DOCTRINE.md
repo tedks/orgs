@@ -277,8 +277,8 @@ question is ruled. Before the outgoing lane's push, the controller records
 the intended successor provider and model argument and confirms the target
 differs from the outgoing lane by provider or normalized model argument. For
 a same-provider migration, an unobservable outgoing model argument fails
-closed. An unversioned family selector and a versioned selector of that family
-count as the same model; two distinct versioned selectors remain different.
+closed. A bare family selector counts as the same selection as a versioned
+selector from that family; two distinct versioned selectors count as different.
 After launch, but before the successor receives the shard as a
 brief or a package mission, the controller confirms the live provider and selected model
 argument match that target. The controller also verifies the shard's exact
@@ -479,8 +479,8 @@ The distilled form, packed verbatim into every role prompt:
 > and model argument before the shard push, confirming the target differs
 > from the outgoing lane by provider or normalized model argument. For a
 > same-provider migration, an unobservable outgoing model argument fails
-> closed. An unversioned family selector and a versioned selector of that
-> family count as the same model; two distinct versioned selectors remain
+> closed. A bare family selector counts as the same selection as a versioned
+> selector from that family; two distinct versioned selectors count as
 > different. After launch,
 > confirm the live provider and selected model argument match the target and
 > verify exact shard bytes before giving the shard
