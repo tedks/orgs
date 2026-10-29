@@ -92,16 +92,19 @@ When the coordinator's own tokens are the scarce resource:
   push begins retirement and gives the agent its own time; later controller
   verification and receipt bookkeeping do not delay or reverse it. Before a
   migration push, the controller records the intended successor model or
-  provider and confirms it differs from the outgoing lane. After launch, and
+  provider and confirms it differs from the outgoing lane. A CTO's own
+  migration waits on `orgs-cto-self-migration-approver`. After launch, and
   before the successor receives the shard as a brief or a package mission,
-  the controller confirms its actual model or provider differs. Otherwise the
+  the controller confirms its actual model or provider differs and verifies
+  the shard's exact bytes. Otherwise the
   shard is not used as a successor brief; the package remains unassigned and
   its approving authority decides whether to assign a new owner. No work
   resumes before that assignment. A model/provider migration is the only case where
   an open package's shard can brief a successor. The outgoing lane's package
   authority ends at the successful push; the controller records the new owner
   and assigns a fresh bounded mission before the successor acts. Only
-  if the agent chooses to leave and asks for exit may a peer type the bare
+  if the agent chooses to leave and asks for exit, and exact shard bytes are
+  verified on the approved private remote, may a peer type the bare
   exit command (`/exit`, or
   `/quit` if the installed version does not accept `/exit`) into the lane's empty
   composer, under the same input-protection checks as `/compact`. The 0.157.1

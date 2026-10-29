@@ -25,13 +25,14 @@ after that.
   the bare exit command, each typed into the recipient's empty composer
   under the same input-protection checks as any delivery. `/compact` is
   confirmed by the compaction event; a peer sends exit only after the private
-  shard is successfully pushed and the agent asks to leave, and confirms it by
-  observing the pane's process end, never by the send and never by a kill. In
+  shard is successfully pushed, the controller verifies its exact bytes, and
+  the agent asks to leave; confirm it by observing the pane's process end,
+  never by the send and never by a kill. In
   ordinary retirement, the mission ends at DONE, or an explicitly authorized
   pause or stop ends the lane's assignment with unfinished package work paused.
   A successful shard push begins retirement and gives the agent its own time.
-  The controller may verify exact bytes with a fresh fetch later; that receipt
-  check does not hold the agent's time or a requested exit. Until process end
+  The controller verifies exact bytes before sending exit; that receipt check
+  does not hold the agent's off-duty time. Until process end
   is observed, the
   controller's pending-exit state tracks its receipt; it does not ask the
   agent to wait or resume work. This stays until the harness-control MCP
@@ -147,11 +148,13 @@ monitor them; it dispatches, verifies receipts, and goes quiet.
 Ordinary retirement follows DONE; an explicitly authorized pause or stop can
 also end the lane's assignment, leaving unfinished package work paused.
 Switching an agent's model or provider is the only case where an open
-package's shard can brief a successor. Before the outgoing lane pushes its
+package's shard can brief a successor. A CTO's own migration waits on
+`orgs-cto-self-migration-approver`. Before the outgoing lane pushes its
 shard, the controller records the intended successor model or provider and
 confirms it differs from the outgoing lane. After launch, and before the
 successor receives the shard as a brief or a package mission, the controller
-confirms its actual model or provider differs. Otherwise the shard is not
+confirms its actual model or provider differs and verifies the shard's exact
+bytes. Otherwise the shard is not
 used as a successor brief; the package remains unassigned and its approving
 authority decides whether to assign a new owner. No work resumes before that
 assignment. The outgoing lane's authority over that package ends at the

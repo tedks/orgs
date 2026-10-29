@@ -271,11 +271,16 @@ to a public repo. Before that push, mission-owned processes and leases are
 released or transferred with the recipient's acceptance and a receipt; the
 shard records those receipts. A cross-model/provider migration authorized
 by the responsible CTO is the one case where an open package's shard can
-brief a successor. Before the outgoing lane's push, the controller records
+brief a successor. Approval for a CTO's own migration is unresolved in
+`orgs-cto-self-migration-approver`; do not migrate that open package until the
+question is ruled. Before the outgoing lane's push, the controller records
 the intended successor model or provider and confirms it differs from the
 outgoing lane. After launch, but before the successor receives the shard as a
 brief or a package mission, the controller confirms its actual model or
-provider differs. If it does not, the shard is not used as a successor brief;
+provider differs. The controller also verifies the shard's exact bytes with a
+fresh private-remote fetch before giving it to the successor. If the actual
+model/provider or shard verification fails, the shard is not used as a
+successor brief;
 the package remains unassigned and its approving authority decides whether
 to assign a new owner. No work resumes before that assignment. At the
 successful push, the outgoing lane's authority over that package ends. The
@@ -290,12 +295,13 @@ own time without holding project leases or acting on a transferred package.
 
 Controller states such as `HANDOFF_PENDING`, `OFF_DUTY` and `EXIT_READY`
 track receipts and choices; they do not hold the agent's time after the
-verified private push. A pending exit records that
-the controller still needs proof of process end and resource release; it is
-not a pending work assignment. The controller thanks the lane and verifies
-the shard against a fresh remote fetch; a failed push blocks exit. If the
-agent chooses to leave and asks for exit, a peer sends the harness command,
-confirms process end and resource release, then marks the lane RETIRED. If
+successful private push. Controller fetch verification updates the receipt
+state and is required before sending an exit command, but it does not delay
+or reverse off-duty time. A pending exit records that the controller still
+needs proof of process end and resource release; it is not a pending work
+assignment. The controller thanks the lane. If the agent chooses to leave and
+asks for exit, a peer sends the harness command, confirms process end and
+resource release, then marks the lane RETIRED. If
 the agent keeps the session, it remains off duty; the controller does not
 reclaim that time. Public audit records cite sanitized evidence, never
 private session content.
@@ -464,18 +470,19 @@ The distilled form, packed verbatim into every role prompt:
 > repair item and cannot take the agent's time back. An explicit pause or stop
 > remains governed by its explicit authority. A cross-model/provider
 > migration authorized by the responsible CTO is the only case where an open
-> package's shard can brief a successor. Record a different intended model or
+> package's shard can brief a successor. A CTO's own migration waits on
+> `orgs-cto-self-migration-approver`. Record a different intended model or
 > provider before the shard push, then confirm the actual model or provider
-> differs after launch and before the successor receives the shard or package
-> mission. Otherwise do not use the shard as a brief; leave the package
+> differs after launch and verify exact shard bytes before giving the shard
+> as a brief or package mission. Otherwise do not use the shard as a brief; leave the package
 > unassigned until its approving authority assigns a new owner. The outgoing lane's package authority ends at the
 > successful push; record the new owner
 > before the successor acts. Off-duty time grants no new project authority. Before the
 > push, release mission processes and leases or transfer them with accepted
 > receipts, and record the receipts in the shard. Thank the lane. Verify the
-> shard against a fresh private-remote fetch for the receipt; that check cannot
-> hold the agent's time or an exit requested after a successful push. Send exit
-> only after the agent chooses to leave and asks for it; confirm process exit and
+> shard against a fresh private-remote fetch for the receipt. That check is
+> required before sending exit, but cannot hold the agent's off-duty time.
+> Send exit only after the agent chooses to leave and asks for it; confirm process exit and
 > resource release before recording RETIRED. Keep shards private, never on a
 > public remote.
 > A question is not a cancellation: answer and re-enter the mission; only the named
