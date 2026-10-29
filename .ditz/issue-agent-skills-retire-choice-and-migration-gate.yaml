@@ -1,0 +1,47 @@
+id: agent-skills-retire-choice-and-migration-gate
+title: Should retire-agent behavior change with the wording contract?
+desc: 'Question: Should the agent-skills retire-agent helper change behavior to match
+  the retirement and migration contract?
+
+
+  Current mismatches: the controller requests exit automatically after publishing
+  the shard, without waiting for the agent to choose and ask; --handoff spawns the
+  successor with the shard brief before checking the launched successor''s actual
+  model/provider.
+
+
+  Options:
+
+  - Change the helper to publish and verify first, leave the lane off duty, and send
+  exit only after the agent explicitly asks; for migration, launch the successor without
+  the shard, verify actual model/provider, then deliver the shard and bounded mission.
+
+  - Keep the agent-skills PR wording-only and file the helper behavior as follow-up;
+  document that the current --handoff mode cannot carry an open-package migration.
+
+  - Keep current helper behavior and narrow the wording contract to match it.
+
+
+  Recommendation: the first option, because it preserves the agent''s voluntary choice
+  and the model/provider migration boundary.
+
+
+  Who decides: Ted, as the mission authority.
+
+
+  What it blocks: Whether this lane may change executable behavior and select/modify
+  the agent-skills feature worktree; current helper migration and automatic-exit instructions
+  remain under review until ruled.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T19:11:21-00:00
+references: []
+log_events:
+- time: 2026-10-29T19:11:21-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
