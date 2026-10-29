@@ -1,0 +1,41 @@
+id: retire-global-prompt-reconciliation
+title: Should the global prompt retirement rule be aligned with the doctrine?
+desc: 'Question: The global `~/.claude/CLAUDE.md` currently describes CTO/lead migration
+  as a successor handoff, while the doctrine says retirement itself gives the agent
+  its own time and uses a shard as a successor brief only for cross-model/provider
+  migration. Should the global wording be reconciled after this ruling?
+
+
+  Options:
+
+  - Align the global prompt with doctrine: successful private push begins the agent''s
+  own time; successor briefing is limited to migration.
+
+  - Keep the global wording broad and clarify how it coexists with the doctrine.
+
+  - Leave both unchanged until a wider prompt review.
+
+
+  Recommendation: align the global prompt after an explicit ruling, so agents receive
+  one lifecycle contract. This lane was explicitly told not to edit `~/.claude/CLAUDE.md`.
+
+
+  Who decides: Ted, as CEO/owner of the global prompt; dotfiles CTO implements after
+  the ruling.
+
+
+  What it blocks: Any future edit to the global retirement wording and whether to
+  preserve a broader migration-handoff exception.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T21:23:05-00:00
+references: []
+log_events:
+- time: 2026-10-29T21:23:05-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
