@@ -1,0 +1,36 @@
+id: orgs-cto-self-migration-approver
+title: Who approves a responsible CTO's own migration?
+desc: 'Question: Who approves a responsible CTO''s own cross-model/provider migration?
+
+
+  Options:
+
+  - The CTO authorizes their own migration and logs the rationale.
+
+  - The CEO approves the responsible CTO''s migration.
+
+  - Another named authority in the reporting chain approves it.
+
+
+  Recommendation: CEO approval, so the CTO does not authorize their own transition.
+
+
+  Who decides: Ted as the org''s CEO.
+
+
+  What it blocks: A responsible CTO''s migration while its authorized package is open.
+  Ordinary DONE retirement and migrations approved by a different responsible CTO
+  are unaffected.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T19:04:36-00:00
+references: []
+log_events:
+- time: 2026-10-29T19:04:36-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
