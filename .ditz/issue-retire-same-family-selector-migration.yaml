@@ -1,0 +1,39 @@
+id: retire-same-family-selector-migration
+title: Should distinct versioned selectors within one model family count as migration?
+desc: 'Question: Should an explicit change between two versioned model selectors from
+  the same family count as a model migration for retire-agent handoff policy?
+
+
+  Options:
+
+  - Treat distinct explicit versioned selectors as a migration; treat a bare family
+  selector and a versioned selector within that family as the same selection.
+
+  - Treat all selectors within one family as the same model.
+
+  - Require runtime model attestation before distinguishing selector changes.
+
+
+  Recommendation: treat distinct explicit versioned selectors as migration, while
+  a bare family alias and a versioned selector from that family remain the same selection;
+  the launcher only exposes the selected CLI argument, not runtime attestation.
+
+
+  Who decides: Ted, as mission authority / CEO.
+
+
+  What it blocks: Future same-family version transitions and the policy for interpreting
+  selector aliases.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T21:22:16-00:00
+references: []
+log_events:
+- time: 2026-10-29T21:22:16-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
