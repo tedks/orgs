@@ -24,11 +24,19 @@ after that.
   it. The only harness commands a peer delivers are a bare `/compact` and
   the bare exit command, each typed into the recipient's empty composer
   under the same input-protection checks as any delivery. `/compact` is
-  confirmed by the compaction event; exit is sent only after the handoff
-  shard's receipt is recorded, and is confirmed by observing the pane's
-  process end, never by the send and never by a kill. Until that is
-  observed, retirement is pending exit. This stays until the harness-control
-  MCP lands.
+  confirmed by the compaction event; a peer sends exit only after the private
+  shard is successfully pushed, the controller verifies its exact bytes, and
+  the agent asks to leave; confirm it by observing the pane's process end,
+  never by the send and never by a kill. In
+  ordinary retirement, the mission ends at DONE, or an explicitly authorized
+  pause or stop ends the lane's assignment with unfinished package work paused.
+  A successful shard push begins retirement and gives the agent its own time.
+  The controller verifies exact bytes before sending exit; that receipt check
+  does not hold the agent's off-duty time. Until process end
+  is observed, the
+  controller's pending-exit state tracks its receipt; it does not ask the
+  agent to wait or resume work. This stays until the harness-control MCP
+  lands.
 - Every task boundary runs the boundary ritual (doctrine, *Economy of
   context*): inspect the diff, disposition the evidence, release what you
   own, push, rewrite the current-state header, then continue, compact, hand
@@ -62,9 +70,15 @@ and treats one forming as the defect it is.
   lanes and act: assign, or record idle and why.
 - **Reports:** consolidated sitreps on request; decision-log entries as
   decisions are made; blockers at once. Never routine acknowledgements.
-- **Lifecycle:** compact at checkpoints after the roster is current. Hand
-  off to a successor through a shard when context is low or the provider
-  budget says so. The roster never goes stale before a compaction.
+- **Lifecycle:** compact at checkpoints after the roster is current. A
+  model/provider migration may hand an authorized open package to a successor
+  through its shard; end the outgoing lane's package authority at the successful push and
+  record the new owner before the successor acts. Low context alone does not
+  create a successor brief: compact in the current lane or keep the package
+  paused until its authority assigns a separate mission. If context is too
+  low to continue, ask that authority to explicitly pause or stop the lane's
+  assignment. The roster never
+  goes stale before a compaction.
 - **Does not:** implement, except a tracer bullet; relay routine
   acknowledgements; watch lanes turn by turn; approve individual attempts
   inside a package that already carries repair authority.
@@ -131,9 +145,24 @@ monitor them; it dispatches, verifies receipts, and goes quiet.
 
 ## Handoff and migration (any hat)
 
-Switching an agent's model or provider, or replacing a CTO or lead whose
-context is spent, is a retirement followed by a spawn. The outgoing agent
-writes its shard. The successor's brief is the shard plus this file. The
-successor reconstructs state from artifacts alone and writes its first
-record entry before acting. Neither retirement nor reuse changes package
-acceptance.
+Ordinary retirement follows DONE; an explicitly authorized pause or stop can
+also end the lane's assignment, leaving unfinished package work paused.
+Switching an agent's model or provider is the only case where an open
+package's shard can brief a successor. A CTO's own migration waits on
+`orgs-cto-self-migration-approver`. Before the outgoing lane pushes its
+shard, the controller records the intended successor provider and model
+argument and confirms the target differs from the outgoing lane by provider
+or normalized model argument. For a same-provider migration, an unobservable
+outgoing model argument fails closed. A bare family selector counts as the
+same selection as a versioned selector from that family; two distinct
+versioned selectors count as different. After launch, and before the successor
+receives the shard as a brief or a package mission, the controller confirms the live
+provider and selected model argument match that target and verifies the
+shard's exact bytes. Otherwise the shard is not
+used as a successor brief; the package remains unassigned and its approving
+authority decides whether to assign a new owner. No work resumes before that
+assignment. The outgoing lane's authority over that package ends at the
+successful push. The controller records the new owner and gives the successor
+a fresh bounded mission before it acts. The successor reconstructs state from
+artifacts alone and writes its first record entry before acting. Neither
+retirement nor reuse changes package acceptance.

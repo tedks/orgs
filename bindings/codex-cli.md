@@ -25,7 +25,7 @@ this document.
 | Deterministic fan-out | No Codex equivalent of a workflow runner is bound. Enumerated work goes to bounded subagents or spawned sessions briefed from a file. |
 | Team isolation | Git worktrees per team or branch (bare-repo layout); packing lists via prompt assembly. |
 | Compaction | Bare `/compact` delivered into the pane by a peer over `tmux-message`, after durable state is saved. `/compact` takes no inline argument; step-specific focus goes through the `experimental_compact_prompt_file` config override, as the fork launcher does. Completion is a new compaction record or a visible `Context compacted` event. `remote_compaction = true` is set in config, but 0.157.1 warns at startup that `features.remote_compaction` is ignored, so it has no effect. |
-| Harness self-control | **Pending** the harness-control MCP (session-targeted compact, status, usage and exit with typed results). Until it lands, a session cannot compact or exit itself: it asks a peer with `COMPACT ME` for compaction, and at retirement a peer types the bare exit command (see Lean operating mode). |
+| Harness self-control | **Pending** the harness-control MCP (session-targeted compact, status, usage and exit with typed results). Until it lands, a session cannot compact or exit itself: it asks a peer with `COMPACT ME` for compaction, and after the shard push a peer types the bare exit command only if the agent chooses to leave and asks for it (see Lean operating mode). |
 | Skills | In this repo, `.agents/skills` aliases `.claude/skills`; its four shared skill entries resolve to the commit-pinned `vendor/agent-skills/skills/` snapshot. Use the local commands described in `AGENTS.md`. Global installed skills remain available for other tasks. |
 | Trust | `[projects."<path>"] trust_level = "trusted"` in `~/.codex/config.toml`. An interactive spawn into an untrusted directory stops at a trust prompt; never answer it with a task's Enter (modal behavior **unverified** for this document; the `codex exec` refusal is documented in `council-review`). |
 | Sessions and resume | Rollouts are JSONL under `~/.codex/sessions/YYYY/MM/DD/rollout-<timestamp>-<uuid>.jsonl`. Resume interactively with `codex resume <id>`, headless with `codex exec resume <id> -` (the `-` reads the prompt from stdin). Record the id in the roster at spawn. |
@@ -85,20 +85,39 @@ When the coordinator's own tokens are the scarce resource:
   the only harness commands a peer types; an ordinary message asking the
   worker to compact or exit runs nothing. This
   stays until the harness-control MCP lands.
-- A finished lane follows the doctrine's retirement contract: thank it,
-  verify its handoff shard (one file per session, never a shared append) is
-  committed and pushed per the doctrine's shard-privacy rule, and record the
-  handoff receipt. Only then a peer types the bare exit command (`/exit`, or
+- Ordinary retirement follows the doctrine's contract: complete the mission
+  at DONE, or end the lane's assignment with an explicitly authorized pause
+  or stop that leaves unfinished package work paused. Write the one-per-
+  session shard, and push it to the approved private remote. A successful
+  push begins retirement and gives the agent its own time; later controller
+  verification and receipt bookkeeping do not delay or reverse it. Before a
+  migration push, the controller records the intended successor provider and
+  model argument and confirms the target differs from the outgoing lane by
+  provider or normalized model argument. A CTO's own
+  migration waits on `orgs-cto-self-migration-approver`. After launch, and
+  before the successor receives the shard as a brief or a package mission,
+  the controller confirms the live provider and selected model argument match
+  that target and verifies the shard's exact bytes. Otherwise the
+  shard is not used as a successor brief; the package remains unassigned and
+  its approving authority decides whether to assign a new owner. No work
+  resumes before that assignment. A model/provider migration is the only case where
+  an open package's shard can brief a successor. The outgoing lane's package
+  authority ends at the successful push; the controller records the new owner
+  and assigns a fresh bounded mission before the successor acts. Only
+  if the agent chooses to leave and asks for exit, and exact shard bytes are
+  verified on the approved private remote, may a peer type the bare
+  exit command (`/exit`, or
   `/quit` if the installed version does not accept `/exit`) into the lane's empty
   composer, under the same input-protection checks as `/compact`. The 0.157.1
   binary carries both `exit` and `quit` as command names (string inspection,
   not a live exit, so **unverified**); use whichever the installed version
   accepts. The receipt is the pane's process ending, observed; never a kill.
-  Until then retirement is pending exit. Confirm resource release before
-  marking the lane RETIRED. This stays until the harness-control MCP lands.
-  Migration to another model or provider is the same shard used as the
-  successor's brief, spawned with `agent-spawn.sh` (`--model` sets the
-  model for a Codex successor only; see the Claude Code binding for a
-  Claude successor). New missions
+  Confirm resource release before marking the lane RETIRED. This stays until
+  the harness-control MCP lands. The migration workflow is
+  `retire.sh --handoff AGENT MODEL`, which wraps the published
+  `agent-spawn.sh` launcher. The launcher accepts `--model` for Claude and
+  Codex successors. The workflow verifies the successor's live provider and
+  selected model argument before briefing. Same-provider selector and alias
+  rules are in [doctrine, *Quiet coordination and lifecycle*](../doctrine/DOCTRINE.md#quiet-coordination-and-lifecycle). New missions
   start in fresh lanes unless exact context continuity is justified.
 - Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.

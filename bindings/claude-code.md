@@ -18,8 +18,8 @@ that's the portability claim the cold-start audit tests.
 | Standup heartbeat | `/loop` (self-paced) or cron; event triggers convene directly |
 | Deterministic fan-out (enumerated sprint, fixed task list) | `Workflow` tool — only for the mechanical middle; decomposition and redirection stay with the live lead |
 | Team isolation | git worktrees per team/branch (bare-repo layout); packing lists via prompt assembly |
-| Handoff and migration | A retirement followed by a spawn. The outgoing agent's handoff shard becomes the successor's brief, and the successor is launched with `agent-spawn.sh` on the new provider. The launcher's `--model` option applies to Codex only, so today a Claude successor starts on its configured default model; the roster records the model actually selected, and if it differs from the lane's assigned tier the successor is not briefed until the CTO, who decides tier per lane (ROLES.md), disposes of the mismatch. Nobody fixes it by typing into the successor's pane. See doctrine, *Quiet coordination and lifecycle*, and [doctrine/ROLES.md](../doctrine/ROLES.md). |
-| Harness self-control | **Pending** the harness-control MCP. Until it lands, a session cannot compact or exit itself: it asks with `COMPACT ME`, and a peer sends bare `/compact` over `tmux-message`; at retirement a peer types bare `/exit` (see Lean operating mode). |
+| Handoff and migration | Ordinary retirement follows DONE; an explicitly authorized pause or stop can also end the lane's assignment, leaving unfinished package work paused. A model/provider migration is the only case where an open package's shard can brief a successor. A CTO's own migration waits on `orgs-cto-self-migration-approver`. Before the outgoing lane pushes its shard, the controller records the intended successor provider and model argument and confirms the target differs from the outgoing lane by provider or normalized model argument. The `retire.sh --handoff` workflow launches without the shard, then confirms the live provider and selected model argument match that target. It verifies the shard's exact bytes before briefing. Otherwise the shard is not used as a successor brief; the package remains unassigned and its approving authority decides whether to assign a new owner. No work resumes before that assignment. The outgoing lane's package authority ends at the successful push; the controller records the new owner and assigns a fresh bounded mission before the successor acts. A tier mismatch still goes to the CTO, who decides tier per lane (ROLES.md), before briefing. Nobody fixes it by typing into the successor's pane. `retire.sh --handoff` wraps the published launcher, which accepts `--model` for Claude and Codex. See doctrine, *Quiet coordination and lifecycle*, and [doctrine/ROLES.md](../doctrine/ROLES.md). Same-provider selector and alias rules are in [doctrine, *Quiet coordination and lifecycle*](../doctrine/DOCTRINE.md#quiet-coordination-and-lifecycle). |
+| Harness self-control | **Pending** the harness-control MCP. Until it lands, a session cannot compact or exit itself: it asks with `COMPACT ME`, and a peer sends bare `/compact` over `tmux-message`; after the shard push, a peer types bare `/exit` only if the agent chooses to leave and asks for it (see Lean operating mode). |
 | Codex seat sessions | `codex exec resume <id> -` (append, single writer) / `codex exec fork <id> -` (non-mutating branch) |
 | agy seat sessions | `--conversation <id>` headless; ids via `--log-file` scrape or `~/.gemini/antigravity-cli/conversations/` |
 
@@ -67,16 +67,30 @@ When the coordinator's own tokens are the scarce resource, the binding tightens:
 - Compaction is sent into the worker's window as bare `/compact` after durable state is saved (long focus text may be delivered as an ordinary message, not a slash-command argument). A session cannot run a slash command on itself, so `COMPACT ME` asks a peer to send it over `tmux-message` and confirm the compaction event. This stays until the harness-control MCP lands.
 - Readiness is an event-driven table the coordinator keeps from `LANDED`, `BLOCKED` and `NEEDS RULING` messages, so a readiness report is a file read, not a reconstruction.
 - A finished lane follows the doctrine's retirement contract and STATES lane
-  lifecycle: thank it, verify its handoff shard (one file per session, never
-  a shared append) is committed and pushed per the doctrine's
-  shard-privacy rule, and record the handoff receipt. Only then a peer types
-  bare `/exit` into the lane's empty composer over `tmux-message`, under the
-  same input-protection checks as `/compact`. The receipt is the pane's
-  process ending, observed; never a kill. Until then retirement is pending
-  exit; confirm resource release before marking the lane RETIRED. Never infer
-  retirement from the sender's exit code. This stays until the
-  harness-control MCP lands. New missions start in fresh lanes
-  unless exact context continuity is explicitly justified.
+  lifecycle: complete the mission at DONE, or end the lane's assignment with
+  an explicitly authorized pause or stop that leaves unfinished package work
+  paused. Write the one-per-session shard, push it to the approved private
+  remote. A successful push begins retirement and gives the agent its own
+  time; later controller verification and receipt bookkeeping do not delay or
+  reverse it. Verify exact bytes before sending a requested exit; this check
+  does not hold the agent's off-duty time. Before a migration push, the
+  controller records the intended successor provider and model argument and
+  confirms the target differs from the outgoing lane by provider or normalized
+  model argument.
+  After launch, and before the successor receives the shard as a brief or a
+  package mission, the controller confirms the live provider and selected
+  model argument match the intended target. Otherwise the shard is not used as
+  a successor brief; the package
+  remains unassigned and its approving authority decides whether to assign a
+  new owner. No work resumes before that assignment. A model/provider migration
+  is the only case where an open package's shard can brief a successor. Only if
+  the agent chooses to leave and asks for exit may a peer type bare `/exit` into
+  the lane's empty composer over `tmux-message`, under the same input-protection checks
+  as `/compact`. The receipt is the pane's process ending, observed; never a
+  kill. Confirm resource release before marking the
+  lane RETIRED. Never infer process end from the sender's exit code. This
+  stays until the harness-control MCP lands. New missions start in fresh
+  lanes unless exact context continuity is explicitly justified.
 - Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.
 - The local vendored `spawn-agent` delivery helper owns typing protection,
   bounded backoff and submission mechanics. Follow its documented outcomes;
