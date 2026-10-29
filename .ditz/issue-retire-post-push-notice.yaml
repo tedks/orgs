@@ -1,0 +1,39 @@
+id: retire-post-push-notice
+title: Should a controller notify the retired lane after pushing its shard?
+desc: 'Question: When a caller/controller pushes a retired lane''s private shard,
+  should it send the original lane one post-push notice that its off-duty time has
+  begun and its package authority has ended?
+
+
+  Options:
+
+  - Send a concise notice after successful push when the agent did not push it itself;
+  never make the notice a condition of off-duty time.
+
+  - Send no notice; successful push is sufficient and the controller keeps the receipt
+  only in its own record.
+
+
+  Recommendation: send the concise notice when the controller performs the push, because
+  this confirms the lifecycle boundary to the agent while keeping off-duty time independent
+  of controller bookkeeping.
+
+
+  Who decides: Ted, as mission authority / CEO.
+
+
+  What it blocks: Whether the controller proactively informs the original lane after
+  controller-authored push; it does not block off-duty time after successful push.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T21:22:16-00:00
+references: []
+log_events:
+- time: 2026-10-29T21:22:16-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
