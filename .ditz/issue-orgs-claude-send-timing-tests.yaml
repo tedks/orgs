@@ -1,0 +1,21 @@
+id: orgs-claude-send-timing-tests
+title: Make legacy claude-send timing tests deterministic
+desc: 'The unchanged skills/spawn-agent/scripts/test-claude-send.sh suite produced
+  variable negative-case failures under concurrent host load during orgs PR #34 final
+  sync, in both orgs and source master, then passed when run alone. Replace wall-clock-sensitive
+  sleeps/max-wait assertions with a deterministic harness or bounded readiness evidence.
+  Preserve the sender''s composer-protection behavior. Nonblocking because the quiet
+  exact-head rerun passed and the synced code did not change this legacy sender.'
+type: task
+component: tests
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-30T17:18:09-00:00
+references: []
+log_events:
+- time: 2026-10-30T17:18:09-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
