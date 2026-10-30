@@ -2,14 +2,15 @@
 
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
 `consolidation` branch. Current state: Phase 2 is in review. Draft public
-orgs PR #34 has code head `fe50aa5` and plan head `dfa34dc`; its integration
-council reached a clean fixpoint and exact-code-head local gates pass. The
-private installer draft PR #224 is pushed at `0a26821`, with its final
-convergence review in progress. Public tracker histories are merged at
+orgs PR #34 has code head `7060c1e`; its agent-skills integration and
+tier-drift import councils both reached clean fixpoints.
+The private installer draft PR #224 is pushed at `0ac21d7` with clean native
+and Claude convergence reviews. Public tracker histories are merged at
 `e92c5f3`. Org master protection is active as ruleset `26175107`. Ted approved
-publication of the scanned tier-drift commit; its import and post-import scan
-are in progress. Source PRs #13 and #14 remain open; final sync and fleet
-cutover await their explicit gates. No live host links have changed.
+publication of tier-drift commit `c4f2d2eb`; its 28 files are imported and
+scanned. A corrected finding about two measured, host-anonymized ratios is
+awaiting Ted's retention ruling. Source PRs #13 and #14 remain open; final sync
+and fleet cutover await their explicit gates. No live host links have changed.
 
 ## Purpose / Big Picture
 
@@ -65,11 +66,20 @@ new source path before any host cutover.
   22 harness-control, 23 Codex MCP, and 16 Codex config assertions). The
   native second-convergence review returned clean; the foreign review remains
   in progress.
-- [ ] Finish the private installer convergence review, fix findings, and rerun
-  its exact-head gates.
-- [ ] Import the approved tier-drift commit with preserved history, run Bazel
-  from its nested project, scan the merged public tree, and record the scan on
-  orgs PR #34.
+- [x] (2026-10-29) Pushed private installer `0ac21d7`; native and Claude
+  convergence reviews returned clean on the last fix delta. Exact-head gates
+  passed: 60 installer tests, 22 harness-control tests, 23 Codex MCP tests,
+  16 Codex config assertions, and `git diff --check`.
+- [x] (2026-10-29) Imported approved tier-drift `c4f2d2eb` as second parent of
+  `c6b0ca0`, with all 28 blob IDs and modes identical under `tools/tier-drift`.
+  Nested Bazel tests passed 3/3. Re-scanned the merged tree and both commit
+  messages, and posted the scan plus a correction on orgs PR #34.
+- [x] (2026-10-29) Closed the tier-drift import council fix delta at
+  `7060c1e`: native and Claude seats found no new Critical or Important
+  findings after the synthetic-home fix. The Google/agy seat remained empty
+  at quota.
+- [ ] Resolve Ted's ruling on retaining the two measured ratios in public
+  history (ditz `orgs-tier-drift-ratios-publication`).
 - [ ] Synchronize source PRs #13 and #14 after they land, then recheck imported
   byte identity and rerun gates before readiness.
 - [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes, final synchronization,
@@ -88,10 +98,13 @@ new source path before any host cutover.
   zero IPv4 or IPv6 addresses, and zero UUID-shaped session IDs. Matches for
   council and ask-agent terms are generic collector classification logic,
   design text, and synthetic tests. Matches for SSH are generic collection
-  instructions, not host entries or credentials. Numerical matches are
-  published model prices, code constants, and synthetic test data; no
-  observed host or session usage figures were found. This was a bounded scan;
-  Ted separately authorized publication of that exact commit afterward.
+  instructions, not host entries or credentials. The first scan incorrectly
+  classified every numeric match as public prices, code constants, or
+  synthetic data. A later independent review found two observed ratios in
+  `src/tier_drift/collector.py`: 8.6% of responses on one unnamed host appeared
+  in copied sessions, and repeated Gemini snapshots caused a 2.49x overcount.
+  Neither gives a host identity or absolute usage volume. The PR scan was
+  corrected, and Ted was asked whether to retain them in public history.
 - The source `agent-skills` `master` is `f7034513724f012680e2dc707727110739aa736b`
   with 371 reachable commits and 159 tracked files. The existing `orgs`
   snapshot pins the older `5b1919e723a92b1c90f2ae8495f594e651125564`
@@ -121,6 +134,17 @@ new source path before any host cutover.
   local process skills. The installer `list` command emits exactly the former
   12 names. Real Claude Code discovery of a curated view of individual
   symlinks remains an unverified acceptance check before live cutover.
+- The tier-drift import's 28 merged files are byte-and-mode identical to the
+  approved source. A post-import scan of every tracked filename and blob plus
+  both commit messages found no fleet names, valid IPv4 addresses, LAN/VPN
+  IPv6 candidates, UUID-shaped session IDs, private home paths, or SSH host
+  entries. Council/ask-agent and SSH terms are generic. The 8.6% and 2.49x
+  observed ratios were missed in the first report and disclosed in the PR
+  correction. The import review found an overbroad synthetic `/home/u`
+  exemption in the setup-leak guard; `7060c1e` narrows it to `/home/u/`, and
+  the native and Claude convergence passes are clean. Case-insensitive names,
+  network addresses, and UUID guard patterns remain a recorded follow-up in
+  ditz `orgs-leak-guard-pattern-hardening`.
 
 ## Decision Log
 
@@ -170,11 +194,12 @@ new source path before any host cutover.
 ## Outcomes & Retrospective
 
 Phase 1 mapped the move and isolated the private tier-drift publication gate.
-The public source import is in draft PR #34 with preserved source ancestry,
-exact-code-head gates, and a clean integration council. The private installer
-draft passed its exact-code-head fixture tests; its second convergence review
-continues. The tracker merge and master protection are delivered. Source final
-sync, tier-drift publication, and host cutover remain pending.
+The public source imports are in draft PR #34 with both source commits as
+ancestors, exact-code-head gates, and clean council fixpoints. Ted's
+measured-ratio decision remains pending. The private installer draft PR #224 reached a clean council fixpoint;
+real Claude client discovery remains a pre-cutover acceptance check. The
+tracker merge and master protection are delivered. Source final sync and host
+cutover remain pending.
 
 ## Context and Orientation
 
@@ -368,11 +393,19 @@ The metadata merge `e92c5f3` has parents `2484ef2` and `449fc7a`. Its tree
 contains 57 issue YAML files with 57 distinct IDs and the existing orgs
 project identity; `ditz sync` succeeded and representative issues from both
 sources resolved through `ditz show`.
+The tier-drift import commit `c6b0ca0` has `c4f2d2eb` as its second parent.
+The merged `tools/tier-drift` tree matches all 28 source blob IDs and modes;
+the one symlink is `CLAUDE.md -> AGENTS.md`. Its Bazel gate passed 3/3 from
+the nested Nix shell. At `7060c1e`, root `nix flake check`, the
+`harness-control` build, 21 config tests, four setup-leak tests, the tmux
+alias check, and scaffold sync check passed. The post-import scan is recorded
+on orgs PR #34, with a separate correction for the two observed ratios.
 
 ## Interfaces and Dependencies
 
-`orgs` and `agent-skills` are public; `dotfiles`, off-duty, tier-drift, and
-the tier-drift archive are private as of this inventory. Public `orgs`
+`orgs` and `agent-skills` are public; `dotfiles`, off-duty, and the tier-drift
+archive are private. The approved tier-drift source was private at the first
+inventory and its exact single commit is now in draft public orgs PR #34. Public `orgs`
 contains reusable code and process; private dotfiles owns installation and
 machine-specific state. Installed skill paths, the config file schema,
 `AGENT_SKILLS_ROOT`, and the stable MCP executable path remain interfaces.
@@ -385,3 +418,7 @@ Revision note (2026-10-29): recorded exact gate and PR evidence, plus recovery
 from the unsafe default rebase attempt without changing the tested tree.
 Revision note (2026-10-29): recorded the delivered tracker merge and private
 installer draft before the review gate.
+Revision note (2026-10-29): recorded Ted's exact tier-drift publication
+approval, history-preserving import, post-import scan, corrected numeric
+finding, and clean private installer convergence. The measured-ratio ruling
+and cutover approval remain separate.
