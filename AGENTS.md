@@ -21,8 +21,12 @@ agent genuinely needs divergent instructions.
 ## Project structure
 
 - `README.md` — concept pitch (draft)
-- `skills/` — **the protocol, as a graph of composable skills.** `skills/sprint`
-  is the root runbook; the rest are the acts. See `skills/README.md`.
+- `skills/` — protocol skills and reusable agent tooling, with shared helpers
+  under `skills/_shared/`. `skills/sprint` is the protocol root runbook. See
+  `skills/README.md`.
+- `harness-control/` — MCP server, package source, and runtime tests
+- `flake.nix`, `flake.lock` — Nix package and packaged quality checks
+- `tests/` — root configuration, native helper, and public-source guard tests
 - `protocol/` — `STATES.md` (transition tables the skills cite),
   `templates/` (artifact templates), and `RUNBOOK.md` (now a pointer into the
   skills, absorbed by `skills/sprint`)
@@ -63,7 +67,12 @@ package at the root uses the Nix flake; its Python helpers also live under
 
 Run `nix flake check` for the packaged harness-control unit, package, and
 transport checks. Run `nix build .#harness-control` when verifying the built
-executable. The protocol-specific tools under `tools/` retain their own tests.
+executable. Also run `python3 tests/test_config.py`,
+`python3 tests/test_setup_leaks.py`,
+`skills/spawn-agent/scripts/test-tmux-message.sh`, and
+`skills/initialize-repo/scripts/test-sync-check.sh` for the imported
+configuration, public-source guard, and installer interfaces. The
+protocol-specific tools under `tools/` retain their own tests.
 
 ## Issue tracking (ditz)
 

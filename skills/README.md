@@ -58,3 +58,6 @@ inspection. These include `ask-agent`, `council-review`, `host-hygiene`,
 and native identity helpers live under `_shared/`. Their own `SKILL.md` files
 and relative scripts are the authoritative instructions. The
 `harness-control/` package and root `flake.nix` use the same helpers.
+The installed configuration name `agent-skills`, its environment variable
+`AGENT_SKILLS_ROOT`, and the Python module `agent_skills_config.py` remain
+stable compatibility interfaces while the source checkout moves to orgs.
