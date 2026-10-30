@@ -1,0 +1,44 @@
+id: tier-drift-measured-rules-provenance
+title: 'tier-drift: record the provenance of the measured counting-rule figures and
+  generalize the practice into re-measurable, per-harness rules'
+desc: 'Filed at Ted''s request, 2026-10-30. tools/tier-drift/src/tier_drift/collector.py
+  justifies its counting rules with two measurements quoted in comments: rule 2, 8.6%
+  of Claude responses on one host were duplicate request ids caused by resumed and
+  forked sessions copying the parent transcript into a new file; rule 6, the Gemini
+  CLI rewrites its whole message array on each save, a 2.49x turn overcount. Ted ruled
+  on 2026-10-30 that the figures stay (orgs-tier-drift-ratios-publication, closed).
+
+
+  Provenance to record in the code and README: which host, which harness versions
+  (Claude Code, Codex CLI, Gemini CLI, Antigravity builds), which date window, and
+  the measurement command, so a reader can tell when a figure is stale. The private
+  2026-09-19 report in dotfiles docs/tier-drift/ and its golden fixtures are the likely
+  source; confirm and cite by path, never by host data in the public tree.
+
+
+  Generalization, the path Ted asked for: the environment is a fleet of hosts running
+  several harnesses whose transcript formats drift with every release, and two codebases
+  now parse the same logs (this collector and dotfiles scripts/usage/token_usage.py,
+  which has its own dedup rules). Proposal: (1) a `tier-drift measure` subcommand
+  that re-measures each rule''s effect per host and harness version from the live
+  logs and writes the result as data (a small JSON beside the fixtures) instead of
+  prose, with the comments pointing at the data; (2) fixtures per harness version
+  that make each rule''s test fail when the format drifts, in the same spirit as the
+  usage code''s mutation tests; (3) one shared transcript-parsing library with a registry
+  of measured rules, used by both the collector and token_usage.py, so a rule measured
+  once applies everywhere and a harness upgrade triggers one re-measurement, tied
+  to the meters self-check the usage lane is adding to npm-ai-update. Decider for
+  (3): CTO, after the consolidation cutover; (1) and (2) are an Implementer lane.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-30T16:02:55-00:00
+references: []
+log_events:
+- time: 2026-10-30T16:02:55-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
