@@ -1,0 +1,29 @@
+id: orgs-tier-drift-ratios-publication
+title: Decide whether to retain tier-drift's two measured ratios in public history
+desc: 'Decision owner: Ted. The exact single source commit c4f2d2eb was approved by
+  CONSOL-TIERDRIFT-OK and imported into draft orgs PR #34. A later independent scan
+  found two observed, host-anonymized ratios in collector.py: 8.6% of responses on
+  one unnamed host were copied across sessions; Gemini snapshots produced a 2.49x
+  overcount. The initial scan and first PR comment incorrectly claimed no observed
+  figures; the PR record has been corrected. No host identity, absolute usage volume,
+  raw session ID, or collected snapshot is present.
+
+  Options: (1) Retain the exact approved history; (2) prepare a new sanitized publication
+  history that removes the ratios, recognizing that the draft branch has already been
+  pushed and a rewrite cannot guarantee erasure of prior GitHub objects. Recommendation:
+  retain the exact commit because the ratios are anonymized method evidence, but Ted
+  decides. Blocks declaring orgs PR #34 ready for merge; does not authorize host cutover
+  or archive work.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-30T02:15:16-00:00
+references: []
+log_events:
+- time: 2026-10-30T02:15:16-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
