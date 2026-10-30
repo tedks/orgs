@@ -23,3 +23,11 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-10-30T01:26:59-00:00
+  who: Ted Smith
+  what: commented
+  comment: "CONSOL-R2 ruling from Ted: choose B. Dotfiles installer must use an explicit
+    allowlist seeded with exactly the prior reusable set; orgs process skills remain
+    local. Each later global promotion is a one-line allowlist change after Ted reviews
+    the skill. Keep this issue open for Ted\u2019s promotion list. Cutover is unblocked
+    by the scope decision once implementation and gates pass."
