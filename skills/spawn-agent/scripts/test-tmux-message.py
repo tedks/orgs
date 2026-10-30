@@ -39,6 +39,11 @@ def fixture_frame(name, marker='❯'):
     return m.Frame(raw, 2, y)
 
 
+def codex_fixture_frame(name):
+    x, y = map(int, (CO_SUBMIT_FIXTURES / (name + '.cursor')).read_text().split(':'))
+    return m.Frame((CO_SUBMIT_FIXTURES / (name + '.ansi')).read_text(), x, y)
+
+
 def claude_co_submit_frame(text='', receipt=True):
     rows = (CO_SUBMIT_FIXTURES / 'claude-co-submit-receipt.ansi').read_text().splitlines()
     if not receipt:
@@ -924,6 +929,215 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
                 frame = screen(harness='claude', prefix=footer + '\n')
                 self.assertEqual(m.composer(frame).kind, 'empty')
                 self.assertEqual(m.composer(frame).harness, 'claude')
+
+    def test_codex_idle_live_captures_and_synthetic_footer(self):
+        # These two live captures were made AFTER the reported 38%-context
+        # incidents. They prove real 272x54 layouts, not the incident failure.
+        for name in ('codex-2026-10-18-live-current-748-scrubbed',
+                     'codex-2026-10-18-live-current-749-scrubbed',
+                     'SYNTHETIC-codex-idle-unrecognized-footer'):
+            with self.subTest(name=name):
+                frame = codex_fixture_frame(name)
+                self.assertIn('Ask Codex to do anything', frame.raw)
+                result = m.composer(frame)
+                self.assertEqual((result.kind, result.harness, result.cursor),
+                                 ('empty', 'codex', (2, 0)))
+                t = Terminal()
+                t.frame = lambda: frame
+                o = SimpleNamespace(max_wait=5, stable_wait=3, poll_interval=.25,
+                                    backoff=True)
+                sender = m.Sender(t, o, t.payload, Path('/unused'), t.clock, t.sleep)
+                self.assertEqual(sender.ready()[1].kind, 'empty')
+                self.assertEqual(t.actions, [])
+
+    def test_codex_unknown_footer_fallback_rejects_choice_and_bad_cursor(self):
+        frame = codex_fixture_frame('SYNTHETIC-codex-idle-unrecognized-footer')
+        self.assertEqual(m.composer(m.Frame(frame.raw, 2, frame.y + 2)).kind, 'unknown')
+        self.assertEqual(m.composer(m.Frame(frame.raw, 3, frame.y)).kind, 'unknown')
+        plain = frame.raw.replace('\x1b[2mAsk Codex to do anything', 'Ask Codex to do anything')
+        self.assertNotEqual(m.composer(m.Frame(plain, 2, frame.y)).kind, 'empty')
+        unstyled_prompt = frame.raw.replace('\x1b[1m›\x1b[0m', '›')
+        self.assertEqual(m.composer(m.Frame(unstyled_prompt, 2, frame.y)).kind, 'unknown')
+        choice = frame.raw.replace('Ask Codex to do anything', '1. Allow')
+        self.assertEqual(m.composer(m.Frame(choice, 2, frame.y)).kind, 'unknown')
+        pasted = frame.raw.replace('\x1b[2mAsk Codex to do anything\x1b[0m', 'short payload')
+        pasted_frame = m.Frame(pasted, 2 + len('short payload'), frame.y)
+        self.assertEqual(m.composer(pasted_frame).kind, 'unknown')
+        self.assertEqual(m.composer(pasted_frame, 'short payload',
+                                    '  GPT-6.1-Sol | main | active').kind, 'text')
+        self.assertEqual(m.composer(pasted_frame, 'short payload',
+                                    '  GPT-6.1-Sol | changed').kind, 'unknown')
+
+    def test_codex_unknown_footer_delivers_only_its_observed_paste(self):
+        base = codex_fixture_frame('SYNTHETIC-codex-idle-unrecognized-footer')
+        t = Terminal(payload='MODAL-M2 short receipt probe')
+        def frame():
+            if t.draft:
+                raw = base.raw.replace('\x1b[2mAsk Codex to do anything\x1b[0m', t.draft)
+            else:
+                raw = base.raw
+            submitted = ''
+            if t.accepted_at is not None:
+                submitted = '› ' + t.submitted + '\n\n'
+            return m.Frame(raw, 2 + m.styles.cell_width(t.draft), base.y, submitted + raw)
+        t.frame = frame
+        result = deliver(t, max_wait=5, stable_wait=3, submit_delay=1)
+        self.assertEqual((result['status'], result['receipt']), ('delivered', 'submitted'))
+        self.assertEqual((t.pastes, t.enters, t.submitted), (1, 1, t.payload))
+
+    def test_codex_unknown_footer_dropped_enter_redraw_is_not_receipt(self):
+        base = codex_fixture_frame('SYNTHETIC-codex-idle-unrecognized-footer')
+        for payload, footer_changes in (('short payload', 0),
+                                        ('short payload', 1),
+                                        ('short payload', 2),
+                                        ('short payload', 3),
+                                        ('first line\nsecond line', 0),
+                                        ('first line\nsecond line', 2)):
+            with self.subTest(payload=payload, footer_changes=footer_changes):
+                t = Terminal(payload=payload, dropped=99)
+                def frame():
+                    parts = t.draft.split('\n')
+                    raw = (base.raw.replace('\x1b[2mAsk Codex to do anything\x1b[0m',
+                                            parts[0] + ''.join('\n  ' + row for row in parts[1:]))
+                           if t.draft else base.raw)
+                    # A full-screen redraw can archive the still-unsent
+                    # composer; the live footer may also change afterwards.
+                    archived = raw if t.enters else ''
+                    if t.enters and footer_changes in (2, 3):
+                        archived = archived.replace('GPT-6.1-Sol | main | active',
+                                                    'GPT-6.1-Sol | main | intermediate')
+                    if t.enters and footer_changes in (1, 2):
+                        raw = raw.replace('GPT-6.1-Sol | main | active',
+                                          'GPT-6.1-Sol | main | updated')
+                    return m.Frame(raw, 2 + m.styles.cell_width(parts[-1]),
+                                   base.y + len(parts) - 1, archived + raw)
+                t.frame = frame
+                with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
+                    deliver(t, max_wait=5, stable_wait=3, submit_delay=1,
+                            receipt_wait=5, retry_wait=1)
+                self.assertEqual(t.accepted_at, None)
+                self.assertEqual(t.pastes, 1)
+
+    def test_codex_unknown_footer_ambiguous_bold_receipt_fails_closed(self):
+        base = codex_fixture_frame('SYNTHETIC-codex-idle-unrecognized-footer')
+        submitted = '\x1b[1m›\x1b[0m short payload\n\n  I received your message.\n'
+        frame = m.Frame(base.raw, base.x, base.y, submitted + base.raw)
+        inp = m.composer(frame)
+        self.assertEqual(inp.kind, 'empty')
+        self.assertEqual(m.records(frame, inp,
+                                   archived_codex_status='  GPT-6.1-Sol | main | active')
+                         [('submitted', 'shortpayload')], 0)
+
+    def test_codex_unknown_footer_ambiguous_bold_receipt_times_out(self):
+        base = codex_fixture_frame('SYNTHETIC-codex-idle-unrecognized-footer')
+        t = Terminal(payload='short payload')
+        def frame():
+            raw = (base.raw.replace('\x1b[2mAsk Codex to do anything\x1b[0m',
+                                    t.draft) if t.draft else base.raw)
+            submitted = ('\x1b[1m›\x1b[0m short payload\n\n'
+                         '  I received your message.\n' if t.accepted_at is not None else '')
+            return m.Frame(raw, 2 + m.styles.cell_width(t.draft), base.y,
+                           submitted + raw)
+        t.frame = frame
+        with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
+            deliver(t, max_wait=5, stable_wait=3, submit_delay=1, receipt_wait=5)
+        self.assertEqual((t.pastes, t.enters, t.accepted_at is not None),
+                         (1, 1, True))
+
+    def test_codex_unknown_footer_outside_clear_cannot_turn_archive_into_receipt(self):
+        base = codex_fixture_frame('SYNTHETIC-codex-idle-unrecognized-footer')
+        for archived_status in ('GPT-6.1-Sol | main | intermediate',
+                                'GPT-6.2-Sol | main | intermediate',
+                                'GPT-6.2-Sol (main)'):
+            with self.subTest(archived_status=archived_status):
+                t = Terminal(payload='short payload', dropped=99)
+                def frame():
+                    visible_text = '' if t.enters else t.draft
+                    raw = (base.raw.replace('\x1b[2mAsk Codex to do anything\x1b[0m',
+                                            visible_text) if visible_text else base.raw)
+                    archived = ''
+                    if t.enters:
+                        archived = base.raw.replace('\x1b[2mAsk Codex to do anything\x1b[0m',
+                                                    t.payload).replace(
+                            'GPT-6.1-Sol | main | active', archived_status)
+                    return m.Frame(raw, 2 + m.styles.cell_width(visible_text), base.y,
+                                   archived + raw)
+                t.frame = frame
+                with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
+                    deliver(t, max_wait=5, stable_wait=3, submit_delay=1,
+                            receipt_wait=5, retry_wait=1)
+                self.assertIsNone(t.accepted_at)
+                self.assertEqual((t.pastes, t.enters), (1, 1))
+
+    def test_codex_unknown_footer_delivers_multiline_and_collapsed_pastes(self):
+        base = codex_fixture_frame('SYNTHETIC-codex-idle-unrecognized-footer')
+        for collapsed in (False, True):
+            with self.subTest(collapsed=collapsed):
+                t = Terminal(payload='first line\nsecond line', collapsed=collapsed)
+                def frame():
+                    visible = (f'[Pasted Content {len(t.payload)} chars]'
+                               if collapsed and t.draft else t.draft)
+                    parts = visible.split('\n')
+                    raw = base.raw.replace(
+                        '\x1b[2mAsk Codex to do anything\x1b[0m',
+                        parts[0] + ''.join('\n  ' + part for part in parts[1:])) if visible else base.raw
+                    submitted = ('› ' + t.payload.replace('\n', '\n  ') + '\n\n'
+                                 if t.accepted_at is not None else '')
+                    return m.Frame(raw, 2 + m.styles.cell_width(parts[-1]),
+                                   base.y + len(parts) - 1, submitted + raw)
+                t.frame = frame
+                result = deliver(t, max_wait=5, stable_wait=3, submit_delay=1)
+                self.assertEqual((result['status'], result['receipt']),
+                                 ('delivered', 'submitted'))
+                self.assertEqual((t.pastes, t.enters, t.accepted_at is not None),
+                                 (1, 1, True))
+
+    def test_readiness_distinguishes_unknown_from_never_stable(self):
+        frame = codex_fixture_frame('codex-2026-10-18-live-current-748-scrubbed')
+        for alternating, expected in ((False, 'unsupported-layout'),
+                                      (True, 'unstable-composer')):
+            with self.subTest(alternating=alternating):
+                t = Terminal()
+                samples = 0
+                def sample():
+                    nonlocal samples
+                    samples += 1
+                    return frame if alternating and samples % 2 == 0 else m.Frame('', -1, -1)
+                t.frame = sample
+                o = SimpleNamespace(max_wait=1, stable_wait=.75, poll_interval=.25,
+                                    backoff=True)
+                sender = m.Sender(t, o, t.payload, Path('/unused'), t.clock, t.sleep)
+                with self.assertRaisesRegex(m.DeliveryError, expected):
+                    sender.ready()
+                self.assertEqual(t.actions, [])
+
+    def test_codex_idle_survives_interleaved_unreadable_snapshots(self):
+        # A moving output frame can make a coordinate/capture sample unreadable
+        # while the same empty composer remains visible before and after it.
+        frame = codex_fixture_frame('codex-2026-10-18-live-current-749-scrubbed')
+        t = Terminal()
+        samples = 0
+        def sample():
+            nonlocal samples
+            samples += 1
+            return m.Frame('', -1, -1) if samples % 4 == 0 else frame
+        t.frame = sample
+        o = SimpleNamespace(max_wait=5, stable_wait=3, poll_interval=.25,
+                            backoff=True)
+        sender = m.Sender(t, o, t.payload, Path('/unused'), t.clock, t.sleep)
+        self.assertEqual(sender.ready()[1].kind, 'empty')
+        self.assertEqual(t.actions, [])
+
+    def test_unknown_gap_does_not_hide_changed_draft(self):
+        t = Terminal()
+        samples = iter((screen('alpha'), m.Frame('', -1, -1), screen('beta')))
+        t.frame = lambda: next(samples, screen('beta'))
+        o = SimpleNamespace(max_wait=5, stable_wait=1, poll_interval=.25,
+                            backoff=False)
+        sender = m.Sender(t, o, t.payload, Path('/unused'), t.clock, t.sleep)
+        with self.assertRaisesRegex(m.DeliveryError, 'human-typing'):
+            sender.ready()
+        self.assertEqual(t.actions, [])
 
     def test_claude_dialogs_and_footers_by_fixture(self):
         fixtures = (

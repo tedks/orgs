@@ -28,6 +28,15 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
         self.old = server._self_identity
         server._self_identity = None
         self.addCleanup(setattr, server, '_self_identity', self.old)
+        self.posture = {'provider': 'openai', 'scores': {'openai': 1.2, 'anthropic': 0.8},
+                        'used_percent': {'openai': 60, 'anthropic': 40},
+                        'resets_at': {'openai': '2026-10-30T00:00:00Z', 'anthropic': '2026-10-31T00:00:00Z'},
+                        'stale': {'openai': False, 'anthropic': False},
+                        'staleness': {'stale': False, 'newest_observed': '2026-10-29T00:00:00Z', 'age_seconds': 0},
+                        'gated': {'openai': False, 'anthropic': False}, 'reason': 'test posture'}
+        self.posture_reader = patch.object(server, '_read_usage_posture', return_value=self.posture)
+        self.posture_reader.start()
+        self.addCleanup(self.posture_reader.stop)
 
     async def test_pinned_identity_verified_every_time(self):
         with patch('harness_identity.discover', return_value=self.identity) as discover, patch('harness_identity.verify_pane') as verify:
@@ -40,7 +49,98 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
         with patch('harness_identity.discover', side_effect=IdentityError('outside tmux')):
             for tool in (server.get_status, server.get_usage):
                 got = await tool()
-                self.assertEqual(got, {'state':'unavailable','reason':'outside tmux'})
+                expected = {'state':'unavailable','reason':'outside tmux'}
+                if tool is server.get_usage:
+                    expected['posture'] = self.posture
+                self.assertEqual(got, expected)
+
+    async def test_posture_is_attached_to_claude_usage(self):
+        snapshot={'schema_version':1,'session_id':SID,'observed_at':100}
+        (self.path/f'{SID}.status.json').write_text(json.dumps(snapshot))
+        claude_binding = {'state': 'observed', 'session_id': SID,
+                          'pointer_paths': [str(self.path / 'current.123')], 'status_dir': str(self.path)}
+        with patch.object(server, '_own_identity', return_value=self.identity), \
+                patch('session_binding.observe_native_session', return_value=claude_binding):
+            result = await server.get_usage()
+        self.assertEqual(result.get('posture'), self.posture)
+
+    async def test_posture_is_attached_to_codex_usage(self):
+        identity = Identity('codex', 123, '777', 'boot', '/tmp/socket', '%9', '/work')
+        data = {'state': 'observed', 'source': 'codex_rollout', 'session_id': SID,
+                'quota_buckets': {'test': {}}}
+        with patch.object(server, '_own_identity', return_value=identity), \
+                patch('session_binding.observe_native_session', return_value={
+                    'state': 'observed', 'session_id': SID, 'observation': data}), \
+                patch.object(server.codex_status, 'codex_home_for', return_value=None):
+            result = await server.get_usage()
+        self.assertEqual(result.get('posture'), self.posture)
+
+    async def test_posture_cli_failure_is_named_and_does_not_raise(self):
+        self.posture_reader.stop()
+        self.addCleanup(self.posture_reader.start)
+        with patch('shutil.which', return_value=None):
+            self.assertEqual(server._read_usage_posture(), {
+                'state': 'unavailable', 'reason': 'token_usage_cli_unavailable'})
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', side_effect=subprocess.TimeoutExpired('token-usage', 5)):
+            self.assertEqual(server._read_usage_posture(), {
+                'state': 'unavailable', 'reason': 'token_usage_posture_timeout'})
+        posture = {'provider': 'anthropic', 'scores': {'openai': 1.2, 'anthropic': 0.8},
+                   'used_percent': {'openai': 60, 'anthropic': 40},
+                   'resets_at': {'openai': '2026-10-30T00:00:00Z', 'anthropic': '2026-10-31T00:00:00Z'},
+                   'stale': {'openai': False, 'anthropic': False},
+                   'staleness': {'stale': False, 'newest_observed': '2026-10-29T00:00:00Z', 'age_seconds': 0},
+                   'gated': {'openai': False, 'anthropic': False}, 'reason': 'Anthropic is behind pace'}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0, stdout=json.dumps(posture), stderr='')) as run:
+            self.assertEqual(server._read_usage_posture(), posture)
+            run.assert_called_once_with(
+                ['/bin/token-usage', 'posture', '--no-scan', '--json'], capture_output=True,
+                text=True, encoding='utf-8', errors='strict', timeout=5, check=False)
+        for stdout in ('not json', '[]', '{"reason":"missing provider"}',
+                       '{"provider":"Mars"}', '{"provider":"openai"}'):
+            with patch('shutil.which', return_value='/bin/token-usage'), \
+                    patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                        args=['token-usage'], returncode=0, stdout=stdout, stderr='')):
+                self.assertEqual(server._read_usage_posture(), {
+                    'state': 'unavailable', 'reason': 'token_usage_posture_malformed'})
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=1, stdout='', stderr='meter unavailable')):
+            self.assertEqual(server._read_usage_posture(), {
+                'state': 'unavailable', 'reason': 'token_usage_posture_failed'})
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', side_effect=UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid')):
+            self.assertEqual(server._read_usage_posture(), {
+                'state': 'unavailable', 'reason': 'token_usage_posture_malformed'})
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', side_effect=OSError('exec failed')):
+            self.assertEqual(server._read_usage_posture(), {
+                'state': 'unavailable', 'reason': 'token_usage_posture_exec_failed'})
+        malformed = [
+            {**posture, 'secret': 'unexpected'},
+            {**posture, 'scores': {'openai': 1.2}},
+            {**posture, 'scores': {'openai': 'bad', 'anthropic': 0.8}},
+            {**posture, 'scores': {'openai': 10 ** 400, 'anthropic': 0.8}},
+            {**posture, 'scores': {'openai': float('nan'), 'anthropic': 0.8}},
+            {**posture, 'used_percent': {'openai': float('inf'), 'anthropic': 40}},
+            {**posture, 'staleness': None},
+            {**posture, 'staleness': {**posture['staleness'], 'path': '/private'}},
+            {**posture, 'staleness': {**posture['staleness'], 'age_seconds': -1}},
+            {**posture, 'staleness': {**posture['staleness'], 'age_seconds': True}},
+            {**posture, 'staleness': {**posture['staleness'], 'age_seconds': 0.5}},
+            {**posture, 'staleness': {**posture['staleness'], 'newest_observed': None}},
+            {**posture, 'reason': None},
+            {**posture, 'gated': {'openai': 0, 'anthropic': False}},
+            {**posture, 'stale': {'openai': None, 'anthropic': False}},
+        ]
+        for item in malformed:
+            with patch('shutil.which', return_value='/bin/token-usage'), \
+                    patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                        args=['token-usage'], returncode=0, stdout=json.dumps(item), stderr='')):
+                self.assertEqual(server._read_usage_posture(), {
+                    'state': 'unavailable', 'reason': 'token_usage_posture_malformed'})
 
     async def test_claude_binding_ignores_env_override(self):
         snapshot={'schema_version':1,'session_id':SID,'observed_at':100,'model':{'id':'test'},'context_window':{'remaining_percentage':42}, 'transcript_path':'private'}
@@ -166,7 +266,8 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
                 usage = await server.get_usage()
         self.assertEqual(status['observation'], old)
         # The daemon case stays "unsupported" with its reason, plus the account meter.
-        self.assertEqual({k: v for k, v in usage.items() if k != 'account_latest'}, old)
+        self.assertEqual({k: v for k, v in usage.items() if k not in ('account_latest', 'posture')}, old)
+        self.assertIs(usage['posture'], self.posture)
         self.assertEqual(usage['account_latest'], {'state': 'unavailable', 'source': 'codex_rollouts_newest',
                                                    'reason': 'sessions_unreadable'})
 
@@ -195,6 +296,9 @@ MUTANTS = {
     'test_codex_allowlist': ("state.pop('rollout_path', None)", 'pass'),
     'test_codex_unsupported_result_compatibility': ("state = dict(binding.get('observation',", "state = dict({'state': 'unavailable', 'reason': 'changed'}.get('observation',"),
     'test_configured_pointer_snapshot_uses_default_directory': ("Path(binding['status_dir'])", "Path(binding['pointer_paths'][0]).parent"),
+    'test_posture_is_attached_to_claude_usage': ("result['posture'] = posture", "pass"),
+    'test_posture_is_attached_to_codex_usage': ("        result['posture'] = posture\n        return result\n    except IdentityError", "        result['posture'] = {'state': 'unavailable'}\n        return result\n    except IdentityError"),
+    'test_posture_cli_failure_is_named_and_does_not_raise': ("'token_usage_posture_timeout'", "'unknown'"),
 }
 
 

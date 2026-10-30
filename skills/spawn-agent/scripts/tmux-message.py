@@ -71,7 +71,7 @@ class Input:
         return self.kind, self.text, self.cursor, self.harness
 
 
-def composer(frame):
+def composer(frame, expected_codex_text=None, expected_codex_footer=None):
     lines = styles.strip_ansi(frame.raw).splitlines()
     raw = frame.raw.splitlines()
     # Keep the pre-existing dialog guard on Codex and unknown layouts. A
@@ -94,9 +94,41 @@ def composer(frame):
             harness = "claude"
         else:
             footers = [i for i in range(idx + 1, len(lines)) if FOOTER.match(lines[i])]
-            if not footers:
-                continue
-            end = footers[0]
+            if footers:
+                end = footers[0]
+            else:
+                # An idle Codex placeholder with the cursor at its start is
+                # still a composer when the single status row changes wording.
+                # Require the measured blank separator and indented final
+                # status row; arbitrary transcript/choice rows stay unknown.
+                ghost = (first in {"", "Ask Codex to do anything"}
+                         and (not first or styles.dim_span(raw[idx], first))
+                         and frame.x == 2)
+                status = next((i for i in range(len(lines) - 1, idx, -1)
+                               if lines[i].strip()), -1)
+                if (not styles.sgr_span(raw[idx], "›", "bold")
+                        or status < idx + 2 or lines[status - 1].strip()
+                        or not lines[status].startswith("  ")
+                        or any(glyph in lines[status] for glyph in "›❯")):
+                    continue
+                content = lines[idx + 1:status - 1]
+                pasted = "\n".join([first] + [row[2:] for row in content])
+                marker = re.fullmatch(r"\[Pasted Content ([0-9]+) chars\]", pasted, re.I)
+                counts = ({str(len(expected_codex_text)),
+                           str(len(expected_codex_text.encode("utf-16-le")) // 2)}
+                          if expected_codex_text is not None else set())
+                own_paste = (expected_codex_footer == lines[status]
+                             and expected_codex_text is not None
+                             and (normalized(pasted) == normalized(expected_codex_text)
+                                  or bool(marker and marker.group(1) in counts))
+                             and all(not row or row.startswith("  ") for row in content)
+                             and frame.y == status - 2
+                             and frame.x == 2 + styles.cell_width(
+                                 content[-1][2:] if content else first))
+                if not ((ghost and frame.y == idx and not content)
+                        or own_paste):
+                    continue
+                end = status
             harness = "codex"
         if not idx <= frame.y < end:
             continue
@@ -114,7 +146,7 @@ def composer(frame):
     return Input("unknown")
 
 
-def records(frame, inp, strict_claude_submitted=False):
+def records(frame, inp, strict_claude_submitted=False, archived_codex_status=None):
     """Candidate receipts outside the live composer, with semantic row markers.
 
     A new occurrence is required relative to the pre-paste history. Assistant
@@ -128,6 +160,14 @@ def records(frame, inp, strict_claude_submitted=False):
     rows = history[:prefix_len + inp.start] if inp.kind not in {"unknown", "modal"} else history[:prefix_len]
     result = Counter()
     lines = [styles.strip_ansi(row) for row in rows]
+    visible_plain = styles.strip_ansi(frame.raw).splitlines()
+    observed_status = (visible_plain[inp.end] if inp.harness == "codex"
+                       and 0 <= inp.end < len(visible_plain) else None)
+    # A redraw can archive a still-unsent fallback composer while its live
+    # status row changes and the current input becomes unknown. Keep the row
+    # observed before paste as an exclusion in that case.
+    composer_statuses = {status for status in (observed_status, archived_codex_status)
+                         if status is not None}
     queued = False
     for index, line in enumerate(lines):
         if QUEUE.search(line):
@@ -156,7 +196,17 @@ def records(frame, inp, strict_claude_submitted=False):
         # Full-screen redraw can archive an UNSENT input box in scrollback.
         # Its footer/rules still identify it as a composer, not a receipt.
         rule = lambda row: bool(row.strip()) and set(row.strip()) == {"─"}
-        if kind == "submitted" and (FOOTER.match(following) or rule(following) or rule(previous)):
+        # The bold prompt, blank separator and indented next row can be either
+        # an archived unsent Codex box or a genuine submitted row. When the
+        # changed-footer fallback was used, neither is a proven receipt.
+        archived_codex_box = (archived_codex_status is not None
+                              and end < len(lines) and not lines[end].strip()
+                              and styles.sgr_span(rows[index], "›", "bold")
+                              and following.startswith("  ") and following.strip()
+                              and not any(glyph in following for glyph in "›❯"))
+        if kind == "submitted" and (FOOTER.match(following) or rule(following)
+                                    or rule(previous) or following in composer_statuses
+                                    or archived_codex_box):
             continue
         result[(kind, normalized(text))] += 1
     return result
@@ -377,6 +427,7 @@ class Sender:
         self.draft_harness = ""
         self.clear_attempted = False
         self.cleared_command_draft_length = 0
+        self.codex_fallback_footer = None
         if self.typed and getattr(options, "literal_exit", False):
             raise DeliveryError("conflicting-input-modes")
         if self.typed and (len(payload.encode("utf-8")) > 200 or payload != payload.rstrip() or payload.endswith(";")):
@@ -415,7 +466,9 @@ class Sender:
 
     def sample(self):
         frame = self.tmux.frame()
-        return frame, composer(frame)
+        return frame, composer(frame,
+                               self.expected if self.pasted and self.codex_fallback_footer else None,
+                               self.codex_fallback_footer)
 
     def at_end(self, inp):
         return inp.cursor == (2 + styles.cell_width(inp.text.rsplit("\n", 1)[-1]), inp.text.count("\n"))
@@ -430,12 +483,30 @@ class Sender:
         stable_since = self.clock()
         probed = False
         last_reason = "unsupported-layout"
+        seen_composer = False
+        consecutive_known = 0
         while self.clock() < deadline:
             frame, inp = self.sample()
             now = self.clock()
             fp = inp.fingerprint()
             if now >= deadline:
                 break
+            if inp.kind == "modal":
+                raise DeliveryError("modal")
+            if inp.kind == "unknown":
+                # A coordinate/capture race is not evidence that input
+                # changed. Keep the last known fingerprint, but require two
+                # fresh known samples after the gap before acting on it.
+                consecutive_known = 0
+                if seen_composer and last_reason == "unsupported-layout":
+                    last_reason = "unstable-composer"
+                self.sleep(min(self.o.poll_interval, max(0, deadline - self.clock())))
+                continue
+            consecutive_known += 1
+            if inp.kind in {"empty", "text", "suggestion"}:
+                seen_composer = True
+                if last_reason == "unsupported-layout":
+                    last_reason = "unstable-composer"
             if previous is None:
                 stable_since = now
             if previous is not None and fp != previous:
@@ -446,10 +517,8 @@ class Sender:
                         raise DeliveryError("human-typing")
                     last_reason = "human-typing"
                 stable_since = now
-            twice = previous is not None and fp == previous
+            twice = consecutive_known >= 2 and previous is not None and fp == previous
             previous = fp
-            if inp.kind == "modal":
-                raise DeliveryError("modal")
             if twice and now - stable_since >= getattr(self.o, "stable_window", self.o.stable_wait):
                 if inp.kind == "empty":
                     return frame, inp
@@ -499,6 +568,10 @@ class Sender:
         before, check = self.sample()
         if check.fingerprint() != inp.fingerprint():
             raise DeliveryError("input-changed-before-paste")
+        if check.harness == "codex":
+            rows = styles.strip_ansi(before.raw).splitlines()
+            if check.end < len(rows) and not FOOTER.match(rows[check.end]):
+                self.codex_fallback_footer = rows[check.end]
         if check.kind == "text" and styles.command_like(check.text) and not self.command_shape(before, check):
             raise DeliveryError("input-changed-before-clear")
         if check.kind == "text" and not self.at_end(check):
@@ -552,7 +625,8 @@ class Sender:
             self.draft_harness = check.harness
             self.expected = check.text + "\n" + self.payload
         claude_co_submit = bool(self.stale_draft_length and self.draft_harness == "claude")
-        baseline = records(before, check, strict_claude_submitted=claude_co_submit)
+        baseline = records(before, check, strict_claude_submitted=claude_co_submit,
+                           archived_codex_status=self.codex_fallback_footer)
         claude_receipt_baseline = (claude_combined_receipts(
             before, check, self.original_draft, self.payload) if claude_co_submit else 0)
         if literal:
@@ -585,7 +659,8 @@ class Sender:
             now = self.clock()
             if now >= deadline:
                 break
-            receipt = records(frame, current, strict_claude_submitted=claude_co_submit)
+            receipt = records(frame, current, strict_claude_submitted=claude_co_submit,
+                              archived_codex_status=self.codex_fallback_footer)
             if literal and self.enters == 1 and current.kind == "unknown":
                 resumed = resume_records(frame)
                 fresh = [session for session, count in resumed.items() if count > resume_before[session]]
@@ -622,7 +697,8 @@ class Sender:
                         and self.enters < max_enters and not input_disappeared):
                     # Refresh receipt AND input immediately before each Enter.
                     confirm, live = self.sample()
-                    fresh = records(confirm, live, strict_claude_submitted=claude_co_submit)
+                    fresh = records(confirm, live, strict_claude_submitted=claude_co_submit,
+                                    archived_codex_status=self.codex_fallback_footer)
                     for kind in ("submitted", "queued"):
                         if not literal and self.enters and any(fresh[(kind, form)] > baseline[(kind, form)] for form in accepted_forms):
                             return {"status": "delivered", "receipt": kind, "enters": self.enters}
@@ -708,7 +784,7 @@ def main():
             code = 3
         reason = error.reason if isinstance(error, DeliveryError) else "tmux-operation-failed"
         result = {"status": "ambiguous" if changed else "deferred", "reason": reason,
-                  "pending_file": str(path), "needs_review": changed or reason in {"unsupported-layout", "modal"},
+                  "pending_file": str(path), "needs_review": changed or reason in {"unsupported-layout", "unstable-composer", "modal"},
                   "paste_attempted": pasted and not sender.typed,
                   "input_attempted": pasted, "input_method": "typed" if o.typed_command or o.literal_exit else "paste",
                   "enters": sender.enters if sender else 0}

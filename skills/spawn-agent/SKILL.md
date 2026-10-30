@@ -103,6 +103,10 @@ Results are JSON: exit 0 is `status=delivered` with a `submitted`, `queued`, or
 paste may have occurred. Failure reports include `reason`, `pending_file`,
 `pane` when resolved, and `needs_review`. The private file holds the actual
 outgoing message; it is never automatically replayed.
+On a changed-footer Codex pane, a bold `›` row followed by a blank row and
+indented text may be an archived unsent composer. It is not a delivery receipt.
+`receipt-timeout` after an attempted paste means the message may have been
+submitted; inspect the pane and do not repaste the pending file.
 
 For `needs_review=true`, read the pane and inspect the reported stage. If a new
 receipt is visible, record acceptance. If this attempt's paste is still in the
