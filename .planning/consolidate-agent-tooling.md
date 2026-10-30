@@ -2,13 +2,14 @@
 
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
 `consolidation` branch. Current state: Phase 2 is in review. Draft public
-orgs PR #34 is pushed at `fe50aa5`; its integration council reached a clean
-fixpoint and exact-head local gates pass. The private installer draft PR #224
-is pushed at `e1222db`, with a later convergence fix in progress. Public
-tracker histories are merged at `e92c5f3`. Org master protection is active as
-ruleset `26175107`. Source PRs #13 and #14 remain open; final sync, tier-drift
-publication, and fleet cutover await their explicit gates. No live host links
-have changed.
+orgs PR #34 has code head `fe50aa5` and plan head `dfa34dc`; its integration
+council reached a clean fixpoint and exact-code-head local gates pass. The
+private installer draft PR #224 is pushed at `0a26821`, with its final
+convergence review in progress. Public tracker histories are merged at
+`e92c5f3`. Org master protection is active as ruleset `26175107`. Ted approved
+publication of the scanned tier-drift commit; its import and post-import scan
+are in progress. Source PRs #13 and #14 remain open; final sync and fleet
+cutover await their explicit gates. No live host links have changed.
 
 ## Purpose / Big Picture
 
@@ -27,7 +28,11 @@ new source path before any host cutover.
 - [x] (2026-10-29) Inventoried source trees, naming collisions, tracker IDs,
   consumer paths, and in-flight PR dependencies.
 - [x] (2026-10-29) Scanned the complete proposed tier-drift source commit and
-  its message without publishing its content; publication awaits a ruling.
+  its message without publishing its content; publication was gated on Ted's
+  later ruling.
+- [x] (2026-10-29) Received `CONSOL-TIERDRIFT-OK` from Ted for exactly
+  `c4f2d2eb4b3b4ac76d68fb0e0788eb651eb6d4d7` under `tools/tier-drift`.
+  The private dotfiles companion and archive remain outside this import.
 - [x] (2026-10-29) Sent `CONSOL-CHECKPOINT-1` with pushed plan commit
   `74a4eb6adf6344f3d1964a7f4bbceb5868d69888` and scan evidence.
 - [x] (2026-10-29) Imported public agent-skills `f703451` as a subtree parent
@@ -53,8 +58,18 @@ new source path before any host cutover.
   at `fe50aa5`; exact-head Nix, config, leak guard, tmux alias, and scaffold
   gates passed. A fake-HOME harness-control install and smoke test passed from
   the earlier orgs code tree at `2fc50d6`.
+- [x] (2026-10-29) Pushed private installer fixes at `8e2f3da`: verify prior
+  curated Claude views before switching, prune demoted Codex links through a
+  managed-link manifest, and retain Git cleanliness for rollback after the
+  app cache moves. Exact-code-head installer tests passed (56 agent-skills,
+  22 harness-control, 23 Codex MCP, and 16 Codex config assertions). The
+  native second-convergence review returned clean; the foreign review remains
+  in progress.
 - [ ] Finish the private installer convergence review, fix findings, and rerun
   its exact-head gates.
+- [ ] Import the approved tier-drift commit with preserved history, run Bazel
+  from its nested project, scan the merged public tree, and record the scan on
+  orgs PR #34.
 - [ ] Synchronize source PRs #13 and #14 after they land, then recheck imported
   byte identity and rerun gates before readiness.
 - [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes, final synchronization,
@@ -75,8 +90,8 @@ new source path before any host cutover.
   design text, and synthetic tests. Matches for SSH are generic collection
   instructions, not host entries or credentials. Numerical matches are
   published model prices, code constants, and synthetic test data; no
-  observed host or session usage figures were found. This is a bounded scan,
-  not authorization to publish.
+  observed host or session usage figures were found. This was a bounded scan;
+  Ted separately authorized publication of that exact commit afterward.
 - The source `agent-skills` `master` is `f7034513724f012680e2dc707727110739aa736b`
   with 371 reachable commits and 159 tracked files. The existing `orgs`
   snapshot pins the older `5b1919e723a92b1c90f2ae8495f594e651125564`
@@ -101,6 +116,11 @@ new source path before any host cutover.
 - The real `orgs/master` worktree on this host had the expected SSH origin,
   branch, and clean tree at the read-only preflight snapshot. Each host needs
   the same fresh check before cutover.
+- At the pinned public source commit, the 12 reusable skill names exactly
+  match the private allowlist. The orgs integration has all 12 alongside 13
+  local process skills. The installer `list` command emits exactly the former
+  12 names. Real Claude Code discovery of a curated view of individual
+  symlinks remains an unverified acceptance check before live cutover.
 
 ## Decision Log
 
@@ -109,6 +129,11 @@ new source path before any host cutover.
   Rationale: moving even apparently sanitized content from a private remote
   to a public repository crosses the brief's explicit stop condition.
   Date/Author: 2026-10-29, orgs-consolidation lane.
+- Decision: import only the scanned single-commit tier-drift history after
+  `CONSOL-TIERDRIFT-OK`, keeping the private companion and archive separate.
+  Rationale: Ted approved publication of exactly this commit on 2026-10-29;
+  broadening to any other tier-drift ref would exceed that approval.
+  Date/Author: 2026-10-29, Ted ruling implemented by orgs-consolidation lane.
 - Decision: merge reusable skills directly under `orgs/skills/` beside the
   existing protocol skills. The current source directory names have no
   collisions. Keep the process skill names and reusable skill names intact.
@@ -146,8 +171,8 @@ new source path before any host cutover.
 
 Phase 1 mapped the move and isolated the private tier-drift publication gate.
 The public source import is in draft PR #34 with preserved source ancestry,
-exact-head gates, and a clean integration council. The private installer draft
-passed its fixture and fake-HOME package checks; its second convergence review
+exact-code-head gates, and a clean integration council. The private installer
+draft passed its exact-code-head fixture tests; its second convergence review
 continues. The tracker merge and master protection are delivered. Source final
 sync, tier-drift publication, and host cutover remain pending.
 
