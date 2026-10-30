@@ -641,7 +641,7 @@ class DeliveryTests(unittest.TestCase):
         t.harness = 'claude'
         original_frame = t.frame
         def delayed_sample():
-            # A single sample consumes the entire explicit readiness budget.
+            # Deliberately land one sample exactly on the readiness boundary.
             t.now = 8
             return original_frame()
         t.frame = delayed_sample

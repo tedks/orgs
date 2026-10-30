@@ -70,7 +70,7 @@ combined input, then submit both. Results record only the co-submitted draft
 length, never its contents. A Claude composer containing `[Image #N]`, even
 when the marker wraps across rows, defers as `image-placeholder`; the image is
 opaque and must never be co-submitted. This check precedes command-draft
-handling. Exception: a verified stable command-shaped draft
+handling. Exception to co-submission: a verified stable command-shaped draft
 is cleared without execution, then the outgoing message is sent only after
 empty input is verified. Its context may pre-empt the command. Results include
 `cleared_command_draft_length` after empty input is verified, and
