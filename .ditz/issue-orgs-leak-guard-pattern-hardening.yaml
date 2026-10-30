@@ -1,0 +1,23 @@
+id: orgs-leak-guard-pattern-hardening
+title: Harden setup leak pattern matching and public URL punctuation
+desc: 'Follow-up nit from orgs PR #34 council convergence. tests/test_setup_leaks.py
+  uses case-sensitive FORBIDDEN matching, so case variants of machine names or owner
+  tokens are not detected. Its public ditz/orgs URL exemption lookahead also rejects
+  harmless punctuation after a URL (for example a closing parenthesis or quote), causing
+  false alarms. Add focused cases, decide whether case-insensitive scanning is appropriate
+  for every forbidden token, and broaden the URL boundary without accidentally exempting
+  private/lookalike repositories. The current PR''s exact-head guard passes; this
+  is nonblocking follow-up.'
+type: task
+component: tests
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-30T01:44:17-00:00
+references: []
+log_events:
+- time: 2026-10-30T01:44:17-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
