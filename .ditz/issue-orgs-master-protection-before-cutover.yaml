@@ -1,0 +1,27 @@
+id: orgs-master-protection-before-cutover
+title: Protect orgs master before fleet skill cutover
+desc: 'The public orgs repository currently has no branch protection and no repository
+  rulesets (GitHub API checked 2026-10-29); Actions are disabled. The current public
+  agent-skills source has active ruleset protect-master (id 25040392) requiring a
+  pull request on refs/heads/master, with no bypass actors and zero required approving
+  reviews. Options: (A) create the equivalent orgs protect-master ruleset before fleet
+  cutover; (B) explicitly accept an unprotected fleet source. Recommend A, preserving
+  the source repository''s merge gate. Decide: Ted/CTO. Blocks: CONSOL-CUTOVER-OK
+  host cutover; public PR #34 can remain in draft. Exact proposed ruleset: target
+  branch, enforcement active, ref_name include refs/heads/master, exclude empty, one
+  pull_request rule with required_approving_review_count 0, allowed_merge_methods
+  merge/squash/rebase, require_extra_approval_for_unattributed_changes true, and other
+  source parameters false/empty.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-30T01:29:51-00:00
+references: []
+log_events:
+- time: 2026-10-30T01:29:51-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
