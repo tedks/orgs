@@ -21,3 +21,11 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-10-30T02:13:28-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Post-tier-drift import council found the existing guard also lacks explicit
+    LAN/VPN address and UUID/session-ID patterns. Current merged tier-drift tree was
+    scanned separately and has zero such identifiers; this remains a nonblocking hardening
+    follow-up. Reassess the issue''s URL-punctuation item against the exact public-project
+    exemption added in PR #34.'
