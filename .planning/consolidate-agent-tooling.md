@@ -1,9 +1,9 @@
 # Consolidate agent tooling into orgs
 
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
-`consolidation` branch. Current state: Phase 2 final source sync is in review.
-Draft public orgs PR #34 has code head `4147cc1`; its agent-skills integration
-and tier-drift import councils both reached clean fixpoints.
+`consolidation` branch. Current state: Phase 2 final source sync reached a clean
+two-seat convergence at code head `1736451`. Draft public orgs PR #34 preserves
+the agent-skills and tier-drift imports, with source master as a merge parent.
 The private installer draft PR #224 is pushed at `0ac21d7` with clean native
 and Claude convergence reviews. Public tracker histories are merged at
 `e92c5f3`. Org master protection is active as ruleset `26175107`. Ted approved
@@ -11,8 +11,9 @@ publication of tier-drift commit `c4f2d2eb`; its 28 files are imported and
 scanned. Ted ruled under `CONSOL-RATIOS-OK` to retain its two measured,
 host-anonymized ratios; the publication question is closed, with provenance
 follow-up filed. Source PRs #13 and #14 are merged and their master tip
-`d2117cd` is a normal merge parent of this branch. The final sync gates and
-scratch install passed; the foreign convergence seat remains in progress.
+`d2117cd` is a normal merge parent of this branch. The final sync gates passed
+at `4147cc1` and again after the posture-contract fix at `1736451`. The fresh
+scratch install passed at the exact fix head.
 Fleet cutover still awaits `CONSOL-CUTOVER-OK`. No live host links have changed.
 
 ## Purpose / Big Picture
@@ -99,8 +100,24 @@ new source path before any host cutover.
   global skill surface is exactly the 12 former reusable names and resolves
   into the clean scratch orgs checkout; no process skills were linked.
   Harness-control resolves to the above store path and its smoke test passed.
-- [ ] Finish the foreign Claude Opus convergence seat on sync delta
-  `b44dd41..4147cc1`; the native OpenAI Sol seat returned CLEAN.
+- [x] (2026-10-30) Native OpenAI Sol found no sync findings. Foreign Claude
+  Opus found an Important consumer mismatch with pending dotfiles PR #218:
+  the source posture validator rejected `staleness.expired` and null weekly
+  values. Fixed it in `1736451`; both seats returned CLEAN on the fix delta.
+  Claude ran 48 producer/consumer combinations against #218 `6ccb229`, all
+  accepted unchanged. Three nonblocking follow-up issues were filed and synced:
+  `orgs-get-usage-posture-hardening`, `orgs-claude-send-timing-tests`, and
+  `orgs-tmux-idle-plan-status`.
+- [x] (2026-10-30) Repeated the fake-HOME install from a fresh scratch prefix
+  against fix head `1736451`. Both Claude and Codex expose the same 12
+  reusable skill links and zero process skill links. The installed executable
+  resolves to `/nix/store/i32n7mj4phdlsamxb97xi9kfiavp8x30-harness-control`,
+  and the MCP smoke test passed. The prior scratch checkout refused an update
+  because it was behind the source branch, as designed; the fresh rehearsal
+  used a clean checkout at the exact fix head.
+- [x] (2026-10-30) `nix flake check` passed all three checks on code head
+  `1736451` after the posture fix. The package built at
+  `/nix/store/i32n7mj4phdlsamxb97xi9kfiavp8x30-harness-control`.
 - [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes and archive work.
 
 ## Surprises & Discoveries
@@ -166,11 +183,13 @@ new source path before any host cutover.
 - The synced `harness-control` exposes quota posture through the external
   `token-usage posture`/`incidents` CLI. Current live dotfiles master lacks
   those subcommands; its open PR #218 supplies them. Without #218 deployed,
-  `get_usage` reports `token_usage_posture_failed` safely. Cutover acceptance
-  should include #218 landing (or Ted explicitly accepting unavailable
-  posture) and an unmocked `get_usage` check. This is an operational dependency,
-  not a defect in the source sync. Real Claude client skill discovery remains
-  a separate pre-cutover acceptance check.
+  `get_usage` reports `token_usage_posture_failed` safely. Claude's final-sync
+  review found the source validator also rejected #218's actual JSON schema.
+  The orgs fix at `1736451` accepts both the prior and current producer shapes
+  with allowlisted fields; both council seats reviewed the fix as clean. Cutover
+  acceptance should include #218 landing (or Ted explicitly accepting
+  unavailable posture) and an unmocked `get_usage` check. Real Claude client
+  skill discovery remains a separate pre-cutover acceptance check.
 
 ## Decision Log
 
@@ -231,9 +250,9 @@ integration and import council fixpoints. Ted ruled to
 retain the two measured ratios, closing that publication question. The
 private installer draft PR #224 reached a clean council fixpoint;
 real Claude client discovery remains a pre-cutover acceptance check. The
-tracker merge and master protection are delivered. The final source sync and
-scratch install passed; foreign convergence review remains in progress. Host
-cutover remains gated.
+tracker merge and master protection are delivered. The final source sync,
+posture-contract convergence, exact-fix Nix check, and fresh scratch install
+passed. Host cutover remains gated.
 
 ## Context and Orientation
 
