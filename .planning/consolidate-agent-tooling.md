@@ -3,8 +3,9 @@
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
 `consolidation` branch. Current state: Phase 2 is in progress. The public
 agent-skills tip has been imported and its files moved into direct orgs paths;
-the old vendor snapshot is removed in the working tree. No PR has been opened
-and no host links have changed. Tier-drift remains behind its separate ruling.
+the old vendor snapshot is removed. Draft orgs PR #34 is open at `17994ec`.
+The private installer PR, tracker merge, and host cutover remain pending. No
+live host links have changed. Tier-drift remains behind its separate ruling.
 
 ## Purpose / Big Picture
 
@@ -30,8 +31,11 @@ new source path before any host cutover.
   of `f52ac9994f024d7c9d5126c372b8b6f9345b7542`, moved the skill,
   harness-control, flake, and test trees to direct paths in `26f8e7a`, and
   verified the source tip remains an ancestor.
-- [ ] Finish direct skill discovery, obsolete vendor removal, source-specific
-  docs, gates, and draft orgs PR.
+- [x] (2026-10-29) Finished direct skill discovery, obsolete vendor removal,
+  source-specific docs, and gates; pushed `17994ec8e6bffb0d29309052e591a21af4c353f1`
+  and opened draft orgs PR #34.
+- [ ] Merge the public issue tracker history and preserve all 57 IDs.
+- [ ] Finish the private dotfiles installer PR and review both changes.
 - [ ] Prepare public `orgs` and private `dotfiles` draft PRs, preserve source
   history, and run local and scratch-prefix gates.
 - [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes, final synchronization,
@@ -65,6 +69,11 @@ new source path before any host cutover.
   with positive assertions that key source files are present. Its forbidden
   fixture check still passes. The initial whole-repo run failed; the scoped
   run passed 2 tests.
+- An ordinary `git pull --rebase` tried to replay the imported source's
+  history and conflicted in three root files. The rebase was aborted; the
+  tested `17994ec` head and source merge parent were verified intact. The
+  remote feature branch was fetched explicitly and was 374 commits behind
+  the local branch with zero remote-only commits before the normal push.
 
 ## Decision Log
 
@@ -89,12 +98,20 @@ new source path before any host cutover.
   Rationale: the original repository-wide assumption does not hold for orgs,
   while the imported content still needs the full guard.
   Date/Author: 2026-10-29, orgs-consolidation lane.
+- Decision: abort the default rebase and compare the fetched feature branch
+  before pushing the preserved merge topology. Use `--rebase-merges` only if
+  a future remote divergence actually requires a rebase.
+  Rationale: flattening the public source merge would discard its explicit
+  ancestry and create artificial conflicts. The remote had no new commits.
+  Date/Author: 2026-10-29, orgs-consolidation lane; doctrine bend logged.
 
 ## Outcomes & Retrospective
 
 Phase 1 mapped the move and isolated the private tier-drift publication gate.
-The public source import is in the branch. Draft PRs, tracker integration,
-scratch installation, and host cutover remain pending.
+The public source import is in draft PR #34, with its history and full
+Nix/package checks. The private installer branch passed fixture tests and
+scratch skill installation; its PR, tracker integration, and host cutover
+remain pending.
 
 ## Context and Orientation
 
@@ -276,9 +293,14 @@ The CTO received `CONSOL-ACK` and `CONSOL-NEEDS-RULING` with submitted
 receipts. The latter was resolved to a distinct approval gate for
 tier-drift publication. `CONSOL-CHECKPOINT-1` also has a submitted receipt.
 The initial `nix flake check` on the unchanged moved source tree passed; a
-second run after direct-path documentation and discovery changes is pending.
+second run on `17994ec` passed as well, including the package, unit, and
+transport checks. `nix build --no-link --print-out-paths .#harness-control`
+returned `/nix/store/a6akf7q8ryzqmcwig0z781r34n6lv04h-harness-control`.
 The configuration test passed 21 cases, tmux-message and scaffold sync tests
 passed, and the scoped setup-leak test passed 2 cases.
+The scratch install cloned the imported orgs branch into an owned temporary
+home, linked 25 Codex skills plus Claude's skills directory, preserved
+Codex's `.system`, and installed without touching live host links.
 
 ## Interfaces and Dependencies
 
@@ -292,3 +314,5 @@ Revision note (2026-10-29): opened the Phase 1 record, then completed the
 source/consumer inventory and incorporated the CTO's tier-drift ruling.
 Revision note (2026-10-29): recorded the Phase 2 source import, direct path
 transition, and test-scope adjustment after the first gate runs.
+Revision note (2026-10-29): recorded exact gate and PR evidence, plus recovery
+from the unsafe default rebase attempt without changing the tested tree.
