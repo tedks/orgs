@@ -98,6 +98,22 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
             run.assert_called_once_with(
                 ['/bin/token-usage', 'posture', '--no-scan', '--json'], capture_output=True,
                 text=True, encoding='utf-8', errors='strict', timeout=5, check=False)
+        # The current producer adds `expired` even when empty. After a weekly
+        # reset it emits null scores and usage for that expired meter.
+        current = {**posture, 'staleness': {**posture['staleness'], 'expired': {}}}
+        expired = {**current, 'scores': {'openai': None, 'anthropic': 0.8},
+                   'used_percent': {'openai': None, 'anthropic': 40},
+                   'staleness': {**current['staleness'], 'stale': True,
+                                 'expired': {'openai': 3600, 'anthropic.five_hour': 60}}}
+        anthropic_expired = {**current, 'scores': {'openai': 1.2, 'anthropic': None},
+                             'used_percent': {'openai': 60, 'anthropic': None},
+                             'staleness': {**current['staleness'], 'stale': True,
+                                           'expired': {'anthropic.seven_day': 120}}}
+        for item in (current, expired, anthropic_expired):
+            with patch('shutil.which', return_value='/bin/token-usage'), \
+                    patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                        args=['token-usage'], returncode=0, stdout=json.dumps(item), stderr='')):
+                self.assertEqual(server._read_usage_posture(), item)
         for stdout in ('not json', '[]', '{"reason":"missing provider"}',
                        '{"provider":"Mars"}', '{"provider":"openai"}'):
             with patch('shutil.which', return_value='/bin/token-usage'), \
@@ -127,6 +143,13 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
             {**posture, 'used_percent': {'openai': float('inf'), 'anthropic': 40}},
             {**posture, 'staleness': None},
             {**posture, 'staleness': {**posture['staleness'], 'path': '/private'}},
+            {**current, 'staleness': {**current['staleness'], 'expired': {'unknown': 1}}},
+            {**current, 'staleness': {**current['staleness'], 'expired': {'openai': True}}},
+            {**current, 'staleness': {**current['staleness'], 'expired': {'openai': -1}}},
+            {**current, 'staleness': {**current['staleness'], 'expired': {'openai': 1.5}}},
+            {**current, 'scores': {'openai': None, 'anthropic': 0.8}},
+            {**expired, 'scores': {'openai': 1.2, 'anthropic': 0.8}},
+            {**expired, 'used_percent': {'openai': 60, 'anthropic': 40}},
             {**posture, 'staleness': {**posture['staleness'], 'age_seconds': -1}},
             {**posture, 'staleness': {**posture['staleness'], 'age_seconds': True}},
             {**posture, 'staleness': {**posture['staleness'], 'age_seconds': 0.5}},
