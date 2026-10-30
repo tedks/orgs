@@ -641,11 +641,12 @@ class DeliveryTests(unittest.TestCase):
         t.harness = 'claude'
         original_frame = t.frame
         def delayed_sample():
-            t.now = 10
+            # A single sample consumes the entire explicit readiness budget.
+            t.now = 8
             return original_frame()
         t.frame = delayed_sample
         with self.assertRaisesRegex(m.DeliveryError, 'image-placeholder'):
-            deliver(t)
+            deliver(t, max_wait=8)
         self.assertEqual(t.actions, [])
 
     def test_claude_image_placeholder_in_transcript_is_not_live_input(self):
