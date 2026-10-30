@@ -27,3 +27,11 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-10-30T16:02:55-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Ruled by Ted 2026-10-30: keep both figures. They are measurements quoted
+    in collector.py comments to justify counting rules 2 and 6 (8.6% duplicate request
+    ids across resumed/forked Claude transcript files on one host; 2.49x Gemini CLI
+    message overcount from whole-array rewrites); no code uses them and they carry
+    no host identity or volume. Provenance and generalization tracked in tier-drift-measured-rules-provenance.'
