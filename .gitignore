@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+# Claude's app-managed skill cache is never committed.
+skills/synced/
+.pytest_cache/
+/result
+/result-*

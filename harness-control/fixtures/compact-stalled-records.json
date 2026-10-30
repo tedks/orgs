@@ -1,0 +1,38 @@
+[
+  {
+    "operation_id": "b353c001380748dcb93652b564f95522",
+    "harness": "codex",
+    "elapsed_to_defer_seconds": 155,
+    "remaining_sender_reserve_seconds": 145,
+    "idle_cursor_turn": null,
+    "root_turn_id": "01a1410b-5ecc-73b1-afc0-2d2874a3fa16",
+    "completion_after_request_seconds": 3.34,
+    "native_completion_row": {
+      "timestamp": "2026-10-15T21:17:08.227Z",
+      "type": "event_msg",
+      "payload": {
+        "type": "task_complete",
+        "turn_id": "01a1410b-5ecc-73b1-afc0-2d2874a3fa16",
+        "root_turn_id": "01a1410b-5ecc-73b1-afc0-2d2874a3fa16"
+      }
+    }
+  },
+  {
+    "operation_id": "17f313b3661a4cbeb253642d4b2b057e",
+    "harness": "codex",
+    "elapsed_to_defer_seconds": 155,
+    "remaining_sender_reserve_seconds": 145,
+    "idle_cursor_turn": null,
+    "root_turn_id": "01a14271-a015-7521-9e0a-1b20fa65a2f4",
+    "completion_after_request_seconds": 2.54,
+    "native_completion_row": {
+      "timestamp": "2026-10-16T03:22:30.982Z",
+      "type": "event_msg",
+      "payload": {
+        "type": "task_complete",
+        "turn_id": "01a14271-a015-7521-9e0a-1b20fa65a2f4",
+        "root_turn_id": "01a14271-a015-7521-9e0a-1b20fa65a2f4"
+      }
+    }
+  }
+]

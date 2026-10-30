@@ -1,0 +1,37 @@
+# Bazel
+bazel-*
+MODULE.bazel.lock.tmp
+
+# Nix
+result
+result-*
+.direnv/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# tier-drift run output: collected aggregates describe the operator's own
+# usage (project paths, hostnames) and are never committed.
+out/
