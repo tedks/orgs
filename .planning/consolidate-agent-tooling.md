@@ -1,12 +1,14 @@
 # Consolidate agent tooling into orgs
 
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
-`consolidation` branch. Current state: Phase 2 is in progress. The public
-agent-skills tip has been imported and its files moved into direct orgs paths;
-the old vendor snapshot is removed. Draft orgs PR #34 is open at `17994ec`.
-The private installer draft PR is open and the tracker histories are merged
-at `e92c5f3`. Council review and host cutover remain pending. No live host
-links have changed. Tier-drift remains behind its separate ruling.
+`consolidation` branch. Current state: Phase 2 is in review. Draft public
+orgs PR #34 is pushed at `fe50aa5`; its integration council reached a clean
+fixpoint and exact-head local gates pass. The private installer draft PR #224
+is pushed at `e1222db`, with a later convergence fix in progress. Public
+tracker histories are merged at `e92c5f3`. Org master protection is active as
+ruleset `26175107`. Source PRs #13 and #14 remain open; final sync, tier-drift
+publication, and fleet cutover await their explicit gates. No live host links
+have changed.
 
 ## Purpose / Big Picture
 
@@ -40,10 +42,21 @@ new source path before any host cutover.
   ran `ditz sync`, and verified one source and one existing issue through CLI.
 - [x] (2026-10-29) Opened the private dotfiles installer draft PR; its
   fixture tests and scratch skill installation passed.
-- [ ] Council review both draft PRs, fix findings, and rerun the exact-head
-  gates before requesting readiness.
-- [ ] Prepare public `orgs` and private `dotfiles` draft PRs, preserve source
-  history, and run local and scratch-prefix gates.
+- [x] (2026-10-29) Applied and read back orgs `protect-master` ruleset
+  `26175107` under `CONSOL-R3`: PR required, force pushes and deletion blocked,
+  no required status checks, and empty bypass list. Recorded and closed its
+  ditz issue.
+- [x] (2026-10-29) Applied `CONSOL-R2` to the private installer: an explicit
+  allowlist seeded with the 12 former reusable directories keeps the 13 orgs
+  process skills local. The global promotion issue remains open for Ted's list.
+- [x] (2026-10-29) Reached a clean council fixpoint for the public integration
+  at `fe50aa5`; exact-head Nix, config, leak guard, tmux alias, and scaffold
+  gates passed. A fake-HOME harness-control install and smoke test passed from
+  the earlier orgs code tree at `2fc50d6`.
+- [ ] Finish the private installer convergence review, fix findings, and rerun
+  its exact-head gates.
+- [ ] Synchronize source PRs #13 and #14 after they land, then recheck imported
+  byte identity and rerun gates before readiness.
 - [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes, final synchronization,
   and archive work.
 
@@ -80,6 +93,14 @@ new source path before any host cutover.
   tested `17994ec` head and source merge parent were verified intact. The
   remote feature branch was fetched explicitly and was 374 commits behind
   the local branch with zero remote-only commits before the normal push.
+- The public council found the original setup-leak test's scope too narrow
+  for orgs. Its scan now covers all tracked skill, harness, tool, bench, test,
+  and Nix files, including symlink targets and invalid UTF-8 text. Historical
+  docs remain a recorded follow-up. The final round returned no new Critical
+  or Important findings; Google/agy's seat was unavailable by quota.
+- The real `orgs/master` worktree on this host had the expected SSH origin,
+  branch, and clean tree at the read-only preflight snapshot. Each host needs
+  the same fresh check before cutover.
 
 ## Decision Log
 
@@ -110,14 +131,25 @@ new source path before any host cutover.
   Rationale: flattening the public source merge would discard its explicit
   ancestry and create artificial conflicts. The remote had no new commits.
   Date/Author: 2026-10-29, orgs-consolidation lane; doctrine bend logged.
+- Decision: retain only the 12 former reusable directories in the private
+  global installer allowlist; keep orgs process skills local until Ted names a
+  skill for promotion.
+  Rationale: `CONSOL-R2` preserves the prior global command surface while
+  making each later promotion a one-line reviewable change.
+  Date/Author: 2026-10-29, Ted ruling implemented by orgs-consolidation lane.
+- Decision: protect orgs master before fleet cutover with ruleset `26175107`.
+  Rationale: `CONSOL-R3` requires the fleet source to reject direct pushes,
+  force pushes, and deletion without adding impossible Actions checks.
+  Date/Author: 2026-10-29, Ted ruling implemented by orgs-consolidation lane.
 
 ## Outcomes & Retrospective
 
 Phase 1 mapped the move and isolated the private tier-drift publication gate.
-The public source import is in draft PR #34, with its history and full
-Nix/package checks. The private installer draft passed fixture tests and
-scratch skill installation. The tracker merge is delivered. Council review,
-source final sync, and host cutover remain pending.
+The public source import is in draft PR #34 with preserved source ancestry,
+exact-head gates, and a clean integration council. The private installer draft
+passed its fixture and fake-HOME package checks; its second convergence review
+continues. The tracker merge and master protection are delivered. Source final
+sync, tier-drift publication, and host cutover remain pending.
 
 ## Context and Orientation
 
