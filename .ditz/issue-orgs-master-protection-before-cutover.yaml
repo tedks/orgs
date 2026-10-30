@@ -25,3 +25,11 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-10-30T01:31:27-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CONSOL-R3 authorized application. Created orgs ruleset id 26175107. GitHub
+    read-back: active protect-master on refs/heads/master; effective rules pull_request,
+    non_fast_forward, deletion. Pull-request parameters exactly match agent-skills
+    ruleset 25040392; bypass_actors []; required_status_checks absent. Actions remain
+    disabled. Read-back verified via repos/tedks/orgs/rulesets/26175107 and repos/tedks/orgs/rules/branches/master.'
