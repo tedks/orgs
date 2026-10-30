@@ -1,0 +1,11 @@
+{
+  "source": "2026-10-16 Claude Opus lead incident (redacted)",
+  "operation_id": "eedb26298af447f9ab54b4de8850f8a6",
+  "state": "warning_dispatching",
+  "pending_final_state": "watching_other",
+  "reason": "intervening_turn",
+  "watcher_pid": null,
+  "delivery": {"state": "not_dispatched"},
+  "continuation": {"state": "not_dispatched"},
+  "completion": {"state": "not_started"}
+}

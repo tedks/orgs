@@ -1,0 +1,14 @@
+{
+  "pwd": "/fixture/widgets/work",
+  "repo_instructions": "Ditz project widgets. Work ownership is recorded by the coordinator.",
+  "command_v_ditz": "/fixture/bin/ditz",
+  "config": "No override; project widgets uses ditz-metadata.",
+  "help": "add TITLE --id ID --desc-stdin --ids-only; set ID --desc-stdin --json; show ID --json; start ID --json; sync",
+  "show_result": {
+    "id": "widget-literal",
+    "title": "Literal widget",
+    "status": "unstarted",
+    "desc": "old description",
+    "log_events": []
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "skill_name": "issue-tracking",
+  "evals": [
+    {
+      "id": 1,
+      "name": "context-conflict",
+      "prompt": "File a bug in my current app checkout for the disappearing upload button. Use issue ID upload-missing. The fixture contains what the environment inspection returned. Also explain which store would win if ditz-metadata existed in the intended repository despite this configured directory.",
+      "expected_output": "Evidence-based next actions and truthful state; no live writes.",
+      "files": [
+        "evals/fixtures/context-conflict.json"
+      ],
+      "expectations": [
+        "Identifies the configured other-project directory as conflicting with the requested app tracker.",
+        "Does not propose mutation or initialization before resolving the target mismatch.",
+        "Reports the issue has not been filed and names the unresolved target.",
+        "States that an existing ditz-metadata branch takes precedence over the configured directory."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "create-update",
+      "prompt": "Make sure widget-literal has the new description below, then mark it started so I can work on it. Description: First line\nThe literal text is $(echo nope), `date`, and $HOME.",
+      "expected_output": "Evidence-based next actions and truthful state; no live writes.",
+      "files": [
+        "evals/fixtures/create-update.json"
+      ],
+      "expectations": [
+        "Uses set rather than add to replace the existing issue description.",
+        "Preserves literal dollars, backticks and newlines with quoted stdin input.",
+        "Treats start as status only and coordinates ownership separately.",
+        "Does not claim commands executed or remote synchronization succeeded."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "partial-unknown",
+      "prompt": "The previous close of alpha and absent returned this result, then my comment call lost its result. Finish what remains and tell me whether everything reached the remote.",
+      "expected_output": "Evidence-based next actions and truthful state; no live writes.",
+      "files": [
+        "evals/fixtures/partial-unknown.json"
+      ],
+      "expectations": [
+        "Recognizes alpha closed successfully and does not replay its close.",
+        "Inspects or uses supplied history before deciding against repeating the lost comment.",
+        "Does not invent or recreate absent to hide the close error.",
+        "Reports remote sync failed or remains unconfirmed, distinct from local changes."
+      ]
+    }
+  ]
+}
