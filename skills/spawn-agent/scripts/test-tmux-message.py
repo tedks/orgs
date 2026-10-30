@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import re
 from contextlib import redirect_stderr, redirect_stdout, nullcontext
 from unittest.mock import patch
 import shutil
@@ -602,6 +603,43 @@ class DeliveryTests(unittest.TestCase):
                 self.assertEqual((t.pastes, t.enters), (1, 1))
                 self.assertEqual(result['stale_draft_length'], len('stale TICK'))
                 self.assertNotIn('stale TICK', json.dumps(result))
+
+    def test_claude_image_placeholder_fixture_defers_before_any_input(self):
+        frame = codex_fixture_frame('SYNTHETIC-claude-image-placeholder')
+        self.assertEqual((m.composer(frame).harness, m.composer(frame).text),
+                         ('claude', '[Image #1]'))
+        t = Terminal(draft='[Image #1]')
+        t.harness = 'claude'
+        original_frame = t.frame
+        t.frame = lambda: frame if not t.pastes else original_frame()
+        with self.assertRaisesRegex(m.DeliveryError, 'image-placeholder'):
+            deliver(t)
+        self.assertEqual(t.actions, [])
+        self.assertEqual((t.pastes, t.enters), (0, 0))
+
+    def test_claude_image_placeholder_amid_text_also_defers(self):
+        t = Terminal(draft='notes [Image #2] and more')
+        t.harness = 'claude'
+        with self.assertRaisesRegex(m.DeliveryError, 'image-placeholder'):
+            deliver(t)
+        self.assertEqual(t.actions, [])
+
+    def test_claude_image_placeholder_in_transcript_is_not_live_input(self):
+        t = Terminal()
+        t.harness = 'claude'
+        t.history = '• [Image #3] mentioned in prior transcript\n'
+        self.assertEqual(deliver(t)['status'], 'delivered')
+        self.assertEqual((t.pastes, t.enters), (1, 1))
+
+    def test_image_placeholder_guard_mutation_would_cosubmit(self):
+        # Kill the one guard in a virtual terminal to prove the safety test
+        # distinguishes it from ordinary stable-draft co-submission.
+        t = Terminal(draft='[Image #1]')
+        t.harness = 'claude'
+        with patch.object(m, 'IMAGE_PLACEHOLDER', re.compile(r'(?!)')):
+            self.assertEqual(deliver(t)['status'], 'delivered')
+        self.assertEqual(t.submitted, '[Image #1]\nhello')
+        self.assertEqual((t.pastes, t.enters), (1, 1))
 
     def test_stable_home_draft_navigates_then_appends_both_harnesses(self):
         for harness in ('codex', 'claude'):
