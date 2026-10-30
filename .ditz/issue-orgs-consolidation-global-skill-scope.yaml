@@ -1,15 +1,13 @@
 id: orgs-consolidation-global-skill-scope
-title: Choose global skill exposure after orgs consolidation
-desc: 'Decision for Ted before fleet cutover. The orgs skills/ tree now contains 12
-  reusable skill directories (including _shared) plus 13 org protocol skills. The
-  current dotfiles installer links the whole skills directory for Claude and each
-  directory for Codex, so switching its source to orgs would expose protocol names
-  such as review, implement, spec, council, and sprint globally. Options: (A) expose
-  every orgs skill globally; (B) expose only the reusable set and keep protocol skills
-  local to orgs. Recommend B because it preserves the current agent-skills installation
-  surface and avoids generic command collisions. Decide: Ted. Blocks: CONSOL-CUTOVER-OK
-  host installation and the final scope of dotfiles PR #224. Public orgs PR #34 can
-  remain in draft while decided.'
+title: Review orgs protocol skills for optional global promotion
+desc: 'CONSOL-R2 decided the cutover scope: the dotfiles installer links only the
+  12 reusable directories listed in scripts/install/global-skills.txt. The 13 orgs
+  process skills remain local to the orgs checkout. Keep this issue open for Ted''s
+  later per-skill promotion list; each approved promotion is a one-line allowlist
+  entry plus installer test. Options for each skill: promote globally or leave local.
+  Recommendation: leave generic protocol names local unless Ted identifies a fleet-wide
+  use. Decide: Ted. Blocks: only future global promotions, not the current cutover
+  once tests pass.'
 type: task
 component: open-questions
 release:
@@ -31,3 +29,11 @@ log_events:
     local. Each later global promotion is a one-line allowlist change after Ted reviews
     the skill. Keep this issue open for Ted\u2019s promotion list. Cutover is unblocked
     by the scope decision once implementation and gates pass."
+- time: 2026-10-30T01:27:39-00:00
+  who: Ted Smith
+  what: changed title
+  comment: ""
+- time: 2026-10-30T01:27:39-00:00
+  who: Ted Smith
+  what: updated description
+  comment: ""
