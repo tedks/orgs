@@ -286,7 +286,7 @@ cp ~/.claude/skills/initialize-repo/templates/PLANS.md \
 
 Create a small `SKILL.md` pointer for each shared skill; do not copy the skill
 implementation into the new repository. The installed paths remain stable when
-the separate agent-skills checkout moves or updates.
+the orgs checkout moves or updates.
 
 ```bash
 for skill in stacked-prs ask-agent spawn-agent initialize-repo; do
@@ -905,6 +905,6 @@ Report the results to the user.
 
 - The Sui binary version and hashes will need updating as new releases come out. Check `gh api repos/MystenLabs/sui/releases/latest` for the current version.
 - Read `github.owner` from the shared agent-skills configuration for repository creation and module/remote URLs. If unset, ask the operator; never infer an owner. Replace `<github.owner>` placeholders before running commands.
-- Shared skills live in the separate agent-skills repository. Project-local `SKILL.md` files point to the installed `~/.claude/skills/` contract; update the shared checkout rather than maintaining embedded copies.
+- Shared skills live in the orgs repository. Project-local `SKILL.md` files point to the installed `~/.claude/skills/` contract; update the shared checkout rather than maintaining embedded copies.
 - To add a new project type: add a new section under Part 2, define its AGENTS.md sections, and add verification checks to Step F9.
 - To fix a bug in a scaffold file: fix it in `templates/` first, then use `scripts/sync-check.sh` on the repos that carry copies to see where the fix needs to propagate.

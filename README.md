@@ -42,15 +42,13 @@ work. Harness bindings map both to real primitives:
 [bindings/codex-cli.md](bindings/codex-cli.md). Specs start from
 [docs/spec-template.md](docs/spec-template.md).
 
-The shared `ask-agent`, `initialize-repo`, `spawn-agent`, and `stacked-prs`
-skills are a commit-pinned snapshot under `vendor/agent-skills/`, including
-its `_shared` helpers and component license. Relative links under
-`.claude/skills/` and `.agents/skills/` expose this local snapshot to Claude
-Code and Codex. A fresh clone contains the skill instructions, scripts, and
-templates; using them never fetches or installs skill source.
-
-See [the vendor maintenance guide](tools/vendor-skills/README.md) for local
-command paths, permissions, provenance, verification, and explicit updates.
+Reusable skills, including `ask-agent`, `spawn-agent`, `where`, and `usage`,
+live beside the protocol skills in [skills/](skills/README.md). Relative
+links under `.claude/skills/` and `.agents/skills/` expose this source to
+Claude Code and Codex. The `harness-control` MCP server and its Nix flake are
+also here; `nix flake check` exercises its packaged tests. A fresh clone
+contains the instructions, scripts, templates, and runtime without fetching
+another skills repository.
 
 ## License
 

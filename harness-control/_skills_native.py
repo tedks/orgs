@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 _NAMES = frozenset(('harness_identity', 'session_binding', 'codex_status'))
-_GUIDANCE = 'install agent-skills before starting harness-control; set AGENT_SKILLS_ROOT to the absolute skills directory for staging'
+_GUIDANCE = 'install the orgs skills before starting harness-control; set AGENT_SKILLS_ROOT to the absolute skills directory for staging'
 _raw = os.environ.get('AGENT_SKILLS_ROOT')
 if _raw is not None and (not _raw or not Path(_raw).is_absolute()):
     raise ImportError('invalid AGENT_SKILLS_ROOT; ' + _GUIDANCE)

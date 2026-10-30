@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Keep setup details out of the current portable source (history is retained)."""
+"""Keep setup details out of the imported portable tooling source."""
 from pathlib import Path
 import re
 import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+PORTABLE_PATHS = tuple('skills/' + name for name in (
+    '_shared', 'ask-agent', 'council-review', 'host-hygiene',
+    'initialize-repo', 'issue-tracking', 'lean-automation', 'retire-agent',
+    'spawn-agent', 'stacked-prs', 'usage', 'where',
+)) + ('harness-control', 'tests', 'flake.nix', 'flake.lock')
 # Split literals so this guard does not itself contain setup leaks.
 FORBIDDEN = re.compile('|'.join(re.escape(word) for word in (
     '/ho' + 'me/', 'frame' + 'work0', 'to' + 'wer0', 'dry' + 'nwyn',
@@ -26,10 +31,16 @@ class SetupLeaks(unittest.TestCase):
         self.assertEqual(leaks('https://github.com/' + 'te' + 'dks/ditz/blob/master/README.md'), [])
         self.assertTrue(leaks('https://github.com/' + 'te' + 'dks/private'))
 
-    def test_tracked_tree_has_no_personal_setup(self):
-        result = subprocess.run(['git', '-C', str(ROOT), 'ls-files', '-z'], check=True, capture_output=True)
+    def test_portable_tree_has_no_personal_setup(self):
+        result = subprocess.run(
+            ['git', '-C', str(ROOT), 'ls-files', '-z', '--', *PORTABLE_PATHS],
+            check=True, capture_output=True,
+        )
+        names = result.stdout.decode().split('\0')
+        self.assertIn('skills/spawn-agent/SKILL.md', names)
+        self.assertIn('harness-control/harness_control.py', names)
         failures = []
-        for name in result.stdout.decode().split('\0'):
+        for name in names:
             path = ROOT / name
             if not name or path.is_symlink() or not path.is_file():
                 continue

@@ -1,6 +1,0 @@
-────────────────────────────────────────────────────────────
-❯ first harmless line
-  second harmless line
-────────────────────────────────────────────────────────────
-  actor@buildhost0:~/Projects/example1/control-delivery-u…
-  ⏵⏵ bypass permissions on (shift+tab to cycle)

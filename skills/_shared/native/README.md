@@ -1,7 +1,7 @@
 # Native harness identity readers
 
 These three modules are the canonical native identity implementation shared by
-retire-agent and the dotfiles harness-control MCP server. They were moved without
+retire-agent and the orgs harness-control MCP server. They were moved without
 behavior changes from dotfiles `mcp/claude-introspect` at commit
 `5fc9f92d5a4a23dbe32507256743cbaff3ad33c9`.
 

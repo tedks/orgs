@@ -1,8 +1,10 @@
 # Consolidate agent tooling into orgs
 
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
-`consolidation` branch. Current state: Phase 1 inventory is complete; no
-source has moved, no PR has been opened, and no host links have changed.
+`consolidation` branch. Current state: Phase 2 is in progress. The public
+agent-skills tip has been imported and its files moved into direct orgs paths;
+the old vendor snapshot is removed in the working tree. No PR has been opened
+and no host links have changed. Tier-drift remains behind its separate ruling.
 
 ## Purpose / Big Picture
 
@@ -22,7 +24,14 @@ new source path before any host cutover.
   consumer paths, and in-flight PR dependencies.
 - [x] (2026-10-29) Scanned the complete proposed tier-drift source commit and
   its message without publishing its content; publication awaits a ruling.
-- [ ] Send `CONSOL-CHECKPOINT-1` with this plan's commit and evidence.
+- [x] (2026-10-29) Sent `CONSOL-CHECKPOINT-1` with pushed plan commit
+  `74a4eb6adf6344f3d1964a7f4bbceb5868d69888` and scan evidence.
+- [x] (2026-10-29) Imported public agent-skills `f703451` as a subtree parent
+  of `f52ac9994f024d7c9d5126c372b8b6f9345b7542`, moved the skill,
+  harness-control, flake, and test trees to direct paths in `26f8e7a`, and
+  verified the source tip remains an ancestor.
+- [ ] Finish direct skill discovery, obsolete vendor removal, source-specific
+  docs, gates, and draft orgs PR.
 - [ ] Prepare public `orgs` and private `dotfiles` draft PRs, preserve source
   history, and run local and scratch-prefix gates.
 - [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes, final synchronization,
@@ -49,6 +58,13 @@ new source path before any host cutover.
   with 371 reachable commits and 159 tracked files. The existing `orgs`
   snapshot pins the older `5b1919e723a92b1c90f2ae8495f594e651125564`
   and includes only four shared skills and three `_shared` support files.
+- The imported `tests/test_setup_leaks.py` originally scanned every tracked
+  file. Existing orgs protocol docs already contain paths and public owner
+  names outside the portable-tooling scope. The test now scans the imported
+  12 skill directories, harness-control, root Nix files, and imported tests,
+  with positive assertions that key source files are present. Its forbidden
+  fixture check still passes. The initial whole-repo run failed; the scoped
+  run passed 2 tests.
 
 ## Decision Log
 
@@ -69,11 +85,16 @@ new source path before any host cutover.
   Rationale: the file schema already validates URL, branch, and checkout,
   and changing user-facing paths would add an unrelated migration.
   Date/Author: 2026-10-29, orgs-consolidation lane.
+- Decision: scope the imported setup-leak test to the imported tooling paths.
+  Rationale: the original repository-wide assumption does not hold for orgs,
+  while the imported content still needs the full guard.
+  Date/Author: 2026-10-29, orgs-consolidation lane.
 
 ## Outcomes & Retrospective
 
-Phase 1 maps the move and isolates the private tier-drift publication gate.
-The implementation and host cutover remain pending.
+Phase 1 mapped the move and isolated the private tier-drift publication gate.
+The public source import is in the branch. Draft PRs, tracker integration,
+scratch installation, and host cutover remain pending.
 
 ## Context and Orientation
 
@@ -253,7 +274,11 @@ scratch prefix; failure leaves active host links unchanged.
 
 The CTO received `CONSOL-ACK` and `CONSOL-NEEDS-RULING` with submitted
 receipts. The latter was resolved to a distinct approval gate for
-tier-drift publication.
+tier-drift publication. `CONSOL-CHECKPOINT-1` also has a submitted receipt.
+The initial `nix flake check` on the unchanged moved source tree passed; a
+second run after direct-path documentation and discovery changes is pending.
+The configuration test passed 21 cases, tmux-message and scaffold sync tests
+passed, and the scoped setup-leak test passed 2 cases.
 
 ## Interfaces and Dependencies
 
@@ -265,3 +290,5 @@ machine-specific state. Installed skill paths, the config file schema,
 
 Revision note (2026-10-29): opened the Phase 1 record, then completed the
 source/consumer inventory and incorporated the CTO's tier-drift ruling.
+Revision note (2026-10-29): recorded the Phase 2 source import, direct path
+transition, and test-scope adjustment after the first gate runs.
