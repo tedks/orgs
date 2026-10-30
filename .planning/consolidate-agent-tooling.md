@@ -1,17 +1,19 @@
 # Consolidate agent tooling into orgs
 
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
-`consolidation` branch. Current state: Phase 2 is in review. Draft public
-orgs PR #34 has code head `7060c1e`; its agent-skills integration and
-tier-drift import councils both reached clean fixpoints.
+`consolidation` branch. Current state: Phase 2 final source sync is in review.
+Draft public orgs PR #34 has code head `4147cc1`; its agent-skills integration
+and tier-drift import councils both reached clean fixpoints.
 The private installer draft PR #224 is pushed at `0ac21d7` with clean native
 and Claude convergence reviews. Public tracker histories are merged at
 `e92c5f3`. Org master protection is active as ruleset `26175107`. Ted approved
 publication of tier-drift commit `c4f2d2eb`; its 28 files are imported and
 scanned. Ted ruled under `CONSOL-RATIOS-OK` to retain its two measured,
 host-anonymized ratios; the publication question is closed, with provenance
-follow-up filed. Source PRs #13 and #14 remain open; final sync
-and fleet cutover await their explicit gates. No live host links have changed.
+follow-up filed. Source PRs #13 and #14 are merged and their master tip
+`d2117cd` is a normal merge parent of this branch. The final sync gates and
+scratch install passed; the foreign convergence seat remains in progress.
+Fleet cutover still awaits `CONSOL-CUTOVER-OK`. No live host links have changed.
 
 ## Purpose / Big Picture
 
@@ -83,10 +85,23 @@ new source path before any host cutover.
   in `collector.py`. Verified ditz `orgs-tier-drift-ratios-publication` is
   closed and `tier-drift-measured-rules-provenance` is filed for provenance
   and re-measurable counting rules. This no longer blocks PR #34.
-- [ ] Synchronize source PRs #13 and #14 after they land, then recheck imported
-  byte identity and rerun gates before readiness.
-- [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes, final synchronization,
-  and archive work.
+- [x] (2026-10-30) Merged source master `d2117cd16e2b1fab23a0c033aa064054a5138f58`
+  normally as parent of `78b4b54`; merged orgs master `de0bf25` normally as
+  parent of `4147cc1`. Both source PRs are ancestors, and all 12 synced path
+  blob IDs match source master. `git diff --check` passed.
+- [x] (2026-10-30) At code head `4147cc1`, `nix flake check` passed all three
+  checks; the package built at `/nix/store/qz02139sdrm2aar369iqicrh2b86zs9h-harness-control`.
+  Config tests passed 21, leak tests 4, tmux-message Python tests 133,
+  shell/live transport tests, scaffold sync test, and the legacy sender suite
+  on a quiet rerun.
+- [x] (2026-10-30) Fake-HOME scratch install of private dotfiles PR #224
+  `0ac21d7` against orgs `4147cc1` passed for both Claude and Codex. Each
+  global skill surface is exactly the 12 former reusable names and resolves
+  into the clean scratch orgs checkout; no process skills were linked.
+  Harness-control resolves to the above store path and its smoke test passed.
+- [ ] Finish the foreign Claude Opus convergence seat on sync delta
+  `b44dd41..4147cc1`; the native OpenAI Sol seat returned CLEAN.
+- [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes and archive work.
 
 ## Surprises & Discoveries
 
@@ -148,6 +163,14 @@ new source path before any host cutover.
   the native and Claude convergence passes are clean. Case-insensitive names,
   network addresses, and UUID guard patterns remain a recorded follow-up in
   ditz `orgs-leak-guard-pattern-hardening`.
+- The synced `harness-control` exposes quota posture through the external
+  `token-usage posture`/`incidents` CLI. Current live dotfiles master lacks
+  those subcommands; its open PR #218 supplies them. Without #218 deployed,
+  `get_usage` reports `token_usage_posture_failed` safely. Cutover acceptance
+  should include #218 landing (or Ted explicitly accepting unavailable
+  posture) and an unmocked `get_usage` check. This is an operational dependency,
+  not a defect in the source sync. Real Claude client skill discovery remains
+  a separate pre-cutover acceptance check.
 
 ## Decision Log
 
@@ -202,13 +225,15 @@ new source path before any host cutover.
 ## Outcomes & Retrospective
 
 Phase 1 mapped the move and isolated the private tier-drift publication gate.
-The public source imports are in draft PR #34 with both source commits as
-ancestors, exact-code-head gates, and clean council fixpoints. Ted ruled to
+The public source imports are in draft PR #34 with source master `d2117cd`
+and orgs master `de0bf25` as ancestors, exact-code-head gates, and clean
+integration and import council fixpoints. Ted ruled to
 retain the two measured ratios, closing that publication question. The
 private installer draft PR #224 reached a clean council fixpoint;
 real Claude client discovery remains a pre-cutover acceptance check. The
-tracker merge and master protection are delivered. Source final sync and host
-cutover remain pending.
+tracker merge and master protection are delivered. The final source sync and
+scratch install passed; foreign convergence review remains in progress. Host
+cutover remains gated.
 
 ## Context and Orientation
 
