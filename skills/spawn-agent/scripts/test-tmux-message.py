@@ -624,10 +624,22 @@ class DeliveryTests(unittest.TestCase):
             deliver(t)
         self.assertEqual(t.actions, [])
 
+    def test_claude_wrapped_image_placeholder_defers_before_any_input(self):
+        frame = codex_fixture_frame('SYNTHETIC-claude-image-placeholder-wrapped')
+        self.assertEqual((m.composer(frame).harness, m.composer(frame).text),
+                         ('claude', 'notes [Image #\n4] and more'))
+        t = Terminal(draft='notes [Image #\n4] and more')
+        t.harness = 'claude'
+        original_frame = t.frame
+        t.frame = lambda: frame if not t.pastes else original_frame()
+        with self.assertRaisesRegex(m.DeliveryError, 'image-placeholder'):
+            deliver(t)
+        self.assertEqual(t.actions, [])
+
     def test_claude_image_placeholder_in_transcript_is_not_live_input(self):
         t = Terminal()
         t.harness = 'claude'
-        t.history = '• [Image #3] mentioned in prior transcript\n'
+        t.history = '❯ [Image #3] mentioned in prior transcript\n'
         self.assertEqual(deliver(t)['status'], 'delivered')
         self.assertEqual((t.pastes, t.enters), (1, 1))
 
