@@ -21,12 +21,16 @@ FORBIDDEN = re.compile('|'.join(re.escape(word) for word in (
     'splin' + 'ter0', 'splin' + 'ter1', 'homes' + '-imac', 'te' + 'dks',
     '~/Projects/' + 'dotfiles', '~/Projects/' + 'orgs', 'chaos-speech-p-' + 'ted',
 )))
-PUBLIC_TOOL = re.compile(r'(?:(?:https://github\.com/)|(?:github:))' + 'te' +
-                         r'dks/(?:ditz|orgs)(?=[/#\s`.]|$)')
+# Exact public project URLs are references, not machine setup. This list is
+# deliberately finite; new owner paths must be checked before exemption.
+PUBLIC_TOOL = re.compile(r'(?<![A-Za-z0-9.-])(?:(?:https://)?github\.com/|github:)' + 'te' +
+                         r'dks/(?:ditz|orgs|discord-agents|swarm-ide)(?=[/#\s`.)]|$)')
+SYNTHETIC_HOME = re.compile(r'/ho' + r'me/u(?=/|\b)')
 
 
 def leaks(text):
-    return FORBIDDEN.findall(PUBLIC_TOOL.sub('PUBLIC_TOOL', text))
+    return FORBIDDEN.findall(SYNTHETIC_HOME.sub('SYNTHETIC_HOME',
+                                                PUBLIC_TOOL.sub('PUBLIC_TOOL', text)))
 
 
 def scan(path):
@@ -44,6 +48,9 @@ class SetupLeaks(unittest.TestCase):
         self.assertTrue(leaks('frame' + 'work0.local'))
         self.assertEqual(leaks('https://github.com/' + 'te' + 'dks/ditz/blob/master/README.md'), [])
         self.assertEqual(leaks('https://github.com/' + 'te' + 'dks/orgs/bench'), [])
+        self.assertEqual(leaks('github.com/' + 'te' + 'dks/discord-agents'), [])
+        self.assertEqual(leaks('/ho' + 'me/u/Projects/synthetic'), [])
+        self.assertTrue(leaks('/ho' + 'me/u/frame' + 'work0'))
         self.assertTrue(leaks('https://github.com/' + 'te' + 'dks/private'))
 
     def test_public_tooling_has_no_personal_setup(self):
