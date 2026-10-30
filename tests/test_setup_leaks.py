@@ -25,7 +25,7 @@ FORBIDDEN = re.compile('|'.join(re.escape(word) for word in (
 # deliberately finite; new owner paths must be checked before exemption.
 PUBLIC_TOOL = re.compile(r'(?<![A-Za-z0-9.-])(?:(?:https://)?github\.com/|github:)' + 'te' +
                          r'dks/(?:ditz|orgs|discord-agents|swarm-ide)(?=[/#\s`.)]|$)')
-SYNTHETIC_HOME = re.compile(r'/ho' + r'me/u(?=/|\b)')
+SYNTHETIC_HOME = re.compile(r'/ho' + r'me/u(?=/)')
 
 
 def leaks(text):
@@ -50,6 +50,8 @@ class SetupLeaks(unittest.TestCase):
         self.assertEqual(leaks('https://github.com/' + 'te' + 'dks/orgs/bench'), [])
         self.assertEqual(leaks('github.com/' + 'te' + 'dks/discord-agents'), [])
         self.assertEqual(leaks('/ho' + 'me/u/Projects/synthetic'), [])
+        self.assertTrue(leaks('/ho' + 'me/u.smith/private'))
+        self.assertTrue(leaks('/ho' + 'me/u-foo/private'))
         self.assertTrue(leaks('/ho' + 'me/u/frame' + 'work0'))
         self.assertTrue(leaks('https://github.com/' + 'te' + 'dks/private'))
 
