@@ -8,8 +8,9 @@ The private installer draft PR #224 is pushed at `0ac21d7` with clean native
 and Claude convergence reviews. Public tracker histories are merged at
 `e92c5f3`. Org master protection is active as ruleset `26175107`. Ted approved
 publication of tier-drift commit `c4f2d2eb`; its 28 files are imported and
-scanned. A corrected finding about two measured, host-anonymized ratios is
-awaiting Ted's retention ruling. Source PRs #13 and #14 remain open; final sync
+scanned. Ted ruled under `CONSOL-RATIOS-OK` to retain its two measured,
+host-anonymized ratios; the publication question is closed, with provenance
+follow-up filed. Source PRs #13 and #14 remain open; final sync
 and fleet cutover await their explicit gates. No live host links have changed.
 
 ## Purpose / Big Picture
@@ -78,8 +79,10 @@ new source path before any host cutover.
   `7060c1e`: native and Claude seats found no new Critical or Important
   findings after the synthetic-home fix. The Google/agy seat remained empty
   at quota.
-- [ ] Resolve Ted's ruling on retaining the two measured ratios in public
-  history (ditz `orgs-tier-drift-ratios-publication`).
+- [x] (2026-10-30) Received `CONSOL-RATIOS-OK`: retain both measured figures
+  in `collector.py`. Verified ditz `orgs-tier-drift-ratios-publication` is
+  closed and `tier-drift-measured-rules-provenance` is filed for provenance
+  and re-measurable counting rules. This no longer blocks PR #34.
 - [ ] Synchronize source PRs #13 and #14 after they land, then recheck imported
   byte identity and rerun gates before readiness.
 - [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes, final synchronization,
@@ -104,7 +107,7 @@ new source path before any host cutover.
   `src/tier_drift/collector.py`: 8.6% of responses on one unnamed host appeared
   in copied sessions, and repeated Gemini snapshots caused a 2.49x overcount.
   Neither gives a host identity or absolute usage volume. The PR scan was
-  corrected, and Ted was asked whether to retain them in public history.
+  corrected. Ted then ruled to retain both figures in public history.
 - The source `agent-skills` `master` is `f7034513724f012680e2dc707727110739aa736b`
   with 371 reachable commits and 159 tracked files. The existing `orgs`
   snapshot pins the older `5b1919e723a92b1c90f2ae8495f594e651125564`
@@ -158,6 +161,11 @@ new source path before any host cutover.
   Rationale: Ted approved publication of exactly this commit on 2026-10-29;
   broadening to any other tier-drift ref would exceed that approval.
   Date/Author: 2026-10-29, Ted ruling implemented by orgs-consolidation lane.
+- Decision: retain the two observed, host-anonymized counting-rule figures
+  in the approved tier-drift commit.
+  Rationale: Ted ruled under `CONSOL-RATIOS-OK` on 2026-10-30. Provenance and
+  a re-measurable mechanism are tracked in `tier-drift-measured-rules-provenance`.
+  Date/Author: 2026-10-30, Ted ruling recorded by orgs-consolidation lane.
 - Decision: merge reusable skills directly under `orgs/skills/` beside the
   existing protocol skills. The current source directory names have no
   collisions. Keep the process skill names and reusable skill names intact.
@@ -195,8 +203,9 @@ new source path before any host cutover.
 
 Phase 1 mapped the move and isolated the private tier-drift publication gate.
 The public source imports are in draft PR #34 with both source commits as
-ancestors, exact-code-head gates, and clean council fixpoints. Ted's
-measured-ratio decision remains pending. The private installer draft PR #224 reached a clean council fixpoint;
+ancestors, exact-code-head gates, and clean council fixpoints. Ted ruled to
+retain the two measured ratios, closing that publication question. The
+private installer draft PR #224 reached a clean council fixpoint;
 real Claude client discovery remains a pre-cutover acceptance check. The
 tracker merge and master protection are delivered. Source final sync and host
 cutover remain pending.
@@ -399,7 +408,9 @@ the one symlink is `CLAUDE.md -> AGENTS.md`. Its Bazel gate passed 3/3 from
 the nested Nix shell. At `7060c1e`, root `nix flake check`, the
 `harness-control` build, 21 config tests, four setup-leak tests, the tmux
 alias check, and scaffold sync check passed. The post-import scan is recorded
-on orgs PR #34, with a separate correction for the two observed ratios.
+on orgs PR #34, with a separate correction for the two observed ratios. Ted's
+later `CONSOL-RATIOS-OK` keeps them and closes the publication question;
+the provenance and re-measurement follow-up remains open.
 
 ## Interfaces and Dependencies
 
@@ -422,3 +433,6 @@ Revision note (2026-10-29): recorded Ted's exact tier-drift publication
 approval, history-preserving import, post-import scan, corrected numeric
 finding, and clean private installer convergence. The measured-ratio ruling
 and cutover approval remain separate.
+Revision note (2026-10-30): recorded `CONSOL-RATIOS-OK`, verified the closed
+publication issue and open provenance follow-up, and removed the ratio hold
+from PR #34. Cutover still requires its own marker.
