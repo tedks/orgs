@@ -1,0 +1,24 @@
+id: orgs-public-docs-leak-guard
+title: Extend public setup-leak guard to historical documentation
+desc: 'Follow-up from orgs consolidation PR #34 council. The imported guard now scans
+  every tracked file under skills/, harness-control/, tests/, and root flake files.
+  It intentionally does not scan root protocol documentation or planning/lesson history:
+  existing public LESSONS.md contains machine-specific path examples, and the source
+  guard''s forbidden owner token also appears in existing public project metadata.
+  Inventory the existing public references, define a reviewed allowlist or a docs-specific
+  rule, then make the guard cover future docs without hiding new leaks. This is deferred
+  because the current PR''s imported tooling and skill tree are fully covered and
+  the historical docs need a separate policy review.'
+type: task
+component: tests
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-30T01:22:04-00:00
+references: []
+log_events:
+- time: 2026-10-30T01:22:04-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
