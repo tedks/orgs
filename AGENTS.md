@@ -65,10 +65,11 @@ package at the root uses the Nix flake; its Python helpers also live under
 
 ## Build and test
 
-Run `nix flake check` for the packaged harness-control unit, package, and
-transport checks. Run `nix build .#harness-control` when verifying the built
-executable. Also run `python3 tests/test_config.py`,
-`python3 tests/test_setup_leaks.py`,
+Run `nix flake check` for the packaged harness-control unit, package,
+transport, and native helper checks. Run `nix build .#harness-control` when
+verifying the built executable. Also run
+`PYTHONDONTWRITEBYTECODE=1 python3 tests/test_config.py`,
+`PYTHONDONTWRITEBYTECODE=1 python3 tests/test_setup_leaks.py`,
 `skills/spawn-agent/scripts/test-tmux-message.sh`, and
 `skills/initialize-repo/scripts/test-sync-check.sh` for the imported
 configuration, public-source guard, and installer interfaces. The
