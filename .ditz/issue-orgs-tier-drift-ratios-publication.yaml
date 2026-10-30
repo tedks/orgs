@@ -18,8 +18,8 @@ type: task
 component: open-questions
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: unstarted
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-10-30T02:15:16-00:00
 references: []
 log_events:
@@ -35,3 +35,7 @@ log_events:
     ids across resumed/forked Claude transcript files on one host; 2.49x Gemini CLI
     message overcount from whole-array rewrites); no code uses them and they carry
     no host identity or volume. Provenance and generalization tracked in tier-drift-measured-rules-provenance.'
+- time: 2026-10-30T16:02:55-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: ""
