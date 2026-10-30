@@ -1,0 +1,25 @@
+id: orgs-consolidation-global-skill-scope
+title: Choose global skill exposure after orgs consolidation
+desc: 'Decision for Ted before fleet cutover. The orgs skills/ tree now contains 12
+  reusable skill directories (including _shared) plus 13 org protocol skills. The
+  current dotfiles installer links the whole skills directory for Claude and each
+  directory for Codex, so switching its source to orgs would expose protocol names
+  such as review, implement, spec, council, and sprint globally. Options: (A) expose
+  every orgs skill globally; (B) expose only the reusable set and keep protocol skills
+  local to orgs. Recommend B because it preserves the current agent-skills installation
+  surface and avoids generic command collisions. Decide: Ted. Blocks: CONSOL-CUTOVER-OK
+  host installation and the final scope of dotfiles PR #224. Public orgs PR #34 can
+  remain in draft while decided.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-30T01:21:59-00:00
+references: []
+log_events:
+- time: 2026-10-30T01:21:59-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
