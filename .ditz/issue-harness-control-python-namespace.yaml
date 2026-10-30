@@ -1,0 +1,25 @@
+id: harness-control-python-namespace
+title: Namespace harness-control Python modules
+desc: 'The initial Nix package installs server.py, session_binding.py, codex_status.py,
+  and related modules at the top level of a dedicated Python environment. This is
+  safe while the environment stays dedicated, but those generic names could collide
+  if harness-control is later composed into a shared Python environment.
+
+
+  Move the runtime into a real agent_harness_control package, update module entry
+  points and the detached observer command, and retain the isolated package/protocol
+  checks. Decide at the same time whether the harmless test fixture socket-path inconsistency
+  is worth normalizing. This does not block the dedicated-profile rollout.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-15T01:18:22-00:00
+references: []
+log_events:
+- time: 2026-10-15T01:18:22-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

@@ -1,0 +1,18 @@
+id: setup-leaks-test-fails-on-master
+title: tests/test_setup_leaks.py fails on master (.planning/harness-compact-dispatch.md)
+desc: 'test_tracked_tree_has_no_personal_setup reports 5 hits in .planning/harness-compact-dispatch.md
+  (absolute /home/tedks paths, local state paths). Pre-existing on master; found while
+  gating PR #11, unrelated to it.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-20T15:55:48-00:00
+references: []
+log_events:
+- time: 2026-10-20T15:55:48-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

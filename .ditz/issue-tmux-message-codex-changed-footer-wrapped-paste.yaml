@@ -1,0 +1,24 @@
+id: tmux-message-codex-changed-footer-wrapped-paste
+title: 'tmux-message: verify or preflight long wrapped Codex paste with changed footer'
+desc: 'PR #13''s changed-footer fallback verifies exact multiline text and counted
+  [Pasted Content N chars] markers after paste. A single long line that Codex visually
+  wraps mid-word may not reconstruct to the outgoing bytes, leaving an ambiguous unsent
+  composer and returning paste-not-observed without Enter. This fails closed but costs
+  a deferred delivery after an input attempt. Capture a real read-only wrapped Codex
+  composer or create a clearly synthetic fixture; either recognize exact owned wrapped
+  text safely or preflight pane width and defer before paste. Add a mutation test
+  that fails against PR #13''s merged behavior. Council round 2 Claude nit; tracked
+  separately to keep the M2 fix bounded.'
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T19:01:03-00:00
+references: []
+log_events:
+- time: 2026-10-29T19:01:03-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

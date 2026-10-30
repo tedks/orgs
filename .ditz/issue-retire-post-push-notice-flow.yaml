@@ -1,0 +1,39 @@
+id: retire-post-push-notice-flow
+title: Should retire-agent deliver a post-push notice to the original lane?
+desc: 'Question: After retire-agent or its caller successfully pushes the private
+  shard, should the original lane receive a post-push notice that off-duty time has
+  begun and package authority has ended?
+
+
+  Options:
+
+  - Send one concise notice when the caller/controller performed the push; the notice
+  never gates off-duty time.
+
+  - Keep the push receipt only in the controller''s bookkeeping and send no post-push
+  notice.
+
+
+  Recommendation: send the notice when another actor performed the push, so the original
+  lane receives the lifecycle boundary directly without making its free time wait
+  for bookkeeping.
+
+
+  Who decides: Ted, as mission authority / CEO.
+
+
+  What it blocks: Whether retire-agent/controller has a user-visible notice step after
+  caller-authored push; it does not block the current successful-push boundary.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T21:22:16-00:00
+references: []
+log_events:
+- time: 2026-10-29T21:22:16-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

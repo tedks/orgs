@@ -1,0 +1,24 @@
+id: tmux-message-codex-bold-receipt-structure
+title: 'tmux-message: verify changed-footer receipt guard against bold user rows'
+desc: "PR #13's changed-footer archived-composer guard excludes a bold Codex `\u203A`
+  row followed by a blank separator and an indented next row. This closes a reproduced
+  false delivery after a dropped Enter and changing footer. A genuine Codex submitted
+  user row might also be bold and followed by indented assistant/tool output; if so
+  the guard would miss the receipt and defer with receipt-timeout. This fails closed.
+  Capture a read-only real submitted Codex row with ANSI (tmux capture-pane -e -p),
+  scrub conversation content, and add a positive-path fixture/test or narrow the guard
+  using evidenced structure. Council round 4 Claude nit; no real submitted-row capture
+  was available in PR #13."
+type: task
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-29T19:05:04-00:00
+references: []
+log_events:
+- time: 2026-10-29T19:05:04-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

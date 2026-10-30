@@ -1,0 +1,71 @@
+id: tmux-message-codex-idle-unsupported-layout
+title: 'tmux-message: idle Codex composer with a normal footer classified unsupported-layout
+  (two incidents 2026-10-18)'
+desc: "Two deferrals on idle Codex panes in one morning, both with reason `unsupported-layout`,
+  nothing pasted:\n\n1. harness-control self_compact for Codex gpt-6.1-sol pane %748
+  (chaos:stage9-bd-driver-20261018, session 01a14da2-4ef2-7293-afd2-9e5cc5505593),
+  requested 2026-10-18T06:44Z. Operation e7ecd870f2724f25888e2a0bf4e46a07 under ~/.local/state/harness-control/dc586e16043f06521da421dcfdefeacca1b66357628f1b24a2709ce72bb70a1a/
+  records delivery {state: deferred, reason: unsupported-layout, input_attempted:
+  false, pending_file: /tmp/tmux-message-7nu66smc/message (8 bytes: the /compact)},
+  completion not_started. The Chaos CTO saw an idle Codex composer (\"\u203A Ask Codex
+  to do anything\"), normal footer, \"Context 38% left\". The lane idled 47 minutes
+  waiting for confirmation; the CTO relayed /compact by send-keys after verifying
+  the composer empty twice, and it compacted. Reported by controller-tools-63 (Chaos
+  CTO), evidence only.\n\n2. dotfiles CTO send of SUISKILLS-R1 to Codex gpt-6-sol
+  pane %749 (dotfiles:sui-skills) at about 02:33 ET: deferred `unsupported-layout`,
+  pending_file /tmp/tmux-message-o536deg9/message (1337 bytes). The pane showed an
+  idle composer under a \"Waiting for agents\" / \"Working (17m)\" multi-agent transcript,
+  \"Context 38% left\", pane 272x54. A retry about three minutes later delivered with
+  a verified receipt, so the condition is transient or layout-dependent.\n\nSame class
+  as the 10-16 Claude-pane stalls (tmux-message-modal-footer-false-positive) but on
+  Codex and with a different reason string. Find where the Codex observer in claude-send-screen.py
+  / tmux-message.py emits unsupported-layout for an idle composer (wide panes? the
+  multi-agent \"Waiting for agents\" rows? a footer variant for gpt-6.1-sol?), capture
+  the real screens read-only as fixtures, and make an idle Codex composer with any
+  footer classify as ready. Related: harness-compact-deferred-delivery-notice (the
+  requester should learn of a deferred delivery promptly)."
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: in_progress
+disposition:
+creation_time: 2026-10-18T07:32:49-00:00
+references: []
+log_events:
+- time: 2026-10-18T07:32:49-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-18T07:34:07-00:00
+  who: Ted Smith
+  what: commented
+  comment: "Mechanism (read 2026-10-18): tmux-message.py ready() initialises last_reason
+    = 'unsupported-layout' and raises it when max_wait passes without two consecutive
+    samples of a known composer kind (empty/text/suggestion) with an identical fingerprint
+    across stable_window. So the reason means 'never observed a stable, recognised
+    composer', not a layout the code rejected. Candidates: composer() returning kind
+    'unknown' on these Codex frames (e.g. the gpt-6.1-sol footer variant; claude-send.sh
+    still matches the literal '  GPT-6-Sol \xB7 ' as one Codex marker), or fingerprint
+    churn from the ticking 'Working (Nm Ns \u2022 esc to interrupt)' row and 'Waiting
+    for agents' rows above the composer while subagents run. Third incident: a send
+    to %751 (idle composer under a running turn, 272x54) deferred the same way at
+    ~03:33 ET, pending /tmp/tmux-message-qmjv8fcg/message. Three of five sends to
+    Codex panes today deferred on this; the sender should report a distinct reason
+    for 'composer unknown' versus 'never stable' so the operator can tell them apart."
+- time: 2026-10-29T18:36:30-00:00
+  who: Ted Smith
+  what: started
+  comment: ""
+- time: 2026-10-29T19:15:29-00:00
+  who: Ted Smith
+  what: commented
+  comment: '2026-10-29 checkpoint: PR #13 is pushed at 9867cca and unmerged. Lead-tier
+    council found a receipt ambiguity after changed-footer fallback: an archived unsent
+    bold composer after a dropped Enter can have the same prompt/blank/indented-row
+    screen shape as a genuine submitted row. Head 0c105da can falsely report delivered
+    if a structured status changes to an unstructured one; broad exclusion instead
+    risks receipt-timeout on genuine indented replies. Requested CTO product ruling,
+    recommending fail closed. Relay to %321 deferred twice before paste, so the direct
+    ruling request is pending. No M3 implementation started. Follow-ups tmux-message-codex-changed-footer-wrapped-paste
+    and tmux-message-codex-bold-receipt-structure are filed.'

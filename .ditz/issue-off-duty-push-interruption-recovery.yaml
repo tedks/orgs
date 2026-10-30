@@ -1,0 +1,27 @@
+id: off-duty-push-interruption-recovery
+title: Recover interrupted off-duty publisher refs and worktrees
+desc: 'A publisher killed after creating its temporary worktree can leave a namespaced
+  refs/offduty-push/* ref and a stale Git worktree entry. A cleanup failure after
+  a successful push can currently report a generic publication failure even though
+  the commit reached remote master. Direct helper use also has no external timeout.
+
+
+  Options: document exact-entry manual recovery, or add conservative startup cleanup
+  keyed to a durable per-invocation ownership marker. Recommend a separate bounded
+  recovery command that enumerates only this helper''s stale artifacts, checks live
+  process/worktree ownership, and reports whether a prior push landed before removing
+  exact entries. Do not prune shared Git worktrees or refs by glob. This follow-up
+  does not block the isolated write path PR; normal exit cleanup is already tested.'
+type: task
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-19T03:10:47-00:00
+references: []
+log_events:
+- time: 2026-10-19T03:10:47-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

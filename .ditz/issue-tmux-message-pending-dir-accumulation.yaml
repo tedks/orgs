@@ -1,0 +1,27 @@
+id: tmux-message-pending-dir-accumulation
+title: 'tmux-message: deferred sends leave /tmp/tmux-message-* dirs forever (9,193
+  on framework0 on 2026-10-18); add a prune command with a TTL'
+desc: 'Every deferred or ambiguous send retains its payload under a fresh mode-700
+  /tmp/tmux-message-<id>/message and nothing ever removes them. On framework0 on 2026-10-18
+  16:35 ET there were 9,193 such directories; a watcher retrying "/exit" (5 bytes)
+  once a minute against a pane that keeps deferring created 25 of the last 40. The
+  retained payload exists for deliberate retry, so an automatic delete at creation
+  time is wrong, but a bounded lifetime is not: add `tmux-message prune [--older-than
+  24h]` that enumerates matching directories into a list, prints it, and removes only
+  entries whose message file is older than the TTL, plus a note in the deferred JSON
+  that the pending file expires. Never glob-delete /tmp; the prune must operate from
+  its own enumerated list of tmux-message-* dirs owned by the current uid. Related:
+  tmux-message-codex-idle-unsupported-layout (the retries that create the litter).'
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T20:34:25-00:00
+references: []
+log_events:
+- time: 2026-10-18T20:34:25-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

@@ -1,0 +1,29 @@
+id: tmux-message-codex-choice-versus-draft
+title: Distinguish Codex choice dialogs from writable drafts
+desc: "The Claude footer repair in draft PR #10 exposed a separate Codex ambiguity.
+  A live Codex composer whose transcript quotes a Claude dialog may be labeled modal
+  by the public parser. Conversely, a selected Codex choice with a retained context
+  footer can look like a writable composer, particularly when a blank spacer precedes
+  the footer. The synthetic layout `Choose an option:\\n\u203A 1. Continue\\n  2.
+  Stop\\n\\n  Any model \xB7 Context 50% left` was classified as text during review;
+  an approval view with the cursor on the final selected row may receive navigation
+  input.\n\nAttempts in PR #10 to distinguish by choice wording or blank rows blocked
+  ordinary drafts such as Yes, No, and numbered lists, or reopened the approval risk.
+  PR #10 therefore restores the prior Codex parser and legacy routing and remains
+  scoped to Claude footer false positives. Obtain authentic Codex choice and ordinary-draft
+  captures, design a positive composer boundary or safe fail-closed rule, and add
+  public/legacy zero-input dialog tests and ordinary-draft delivery tests. Do not
+  infer dialog safety from a context footer alone."
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T07:25:43-00:00
+references: []
+log_events:
+- time: 2026-10-18T07:25:43-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

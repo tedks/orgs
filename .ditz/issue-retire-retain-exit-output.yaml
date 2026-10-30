@@ -1,0 +1,51 @@
+id: retire-retain-exit-output
+title: Preserve exit-notice visibility before guarded tmux retirement
+desc: 'During an authorized retirement batch, eight dedicated Codex CLI lanes wrote
+  agent-authored private shards, passed guarded publication/identity checks, received
+  one typed exit with Enter, and their pinned wrapper/native actors ended. Their tmux
+  panes disappeared immediately on process exit, so the sender returned tmux-operation-failed
+  and the retirement observer could not capture the required fresh same-session native
+  resume notice. Private handoffs remain verified; formal receipts correctly remain
+  pending-exit, not retired. A ninth lane whose exact pane had remain-on-exit enabled
+  before exit completed both independent receipts and retired successfully. No process
+  was killed or notice synthesized.
+
+
+  Repair scope: establish durable, narrowly target-owned exit-output observation before
+  submitting exit, or fail before irreversible input if evidence cannot be captured;
+  preserve human composer protections, native session/PID/boot bindings and strict
+  no-blind-retry semantics. Do not weaken process-plus-native-notice retirement proof
+  or globally mutate unrelated tmux settings. Preserve old pending receipts honestly;
+  vanished historical terminal output cannot be invented. Add paired behavior/mutation
+  tests for a dedicated CLI pane that auto-closes, supported retained-pane output,
+  missing/wrong native UUID, and original-process identity reuse. No current product
+  lane or deployment needs resumption for this bookkeeping defect. The detailed batch
+  evidence remains private; no session identifiers, process lists or private handoffs
+  belong in a public issue.'
+type: bugfix
+component: harness-control
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-25T01:36:26-00:00
+references: []
+log_events:
+- time: 2026-10-25T01:36:26-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-30T00:39:59-00:00
+  who: Ted Smith
+  what: commented
+  comment: Reproduced in another explicitly authorized completed-lane retirement batch.
+    Two dedicated Codex panes auto-closed after their private handoffs were published
+    and guarded exit input was sent; original actors ended, but the required fresh
+    native resume notices were lost. Their receipts remain pending-exit. Enabling
+    remain-on-exit for the still-live, exact owned windows allowed subsequent sessions
+    to retain both independent exit receipts. This should be a pre-exit/pre-offer
+    guard in shared tooling; starting observers and only then enabling retention is
+    too late. No notice synthesis, exit replay or target-agent kill was used. Existing
+    private event records retain attribution/evidence; no product code or review gate
+    changed. Repair remains queued; this comment does not authorize weakening verification
+    or globally changing tmux settings.

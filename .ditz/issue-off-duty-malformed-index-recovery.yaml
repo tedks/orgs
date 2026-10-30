@@ -1,0 +1,27 @@
+id: off-duty-malformed-index-recovery
+title: Document recovery for a malformed claimed off-duty receipt
+desc: 'The retry-time index builder intentionally fails closed when a remote shard
+  claims an event whose receipt is malformed. That prevents a writer from publishing
+  an index that silently drops or misstates the event, but one corrupt claimed receipt
+  can block later writers on every host.
+
+
+  Document an exact-entry steward recovery path in retire-agent references: identify
+  the claimed shard and receipt on fetched remote master, preserve their blobs privately,
+  reconcile the authoritative event and receipt, then publish corrected bytes through
+  the isolated helper. Keep automated writers fail-closed; do not silently skip malformed
+  claimed receipts. This documentation follow-up does not block the current write-path
+  PR.'
+type: task
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-19T03:11:05-00:00
+references: []
+log_events:
+- time: 2026-10-19T03:11:05-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

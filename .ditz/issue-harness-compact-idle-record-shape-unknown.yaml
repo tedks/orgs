@@ -1,0 +1,32 @@
+id: harness-compact-idle-record-shape-unknown
+title: 'harness-control: self_compact fails with idle_record_shape_unknown for both
+  harness probes on a Codex gpt-6-sol pane (2026-10-18)'
+desc: 'Reported by the sui-fix lead (Codex gpt-6-sol, session 01a150bc-b842-7f60-8481-542ecddb72c5,
+  pane %758, worktree ~/Projects/dotfiles/sui-skills-assessment) on 2026-10-18 ~17:20
+  ET: self_compact could not dispatch, reason idle_record_shape_unknown. Operation
+  record ~/.local/state/harness-control/e590c58242a4e25793471613556f36a0b157909e730910dab12327430ae5bbed/7bb0339a4de244e5845552b988c7f461.json
+  contains only {"claude": {"error": "idle_record_shape_unknown", "type": "ControlError"},
+  "codex": {"error": "idle_record_shape_unknown", "type": "ControlError"}}: no requested_at,
+  pane, session id or the record that failed to parse. The native idle preflight (see
+  real-cli-review/run-8742fb0e74/results/native-idle-preflight.json for the known
+  shapes) does not recognise this session''s idle record; Codex 0.157.1 rollouts may
+  have a new idle/turn-boundary event shape, or the probe looked at the wrong harness
+  first. Fix: log the unparsed record (path + first bytes, no transcript text) in
+  the operation json, recognise the current shape with a fixture from this session''s
+  rollout, and fall back to the peer-relay instruction in the error so the agent knows
+  to ask its owner. Companion: harness-compact-deferred-delivery-notice (records lack
+  requested_at/pane). Interim handle used by the CTO: idle-gated /compact relay by
+  send-keys followed by a CONTINUE message naming the checkpoint shard.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T21:18:36-00:00
+references: []
+log_events:
+- time: 2026-10-18T21:18:36-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

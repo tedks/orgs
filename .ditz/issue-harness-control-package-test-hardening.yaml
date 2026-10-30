@@ -1,0 +1,48 @@
+id: harness-control-package-test-hardening
+title: Harden harness-control package transport and isolation tests
+desc: 'Strengthen the hermetic harness-control package tests after the initial Nix
+  landing:
+
+
+  - exercise tmux-message send as well as read against the private tmux server, including
+  a reachable transport-file assertion;
+
+  - add a stronger negative control that runs the wrapper through the package probe
+  and demonstrates the probe catches an unisolated Python invocation.
+
+
+  These are non-blocking test-depth improvements. The current package checks already
+  cover a real MCP handshake, hostile Python environment variables, hostile user site
+  and NIX_PYTHONPATH .pth injection, observer subprocess isolation, and private tmux
+  read transport.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-15T01:23:50-00:00
+references: []
+log_events:
+- time: 2026-10-15T01:23:50-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-15T01:26:40-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Council convergence round 3 assigned two additional non-blocking test-depth
+    items here: (1) cover the detached observer through the executable wrapper/server''s
+    own sys.executable rather than invoking the installed library file directly; (2)
+    retain an explicit hostile-PATH package probe. Item (2) was cheap and was fixed
+    immediately in PR #2; keep the observer end-to-end coverage with the existing
+    send-smoke and stronger negative-control work.'
+- time: 2026-10-15T01:56:48-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'PR #3 preserved the full legacy lifecycle suite beside the packaged runtime.
+    Additional non-blocking council notes to include here: improve mutation-timeout
+    diagnostics, and assert that test/fixture files do not enter the installed Python
+    package.
+
+    '

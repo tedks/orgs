@@ -1,0 +1,40 @@
+id: compact-peer-boundary-vs-new-input-order
+title: Choose continuation when peer compaction and new root input appear in one poll
+desc: 'Council convergence on PR #9 identified a product ordering question. The native
+  transcript can expose both a peer compaction boundary and a new root input during
+  one polling interval. Current harness-control treats the confirmed compaction as
+  completed_by_other and sends its continuation, even if the root input came later;
+  this behavior is documented in PR #9. The continuation could arrive while the agent
+  works on that new input.
+
+  Options: (A) Keep confirmed peer boundary precedence and send continuation; (B)
+  treat any simultaneous new input as cancellation without continuation; (C) compare
+  native transcript offsets/timestamps and continue only when input preceded the peer
+  boundary, if trustworthy ordering can be established.
+
+  Recommendation: retain A for the stale-cancel repair, which preserves the existing
+  completed_by_other branch and avoids a second /compact, then evaluate C in a separate
+  scoped change with native fixtures. Decision owner: Ted/CTO (product behavior).
+  Blocks any change to simultaneous-event precedence or continuation timing; does
+  not block the terminal cancellation deadlock fix in PR #9.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-16T17:08:11-00:00
+references: []
+log_events:
+- time: 2026-10-16T17:08:11-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-16T17:08:50-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Ruling (dotfiles CTO, 2026-10-16): keep the existing precedence for PR
+    #9 (peer compaction seen = completed, send the continuation). A continuation that
+    lands during newer work is a message the agent can read in context; the opposite
+    error, never sending it, strands a lane. Study transcript ordering separately
+    with fixtures before changing it.'

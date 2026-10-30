@@ -1,0 +1,32 @@
+id: tmux-message-legacy-quoted-dialog-modal
+title: Legacy sender treats quoted Claude dialog strings as an active modal
+desc: 'A new 2026-10-18 comment on tmux-message-modal-footer-false-positive reports
+  a fourth false-positive shape: a send to Codex pane %751 whose payload quoted "Update
+  available!" and "Press enter to continue" returned ambiguous modal-after-paste after
+  the submitted row was visible. skills/spawn-agent/scripts/claude-send.sh screen_state()
+  checks those substrings before harness routing, across the whole screen, so transcript/output
+  text can appear to be an active modal. The PR #10 footer repair retained this master-era
+  narrow pre-routing check to preserve earlier modal safety; it did not resolve quoted-text
+  false positives.
+
+
+  Add a regression fixture with the dialog strings in a submitted history row and
+  a live Codex composer. Require that the legacy sender not classify it as modal;
+  preserve genuine update/trust dialog deferral, including a Claude dialog with quoted
+  Codex rows. Use the shared frame-aware classifier or another positive active-dialog
+  boundary, and verify no paste/Enter on a real modal. Keep this in a separate PR
+  from merged #10 and from MODAL-M2 unless the same function proves to be the root
+  cause. Original issue comment timestamp 2026-10-18 07:39Z.'
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T07:49:04-00:00
+references: []
+log_events:
+- time: 2026-10-18T07:49:04-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

@@ -1,0 +1,33 @@
+id: compact-peer-watch-window-and-notice
+title: Choose peer compaction watch duration and cancellation notice timing
+desc: 'Context: PR #7 implements the CTO ruling that an intervening operator turn
+  cancels scheduled /compact, sends one notice, and records completed_by_other plus
+  continuation if a peer compaction event is observed anyway. The observer watches
+  for a new event for 30 seconds after the cancellation notice. A manual /compact
+  on a large context may finish later. The notice says to re-checkpoint and request
+  again, but the observer holds the operation lease during that 30-second watch, so
+  an immediate request returns operation_in_progress. If a late event arrives after
+  the window, the record remains cancelled.
+
+  Options: (A) Keep the 30-second bounded watch and exact ruled notice. (B) Extend
+  the watch based on measured native compaction duration and revise the notice to
+  tell the agent when a new request can be made. (C) Add a separate durable peer-event
+  watcher that survives beyond the cancellation operation.
+
+  Recommendation: B after timing measurements; keep the current bounded implementation
+  in PR #7 to land the root dispatch fix. Decision owner: Ted (dotfiles CTO/product
+  scope). Blocks: only a later wording/window change, not merge of PR #7. No affected
+  live pane is needed to decide.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-16T08:16:24-00:00
+references: []
+log_events:
+- time: 2026-10-16T08:16:24-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

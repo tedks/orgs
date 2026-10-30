@@ -1,0 +1,22 @@
+id: setup-leaks-existing-plans
+title: Setup leak gate fails on existing tracked planning documents
+desc: '`python3 tests/test_setup_leaks.py` fails on the current feature branch because
+  several tracked `.planning/harness-compact-*.md` files already contain machine-specific
+  absolute paths and names. A scan limited to PR #10''s changed files reports no leaks.
+  This gate should be restored by removing or relocating the older private planning
+  details in a separate change; do not weaken the source-tree guard to hide them.
+  Confirm failure against `origin/master` before editing, then rerun the gate in an
+  isolated HOME/config environment.'
+type: bugfix
+component: repo-config
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T06:44:06-00:00
+references: []
+log_events:
+- time: 2026-10-18T06:44:06-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

@@ -1,0 +1,45 @@
+id: tmux-message-unavailable-dialog-evidence
+title: Decide evidence bar for unavailable Claude update and feedback dialogs
+desc: 'Question for the dotfiles CTO: What evidence is required to mark PR #10 ready
+  when the Claude Code 2.1.302 update dialog and unsent-feedback exit dialog could
+  not be induced in the authorized scratch session?
+
+
+  Options:
+
+  1. Keep PR #10 draft and capture each dialog on a later real occurrence.
+
+  2. Accept clearly labeled synthetic dialog fixtures based on existing wording and
+  mark the PR ready.
+
+  3. Accept fail-closed unknown-layout behavior for these unavailable dialogs, with
+  no fixture claim, and mark the PR ready.
+
+
+  Recommendation: option 3 if the code review and exact-SHA gates are clean. Both
+  public and legacy senders require a positively identified live composer before any
+  input; unfamiliar dialog layouts therefore defer. Keep the missing authentic captures
+  explicit in the PR. Do not fabricate a real capture.
+
+
+  Decision owner: dotfiles CTO. This blocks the evidence disposition and whether PR
+  #10 can move from draft to ready, not further classifier work or local tests.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: closed
+disposition: fixed
+creation_time: 2026-10-18T07:06:55-00:00
+references: []
+log_events:
+- time: 2026-10-18T07:06:55-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-18T07:40:24-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'MODAL-R2: accept clearly labeled synthetic update and SYNTHETIC-UNVERIFIED
+    feedback dialog fixtures; replacement by read-only capture is tracked in tmux-message-replace-synthetic-dialog-fixtures,
+    and neither blocks PR #10 merge.'

@@ -1,0 +1,28 @@
+id: tmux-message-replace-synthetic-dialog-fixtures
+title: Replace synthetic Claude update and feedback dialogs with read-only captures
+desc: 'PR #10 uses a SYNTHETIC update dialog built from the detector''s exact anchors
+  ("Update available!" and "Press enter to continue") and a SYNTHETIC-UNVERIFIED unsent-feedback
+  exit dialog built from the detector anchors ("unsent feedback drafts" and a selected
+  choice row). The dotfiles issues retire-agent-claude-exit-dialog and tmux-message-lifecycle-receipts
+  did not record the feedback dialog''s verbatim text. The dotfiles CTO ruled on 2026-10-18
+  that these provisional fixtures do not block merge.
+
+
+  The next time any agent sees either real Claude dialog, capture it read-only with
+  `tmux capture-pane -e -p`, scrub conversation and local paths, preserve dialog UI
+  lines, record Claude version and pane dimensions, then replace the matching synthetic
+  fixture and rerun public and legacy zero-input tests. Do not type into a live pane
+  for fixture collection.'
+type: task
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T07:40:21-00:00
+references: []
+log_events:
+- time: 2026-10-18T07:40:21-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

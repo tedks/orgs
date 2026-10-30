@@ -1,0 +1,22 @@
+id: tmux-message-deduplicate-claude-frame-parse
+title: Avoid duplicate Claude composer frame parsing in tmux-message
+desc: 'Council review of draft PR #10 noted that tmux-message.py composer() calls
+  claude_composer_frame and then dialog_active calls it again on the same frame. This
+  is a small redundant ANSI/text parse per screen poll, not a correctness or merge
+  blocker. When next touching the shared classifier, carry the computed frame shape
+  into dialog detection or otherwise reuse it without weakening the fail-closed boundary.
+  Keep this separate from the Claude footer false-positive repair to avoid expanding
+  the patch and review surface.'
+type: task
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T07:32:47-00:00
+references: []
+log_events:
+- time: 2026-10-18T07:32:47-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

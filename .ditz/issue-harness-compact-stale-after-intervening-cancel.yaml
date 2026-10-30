@@ -1,0 +1,64 @@
+id: harness-compact-stale-after-intervening-cancel
+title: 'harness-control: after an intervening-turn cancel the compact operation stays
+  registered (state warning_dispatching / watching_other); cancel_operation refuses
+  (cancellation_only_before_dispatch) and every new self_compact is refused as operation_in_progress'
+desc: ""
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: closed
+disposition: fixed
+creation_time: 2026-10-16T16:43:43-00:00
+references: []
+log_events:
+- time: 2026-10-16T16:43:43-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-16T16:43:43-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Seen 2026-10-16 ~12:50 ET on the search-guard lead (Claude Opus, pane
+    %716, session 0b219048): operation eedb26298af447f9ab54b4de8850f8a6 under ~/.local/state/harness-control/db787646.../:
+    state warning_dispatching, reason intervening_turn, watcher null, delivery/continuation
+    not_dispatched. The intervening turn was a cross-session message from the CTO.
+    Expected per the ruling: cancelled + one notice + a fresh request allowed. Fix:
+    a cancelled operation must reach a terminal state (cancelled) that frees the session
+    for a new request; cancel_operation must be allowed for a watching/warning operation
+    that has not dispatched; add a fixture from this record and a regression test.
+    The CTO compacted the lane by hand.'
+- time: 2026-10-16T16:45:45-00:00
+  who: Ted Smith
+  what: started
+  comment: ""
+- time: 2026-10-16T16:52:19-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Lead record 2026-10-16: Branch fix/harness-compact-stale-cancel from master
+    996a24f. Assumptions: no slash dispatch in the incident; .worker lease serializes
+    sends; root transcript input lacks authenticated sender origin. Acceptance: terminal
+    cancelled with notice receipt, explicit cancellation of pre-dispatch warning/watch,
+    refusal names ID/state/remedy, previous behavior killed by new tests, both native
+    harnesses, mutation guards, Nix gates, council clean, normal merge, installed-store
+    verification. Repair authority: agent-skills harness-control and focused tests/docs;
+    dotfiles installer after merge. Stop: changed product policy/risk, unavailable
+    live-safe evidence, or failed gates after bounded repair. Decision: peer control
+    should be exempt only with authenticated provenance; current native root rows
+    cannot support exemption, so root input still cancels. Follow-up open question
+    harness-compact-peer-provenance. Core suite 107 tests green; previous-head regressions
+    fail as intended; mutation and native tests running. No live pane/state touched.'
+- time: 2026-10-16T17:23:25-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'PR #9 at d35d547: council fixpoint CLEAN with Codex Sol and Claude Opus;
+    agy seat unavailable (quota). Offline core 113 tests pass; native disposable Claude/Codex
+    compaction plus intervening cancel/notice/replacement pass; Nix source gate mutation
+    suite is running. Product ordering question tracked separately as compact-peer-boundary-vs-new-input-order;
+    peer control-prefix ruling tracked in harness-compact-peer-provenance for a later
+    PR.'
+- time: 2026-10-16T17:37:50-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Fixed by merged agent-skills PR #9 (f47c5e0); exact-head tests, mutation
+    gate, native Claude/Codex rehearsal, and installed Nix source verification passed.'

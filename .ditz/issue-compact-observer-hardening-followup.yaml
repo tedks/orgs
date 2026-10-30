@@ -1,0 +1,53 @@
+id: compact-observer-hardening-followup
+title: Harden compact observer diagnostics and native rehearsal
+desc: 'Nonblocking review follow-up after PR #7. Rationale: these are lower-impact
+  hardening items and should be handled separately from the root dispatch defect and
+  operator product rulings.
+
+  - Make the opt-in native rehearsal create/check its parent state directory before
+  mkdtemp. mkdtemp already uses 0700, so the review''s world-readable-window concern
+  is disproved; missing parent remains a test setup failure.
+
+  - Audit observer watcher_pid metadata consumption or remove it if only diagnostic;
+  do not use a possibly reused PID to stop a process.
+
+  - Tighten the Claude pane completion marker against an unrelated tool result literally
+  equal to Compacted if transcript/pane evidence permits. The current independent
+  native boundary plus pane progress/count check mitigates it.
+
+  - Add mutation cases for cancellation recheck, definite-not-dispatched gating, and
+  reconciler reread if this path receives further logic changes. The current unit
+  tests cover these failure cases, but the mutation list does not prove each guard
+  independently.
+
+  - Revisit no-daemon disposable Codex launch compatibility when a supported native
+  startup path is available. The current fixture reproduces both real no-daemon root-completion
+  rows, but the native end-to-end rehearsal used a direct Codex launch.
+
+  The final send recheck can defer after a newly starting turn; that fail-closed behavior
+  depends on the separate intervening-turn product ruling. Opaque incident IDs in
+  the fixture are not credentials or message content, so no removal is requested.'
+type: task
+component: harness-control
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-16T07:02:55-00:00
+references: []
+log_events:
+- time: 2026-10-16T07:02:55-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-16T08:16:32-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'R1 council nits to consider in a later hardening pass: _compact_event
+    rescans from the request baseline every 0.5s during idle/watch (bounded at 8 MiB,
+    but potentially wasteful over a 3600s wait); use an incremental event cursor without
+    losing the baseline or malformed-record checks. Audit the rare identity-failure
+    plus peer-boundary path for a useful recorded notice result when continuation
+    cannot reach the pane. The exact CTO cancellation notice can be followed by a
+    continuation when an event arrives during the 30s watch; wording/timing is separately
+    filed as compact-peer-watch-window-and-notice. These do not block PR #7.'

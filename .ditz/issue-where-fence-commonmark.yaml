@@ -1,0 +1,28 @@
+id: where-fence-commonmark
+title: 'where/sync-check: fence detection is looser than CommonMark'
+desc: 'Council round 3 on agent-skills#8, a nit from the Claude seat. Both the Python
+  fence logic in skills/where/scripts/where and the awk version in skills/initialize-repo
+  sync-check.sh close an open fence too eagerly:
+
+  (a) An info-string line such as ```python closes an open ``` fence, but CommonMark
+  does not allow an info string on a closing fence.
+
+  (b) A ``` line closes a ```` fence, but a closing fence must be at least as long
+  as the opening one.
+
+  Effect: in an AGENTS.md that nests fences, the Project structure section may be
+  misparsed. This is rare in practice. Fix both implementations together, with shared
+  fixtures.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-16T16:45:17-00:00
+references: []
+log_events:
+- time: 2026-10-16T16:45:17-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

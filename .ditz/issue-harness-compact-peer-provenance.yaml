@@ -1,0 +1,41 @@
+id: harness-compact-peer-provenance
+title: Authenticate peer control messages before exempting them from compaction cancellation
+desc: 'Question from the 2026-10-16 self_compact stale-cancel incident: Should a peer
+  cross-session or tmux-delivered control message that merely tells a lane to compact
+  count as an intervening operator turn? Options: (1) continue treating every native
+  root input as intervening; (2) exempt messages whose text resembles control instructions;
+  (3) add a sender-bound receipt that the observer can authenticate and exempt only
+  those control deliveries. Recommendation: policy should exempt authenticated peer
+  control messages, but retain option 1 until option 3 exists. Never use option 2
+  because an operator can send identical text. Decider: Ted/CTO for the policy; harness-control
+  owner for the provenance contract. Blocks reliable compaction after a peer reminder,
+  but does not block the stale-cancel deadlock fix. Source: agent-skills issue harness-compact-stale-after-intervening-cancel,
+  2026-10-16 incident.'
+type: feature
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-16T16:51:01-00:00
+references: []
+log_events:
+- time: 2026-10-16T16:51:01-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-16T16:53:38-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Recommended design (dotfiles CTO, 2026-10-16): native input carries no
+    sender, so use a convention: a turn whose text begins with a configured control
+    prefix (default CONTROL:, plus the org''s existing markers such as COMPACT ME,
+    CONTINUE-, RETIRE-, listed in config) is not an intervening turn for a scheduled
+    compaction; everything else cancels with the notice. Separate PR after the stale-cancel
+    fix lands; add fixtures for both a control-prefixed turn and an ordinary one.'
+- time: 2026-10-16T17:31:16-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'PR #9 README and plan now acknowledge the CTO 2026-10-16 configured control-prefix
+    follow-up direction. The stale-cancel repair itself continues counting all native
+    root input; no prefix exemption is introduced in that PR.'

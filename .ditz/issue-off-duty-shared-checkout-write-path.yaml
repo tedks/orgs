@@ -1,0 +1,90 @@
+id: off-duty-shared-checkout-write-path
+title: 'retire-agent / shard writers: stop committing through the shared ~/Projects/off-duty
+  checkout; push shards and receipts from a temporary worktree at origin/master'
+desc: 'Reported by the Chaos CTO (controller-tools-63) 2026-10-19 02:16Z and hit by
+  the dotfiles CTO three times on 2026-10-18: the shared ~/Projects/off-duty checkout
+  on framework0 was ahead 1 (953da27, a shard already on origin as f57e552 by another
+  path) and behind 119, with two retire-agent receipts (receipts/14da821f..., receipts/1909d438...)
+  modified but uncommitted (state advanced from retirement-requested/deferred to pending-handoff/delivered),
+  one untracked receipt (receipts/e29e2ec9...) and two untracked shards whose identical
+  copies were already on origin. `git pull --rebase` refuses ("commit or stash"),
+  `--autostash` fails ("could not detach HEAD"). Effect: every lane that follows the
+  documented write-shard / pull --rebase / push sequence in the shared tree leaves
+  its shard untracked or unpushed, and the shard check at retirement can pass against
+  a local file that never reached the private remote.
+
+
+  Fix (one agent-skills PR plus a one-line binding note in orgs): (1) a shared helper,
+  e.g. skills/_shared/offduty-push.sh FILE... MESSAGE, that creates a temporary detached
+  worktree of the off-duty repo at origin/master in the caller''s scratch area, copies
+  the given files in, commits, pushes to origin master with a bounded retry on non-fast-forward
+  (fetch, re-create the worktree, re-apply), removes the worktree, and prints the
+  pushed commit; it never touches the shared checkout''s index or working tree. (2)
+  retire-agent writes shards and receipts through that helper and verifies the shard
+  by fetching origin/master, not by looking at the shared tree. (3) harness-control
+  record_checkpoint''s remote_presence check keys on origin/master the same way. (4)
+  The receipts writer must not leave uncommitted state in the shared tree: either
+  commit through the helper or keep receipts under ~/.local/state and push only the
+  final one. The dotfiles CTO repaired the shared checkout by hand on 2026-10-18 (salvage
+  of the receipt states, then reset to origin/master); document that repair as the
+  recovery procedure in the skill''s README.'
+type: bugfix
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: closed
+disposition: fixed
+creation_time: 2026-10-19T02:18:13-00:00
+references: []
+log_events:
+- time: 2026-10-19T02:18:13-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-19T02:21:11-00:00
+  who: Ted Smith
+  what: started
+  comment: ""
+- time: 2026-10-19T03:27:46-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Implementation is pushed in draft agent-skills PR #12 at 9e198154ae11f9a88e5aedfa568b3dbdba470876
+    and draft public orgs PR #31 at 5871c6c. The final code commit is 5e0b98e; later
+    agent-skills commits are documentation only. The helper publishes exact bytes
+    from a disposable worktree at a uniquely fetched remote master commit. Retire-agent
+    stages shards and every receipt state privately, rebuilds the index and checks
+    known-session duplicates on each retry, and verifies fetched remote bytes before
+    exit. Harness-control checks remote presence against a fresh fetched commit.
+
+
+    Local evidence: 12 helper tests, 165 retirement tests, all active retirement mutations
+    caught, 115 harness-control tests, 21 configuration and 6 native-helper tests,
+    native reader suites 10/12/63 plus their mutation checks, and nix flake check
+    (transport/package/unit, including 92 harness-control mutations) passed. New stale-ref,
+    unknown caller-session, dirty-attributes, and committed-attributes regressions
+    were each observed red against the prior behavior. The separate setup-leak gate
+    still fails on older tracked .planning/harness-compact files under existing issue
+    setup-leaks-existing-plans.
+
+
+    Council fixpoint: native Codex gpt-6-sol and foreign Claude Opus seats CLEAN on
+    final code delta 2d3454a..5e0b98e. Google agy was unavailable at quota and remained
+    empty. Recovery and attribute caveat are documented in the skill README. Follow-ups
+    filed: off-duty-push-interruption-recovery and off-duty-malformed-index-recovery.
+    Keep this issue in_progress until the CTO rules on ready/merge and runs the post-merge
+    installed Nix snapshot. The README filename remains as requested by the lead brief;
+    no product question remains open.'
+- time: 2026-10-19T03:40:16-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Merged: agent-skills PR #12 (f703451: skills/_shared/offduty-push.sh,
+    retire-agent and harness-control verify against a fresh remote master fetch, receipts
+    kept out of the shared tree, README recovery) and orgs PR #31 (480d875, binding
+    sentence). Deployed 2026-10-18 evening: agent-skills master pulled and harness-control
+    rebuilt from f7034513 on framework0, tower0 and splinter1. The CTO''s exit receipt
+    for the lead was appended through the helper (off-duty 21c1257) without touching
+    the shared checkout. Running sessions pick up the new harness-control on restart.'
+- time: 2026-10-19T03:40:16-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: ""

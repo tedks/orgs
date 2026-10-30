@@ -1,0 +1,122 @@
+id: e33bd34f09f01e29d055f31df6d88591e07eda16
+title: Make self_compact dispatch after native idle and report failure
+desc: 'Lead: Codex, pane %711, agent-skills/harness-compact-dispatch, branch fix/harness-compact-dispatch.
+  Parent brief: 20261016/harness-compact-dispatch.md. Context: agent-skills master
+  6607030; live installed wrapper points to Nix store; tripwire lead owns get_usage;
+  this lane owns harness-control compact dispatch only.
+
+  Assumptions: the recorded identity and native transcript remain valid while waiting;
+  the caller ends its turn after self_compact. Unknown transcript or pane evidence
+  must fail closed. Same-user human input may race screen polling.
+
+  Acceptance: two incident records reproduced as fixtures; disposable Claude and Codex
+  panes confirm idle -> typed /compact (Claude), compaction witness -> continuation;
+  60 minute default idle bound re-arms after focus; deferred/bound expiry sends a
+  single explicit pane warning; tool result says scheduled with watcher PID and bound;
+  operation records each state transition. Mutation checks reject missing idle and
+  bound guards. No live affected panes or state touched.
+
+  Repair authority: modify agent-skills harness-control code/docs/tests and disposable
+  test panes; local gates, PR and council to fixpoint. Stop: changed contract requiring
+  product ruling, live pane/state risk, or evidence insufficiency. No open product
+  ruling at claim.
+
+  Initial evidence: b353c001 and 17f313 records both deferred at ~155 s with native_idle_not_observed_with_sender_budget;
+  no delivery or continuation. SEND_BUDGET=100, PREFLIGHT=15, COMPACT_WATCH=30 reserves
+  145 s out of 300 s before idle wait ends. This is a timing design flaw even if idle
+  parser is correct.'
+type: bugfix
+component: harness-control
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: closed
+disposition: fixed
+creation_time: 2026-10-16T06:09:44-00:00
+references: []
+log_events:
+- time: 2026-10-16T06:09:44-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-16T06:09:48-00:00
+  who: Ted Smith
+  what: started
+  comment: ""
+- time: 2026-10-16T06:19:02-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Diagnosis from both read-only incident records: each request used the
+    300 s operation budget, stopped idle polling at 155 s because 145 s was reserved
+    for sender/preflight/compaction observation, and delivered nothing. Both native
+    root task_complete events were written 2.54-3.34 s after request, with turn_id=root_turn_id;
+    the idle cursor nevertheless held turn=null because the corresponding task_started
+    had fallen outside the 8 MiB tail. New regression fixture reproduces that parser
+    miss and failed before the fix. Code now accepts a post-baseline root completion,
+    separates idle bound (3600 s default) from fresh sender budget, re-arms on new
+    root turns, persists transitions and watcher PID, and attempts one visible warning
+    on deferred dispatch. Synthetic tmux compact+exit integration passed; remaining:
+    native Claude/Codex disposable tests, mutation checks, Nix gates and council.'
+- time: 2026-10-16T07:02:30-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Implementation and review status at c37b260 (branch fix/harness-compact-dispatch,
+    draft PR #7): Both incident task_complete rows are fixture-backed; 3600-second
+    native idle bound and guarded detached dispatch are implemented. Disposable native
+    Claude/Codex direct-launch compact+continuation passed; the no-daemon Codex startup
+    remained unsupported in the disposable test, with no paste to that pane. Core
+    suite passed 89 tests. Council Codex and Claude seats converged CLEAN on successive
+    fix deltas; Google seat unavailable due provider quota. Final nix flake check/build
+    are running at c37b260. Two operator product rulings block merge: compact-intervening-turn-policy
+    and compact-unconfirmed-review-notice. No live affected pane or operation record
+    was changed.'
+- time: 2026-10-16T07:11:01-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'HCOMPACT-RATE tripwire at 338 turns/hour: I polled the running nix flake
+    check/mutation process with repeated short tool waits while it produced no output.
+    I stopped that polling pattern. I will use one bounded blocking wait for the existing
+    gate, and any further repeated test cycle goes to a fresh Luna worker with a small
+    brief. The gate process is owned by this lane; branch source remains unchanged
+    at 40405c3 while it runs.'
+- time: 2026-10-16T07:14:33-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Gate at 40405c3: nix build .#harness-control passed; nix flake check reached
+    full unit mutation suite and failed because two existing mutation cases survived:
+    failure_notice and warning_before_terminal. All other reported mutation cases
+    were killed. A fresh Luna implementer has the bounded task of repairing meaningful
+    test assertions in test_harness_control_core.py only and running targeted mutation
+    evidence; lead will inspect the diff and rerun the exact-head full gate. Product
+    rulings remain pending.'
+- time: 2026-10-16T07:35:02-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Final gate receipt at pushed branch HEAD b6104ed3af2e1ff3c42608ed77836b25f9b96b6b:
+    nix flake check exited 0 with harness-control transport/unit/package checks; nix
+    build .#harness-control exited 0. Git pull --rebase made no changes, git push
+    succeeded, and local branch is up to date with origin. Council available seats
+    (Codex native Lead, Claude Opus foreign) reached CLEAN on production fix deltas;
+    Google agy unavailable due quota. PR #7 is still draft and merge is blocked solely
+    by two Ted product rulings in compact-intervening-turn-policy and compact-unconfirmed-review-notice.
+    The three open question/follow-up issues are synced in ditz-metadata. No live
+    affected panes or records were touched.'
+- time: 2026-10-16T08:16:43-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'HCOMPACT-R1 rulings applied at branch commit 63369fd (PR #7, not merged
+    yet): intervening operator turn cancels the scheduled command with one notice
+    and reason intervening_turn; a bounded peer-event watch can mark completed_by_other
+    and send continuation. Delivered but unconfirmed /compact records unconfirmed
+    with receipt, one distinct notice, and no automatic retry or continuation. Real
+    Claude boundary/summary and Codex peer-event fixtures, focus-triggered compaction,
+    cancellation race, reaper, and typed pane error contract are covered. Focused
+    core suite passes 104 tests. Available Codex native and Claude Opus council seats
+    reached CLEAN on the final logic and fix delta; agy unavailable due quota. Exact-head
+    nix flake check/build are running on 63369fd. Product ruling issues are answered;
+    follow-up wording/window question compact-peer-watch-window-and-notice does not
+    block merge. No affected live pane/state was touched.'
+- time: 2026-10-16T08:36:51-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Merged PR #7 normally as 996a24f after exact-head flake check/build and
+    CLEAN available council seats; remaining hardening is tracked separately.'

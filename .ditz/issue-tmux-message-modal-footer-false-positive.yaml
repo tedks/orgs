@@ -1,0 +1,76 @@
+id: tmux-message-modal-footer-false-positive
+title: 'tmux-message: modal detector fires on Claude Code footer text (usage limit,
+  auto-update, feedback draft)'
+desc: "Reported by the Chaos CTO (controller-tools-63, pane %685) on 2026-10-17; the
+  dotfiles CTO owns tmux-message.\n\nWhat happened: from 2026-10-16 23:19Z to 2026-10-17
+  00:31:52Z every `tmux-message send %685` from the XRW completion lead (10 attempts
+  across two bounded loops) was deferred with reason `modal`; nothing was pasted.
+  The CTO pane was not showing a dialog. It had hit its Anthropic usage limit and
+  Claude Code's footer read \"Usage limit reached \xB7 continuing automatically at
+  12pm \xB7 esc to cancel\", which matched the sender's modal pattern (\"Esc to cancel\").
+  A launch-critical READY IDENTITY + PREFLIGHT message (b345ec4) stalled about two
+  hours. Record: ~/Projects/chaos/controller-tools/lane-xrw-completion-20261013-record.md
+  lines 232 and 256. Retained payloads: /tmp/tmux-message-wch02f6z, /tmp/tmux-message-0xc5krup,
+  /tmp/tmux-message-ozugunsu (message files, 10-16 21:28-21:32 ET).\n\nOther Claude
+  Code footer text that is not a modal and must not defer a send: \"\u2718 Auto-update
+  failed: no write permission to npm prefix \xB7 Run claude doctor\" (seen on dotfiles
+  %733 on 10-18 with \"new task? /clear to save 319.9k tokens \xB7 globalVersion:
+  2.1.301 \xB7 latestVersion: 2.1.302\"), and the \"1 feedback draft\" count.\n\nAsk
+  (Chaos CTO, verbatim): \"narrow the modal heuristic to actual dialog frames (the
+  box glyphs plus a choice line), and treat known footers (usage limit, auto-update,
+  feedback draft count) as non-modal; the misclassification stalled a launch-critical
+  message for two hours.\"\n\nCode: skills/spawn-agent/scripts/claude-send.sh screen_state()
+  (the 'Update available!' + 'Press enter to continue' and trust-prompt checks, then
+  claude_trust_modal_active) and the modal/readiness classification in claude-send-screen.py
+  and claude-pane-detect.sh. Real modals that must still defer: the trust prompt,
+  the update \"Press enter to continue\" screen, permission prompts, the /exit \"Background
+  work is running\" dialog, and the unsent-feedback-draft prompt (the latter two are
+  separate issues on the dotfiles tracker: retire-agent-claude-exit-dialog, tmux-message-lifecycle-receipts;
+  the placeholder deferral is tmux-message-claude-placeholder)."
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: closed
+disposition: fixed
+creation_time: 2026-10-18T06:20:09-00:00
+references: []
+log_events:
+- time: 2026-10-18T06:20:09-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-18T06:22:16-00:00
+  who: Ted Smith
+  what: started
+  comment: ""
+- time: 2026-10-18T06:46:11-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Draft PR #10: fixture/test commit df5e5dc shows the usage-limit footer
+    regression red on the previous classifier (`modal` vs `empty`); implementation
+    commit 81b2419 narrows detection without changing public status or exit codes.
+    Real Claude 2.1.302 scratch captures cover login, trust, permission, and background-work
+    exit. Auto-update and feedback-count footers use scrubbed read-only live captures;
+    usage-limit and /clear text are labeled synthetic. Update and unsent-feedback
+    dialogs could not be induced safely and need an evidence ruling. Current-head
+    public Python, shell alias, real tmux, legacy sender, and config tests pass. Repository-wide
+    setup-leak gate fails on unrelated tracked planning files; see issue setup-leaks-existing-plans.'
+- time: 2026-10-18T07:39:15-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Fourth shape (2026-10-18 03:38 ET): a send to Codex pane %751 whose payload
+    quoted the strings ''Update available!'' and ''Press enter to continue'' came
+    back ambiguous modal-after-paste once the submitted row was on screen. claude-send.sh
+    screen_state() runs that substring check before the harness branch, so quoted
+    dialog text in any transcript row (Claude or Codex) reads as a modal. The PR #10
+    dialog_active docstring says ''never a bare footer or quoted output''; make sure
+    the pre-harness check in screen_state is routed through the same frame-aware classifier
+    (or dropped for Codex frames) and add a fixture with the dialog strings inside
+    a submitted history row.'
+- time: 2026-10-18T07:48:40-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'PR #10 normal-merged at ee40f9225def70cc9020ad518c0a8f5bfa0bb2eb. Final
+    source 59530f1 passed affected local gates and council convergence was CLEAN;
+    MODAL-R2 accepted labeled synthetic dialog evidence with replacement tracked separately.'

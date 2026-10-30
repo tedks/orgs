@@ -1,0 +1,26 @@
+id: harness-compact-deferred-delivery-notice
+title: 'harness-control: self_compact with a deferred delivery (nothing pasted) left
+  the requester idle 47 minutes before any notice'
+desc: 'Operation e7ecd870f2724f25888e2a0bf4e46a07 (Codex pane %748, 2026-10-18T06:44Z):
+  tmux-message deferred the /compact paste with reason unsupported-layout and input_attempted
+  false. The operation stayed "deferred" with completion not_started and the agent
+  idled 47 minutes waiting for a confirmation that could never come, until the Chaos
+  CTO relayed /compact by hand. When the sender defers without pasting, the requester
+  has nothing in flight: the watcher should post the deferral notice (reason, pending
+  file, suggested next step: retry at the next boundary or ask the owner to relay)
+  at its next poll instead of waiting out the delivery bound. Also record requested_at
+  and pane in the operation json (both null in this record). Evidence: ~/.local/state/harness-control/dc586e16043f06521da421dcfdefeacca1b66357628f1b24a2709ce72bb70a1a/e7ecd870f2724f25888e2a0bf4e46a07.json;
+  reporter controller-tools-63 (Chaos CTO). Companion: tmux-message-codex-idle-unsupported-layout.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-18T07:32:49-00:00
+references: []
+log_events:
+- time: 2026-10-18T07:32:49-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

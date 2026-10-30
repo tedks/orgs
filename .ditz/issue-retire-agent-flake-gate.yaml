@@ -1,0 +1,20 @@
+id: retire-agent-flake-gate
+title: Gate the broader retire-agent regression suites with Nix
+desc: 'The Nix flake gate now runs tests/test_native_helpers.py, which covers retire-agent''s
+  native-helper loading boundary, but it does not run skills/retire-agent/scripts/test-retire.py,
+  test-retire-native.py, or test-mutations.py. Audit their hermetic prerequisites,
+  add the locally runnable suites to nix flake check, and keep any live/network-dependent
+  cases explicit. Non-blocking follow-up from PR #4 council review.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-15T02:34:50-00:00
+references: []
+log_events:
+- time: 2026-10-15T02:34:50-00:00
+  who: Ted Smith
+  what: created
+  comment: ""

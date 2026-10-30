@@ -1,0 +1,26 @@
+id: native-rehearsal-turn-rate
+title: harness-control native both-harness rehearsal drives leads past the tripwire's
+  300 turns/h line; make the rehearsal one blocking command with bounded waits instead
+  of a tool-call polling loop
+desc: ""
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-16T17:40:41-00:00
+references: []
+log_events:
+- time: 2026-10-16T17:40:41-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-16T17:40:41-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Observed twice on 2026-10-16: the harness-compact lead (%711, 338 turns/h
+    at 03:10) and the harness-cancel lead (%724, 348 turns/h at 13:40), both while
+    running the native rehearsal and Nix gates. The work is fine; the shape is a loop
+    of small tool calls. Wrap the rehearsal in a script that waits internally (until-loops
+    with sleeps) and prints one result, so a lead spends one turn on it.'

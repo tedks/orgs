@@ -1,0 +1,45 @@
+id: compact-unconfirmed-review-notice
+title: Decide review notice after delivered but unconfirmed compaction
+desc: 'Context: PR #7 sends one explicit COMPACTION NOT DISPATCHED notice only when
+  /compact definitely was not sent. If it was delivered but native compaction and
+  pane marker cannot be confirmed, the operation record becomes timed_out or continuation_failed
+  without a visible lane notice. This may be a silent stalled lane, but a notice must
+  never falsely say the command was not dispatched.
+
+  Options: (A) Send a distinct one-time review notice saying compaction was delivered
+  but not confirmed, with the checkpoint path and no instruction to rerun /compact.
+  (B) Record the ambiguous outcome only; rely on an operator reading the operation
+  record.
+
+  Recommendation: A, with exact wording and one-send guard reviewed before implementation.
+
+  Decision owner: Ted. Blocks: product contract and merge of agent-skills PR #7. No
+  live affected pane may be used to test the ruling.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: closed
+disposition: fixed
+creation_time: 2026-10-16T07:00:42-00:00
+references: []
+log_events:
+- time: 2026-10-16T07:00:42-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
+- time: 2026-10-16T07:36:27-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Ruling (dotfiles CTO, 2026-10-16): never silent. When /compact was delivered
+    (typed/pasted and submitted) but no compaction event is observed within the bound,
+    the watcher delivers one notice into the pane (''COMPACTION UNCONFIRMED: delivered
+    at <time>, no compaction event within <bound>; check /status, then re-request
+    or compact manually''), records state unconfirmed with the delivery receipt, and
+    does not retry on its own. The continuation message is not sent, because the checkpoint
+    may now be stale.'
+- time: 2026-10-16T08:36:51-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Ruling implemented in merged PR #7 (996a24f): delivered but unconfirmed
+    command keeps receipt, sends one notice, and does not retry or continue.'

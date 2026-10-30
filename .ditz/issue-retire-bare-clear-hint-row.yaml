@@ -1,0 +1,26 @@
+id: retire-bare-clear-hint-row
+title: Does a healthy Claude install render a bare 'new task? /clear to save N tokens'
+  row?
+desc: 'Context: PR #11 accepts Claude 2.1.301/2.1.302 status rows only when they carry
+  globalVersion/latestVersion fields. Council (Claude seat) noted that an install
+  with no failed auto-update may render the hint row alone, which the recognizer keeps
+  pending (fixture ''hint-only''), stalling retirement again.
+
+  Options: (A) leave strict until a live pane shows it (recommended: no evidence yet);
+  (B) accept the bare hint row now.
+
+  Who decides: Ted/CTO, after reading a live idle Claude pane on a healthy install.
+  Blocks: nothing today; would block retire.sh on such installs.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-20T15:55:48-00:00
+references: []
+log_events:
+- time: 2026-10-20T15:55:48-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
