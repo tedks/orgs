@@ -1,0 +1,20 @@
+id: orgs-tmux-idle-plan-status
+title: Refresh imported tmux-message Codex idle-layout plan status
+desc: 'The imported .planning/tmux-message-codex-idle-layout.md still says source
+  PR #13 is unmerged and implementation is pending, though #13 merged as d2117cd and
+  the final source sync is in orgs PR #34. Update its current-state header and outcome
+  to the verified state, preserving the original plan history. This was a nonblocking
+  docs nit in final-sync council.'
+type: task
+component: docs
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-10-30T17:18:09-00:00
+references: []
+log_events:
+- time: 2026-10-30T17:18:09-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
