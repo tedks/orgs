@@ -29,3 +29,10 @@ log_events:
     scanned separately and has zero such identifiers; this remains a nonblocking hardening
     follow-up. Reassess the issue''s URL-punctuation item against the exact public-project
     exemption added in PR #34.'
+- time: 2026-10-30T02:15:22-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Final tier-drift fix-delta review returned CLEAN. Claude noted a desired
+    fail-closed behavior: bare /home/u without trailing slash is flagged. Add a focused
+    regression assertion when hardening this guard so a later edit does not broaden
+    the synthetic exemption.'
