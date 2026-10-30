@@ -4,8 +4,9 @@ This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
 `consolidation` branch. Current state: Phase 2 is in progress. The public
 agent-skills tip has been imported and its files moved into direct orgs paths;
 the old vendor snapshot is removed. Draft orgs PR #34 is open at `17994ec`.
-The private installer PR, tracker merge, and host cutover remain pending. No
-live host links have changed. Tier-drift remains behind its separate ruling.
+The private installer draft PR is open and the tracker histories are merged
+at `e92c5f3`. Council review and host cutover remain pending. No live host
+links have changed. Tier-drift remains behind its separate ruling.
 
 ## Purpose / Big Picture
 
@@ -34,8 +35,13 @@ new source path before any host cutover.
 - [x] (2026-10-29) Finished direct skill discovery, obsolete vendor removal,
   source-specific docs, and gates; pushed `17994ec8e6bffb0d29309052e591a21af4c353f1`
   and opened draft orgs PR #34.
-- [ ] Merge the public issue tracker history and preserve all 57 IDs.
-- [ ] Finish the private dotfiles installer PR and review both changes.
+- [x] (2026-10-29) Merged public issue tracker histories at
+  `e92c5f3420aca22ec5f97f14231ee86b4a0c25a6`, pushed the metadata branch,
+  ran `ditz sync`, and verified one source and one existing issue through CLI.
+- [x] (2026-10-29) Opened the private dotfiles installer draft PR; its
+  fixture tests and scratch skill installation passed.
+- [ ] Council review both draft PRs, fix findings, and rerun the exact-head
+  gates before requesting readiness.
 - [ ] Prepare public `orgs` and private `dotfiles` draft PRs, preserve source
   history, and run local and scratch-prefix gates.
 - [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes, final synchronization,
@@ -109,9 +115,9 @@ new source path before any host cutover.
 
 Phase 1 mapped the move and isolated the private tier-drift publication gate.
 The public source import is in draft PR #34, with its history and full
-Nix/package checks. The private installer branch passed fixture tests and
-scratch skill installation; its PR, tracker integration, and host cutover
-remain pending.
+Nix/package checks. The private installer draft passed fixture tests and
+scratch skill installation. The tracker merge is delivered. Council review,
+source final sync, and host cutover remain pending.
 
 ## Context and Orientation
 
@@ -301,6 +307,10 @@ passed, and the scoped setup-leak test passed 2 cases.
 The scratch install cloned the imported orgs branch into an owned temporary
 home, linked 25 Codex skills plus Claude's skills directory, preserved
 Codex's `.system`, and installed without touching live host links.
+The metadata merge `e92c5f3` has parents `2484ef2` and `449fc7a`. Its tree
+contains 57 issue YAML files with 57 distinct IDs and the existing orgs
+project identity; `ditz sync` succeeded and representative issues from both
+sources resolved through `ditz show`.
 
 ## Interfaces and Dependencies
 
@@ -316,3 +326,5 @@ Revision note (2026-10-29): recorded the Phase 2 source import, direct path
 transition, and test-scope adjustment after the first gate runs.
 Revision note (2026-10-29): recorded exact gate and PR evidence, plus recovery
 from the unsafe default rebase attempt without changing the tested tree.
+Revision note (2026-10-29): recorded the delivered tracker merge and private
+installer draft before the review gate.
