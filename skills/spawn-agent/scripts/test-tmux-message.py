@@ -636,6 +636,18 @@ class DeliveryTests(unittest.TestCase):
             deliver(t)
         self.assertEqual(t.actions, [])
 
+    def test_claude_image_placeholder_sample_at_readiness_deadline(self):
+        t = Terminal(draft='[Image #5]')
+        t.harness = 'claude'
+        original_frame = t.frame
+        def delayed_sample():
+            t.now = 10
+            return original_frame()
+        t.frame = delayed_sample
+        with self.assertRaisesRegex(m.DeliveryError, 'image-placeholder'):
+            deliver(t)
+        self.assertEqual(t.actions, [])
+
     def test_claude_image_placeholder_in_transcript_is_not_live_input(self):
         t = Terminal()
         t.harness = 'claude'
