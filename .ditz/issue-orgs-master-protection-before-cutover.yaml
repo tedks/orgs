@@ -16,8 +16,8 @@ type: task
 component: open-questions
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: unstarted
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-10-30T01:29:51-00:00
 references: []
 log_events:
@@ -33,3 +33,7 @@ log_events:
     non_fast_forward, deletion. Pull-request parameters exactly match agent-skills
     ruleset 25040392; bypass_actors []; required_status_checks absent. Actions remain
     disabled. Read-back verified via repos/tedks/orgs/rulesets/26175107 and repos/tedks/orgs/rules/branches/master.'
+- time: 2026-10-30T01:31:30-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: Applied and read back protect-master ruleset 26175107 under CONSOL-R3
