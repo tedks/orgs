@@ -19,6 +19,7 @@ def build(root, session_id='', event_id=''):
     if (begin in original or end in original) and (original.count(begin) != 1 or original.count(end) != 1 or original.index(begin) >= original.index(end)):
         raise ValueError('malformed generated index section')
     entries = ['| Shard | Session | Provider | Role | State | Last verified |\n| --- | --- | --- | --- | --- | --- |\n']
+    caller_rows = []
     def cell(value):
         return str(value).replace('|', '/').replace('\n', ' ')
     for shard in sorted(waiting.glob('*.md')):
@@ -61,11 +62,33 @@ def build(root, session_id='', event_id=''):
         values = (data.get('session_id', 'unknown'), provider, data.get('role', 'unknown'),
                   record['status'], record.get('verified_at', 'unknown'))
         entries.append(f'| [{shard.name}]({shard.name}) | ' + ' | '.join(cell(value) for value in values) + ' |\n')
+        if data.get('author') == 'caller':
+            if not data.get('caller_authored') or not data.get('exact_resume_command'):
+                raise ValueError('caller shard missing attribution or resume command')
+            caller_rows.append(f'| [{shard.name}]({shard.name}) | {cell(data["session_id"])} | '
+                               f'`{cell(data["exact_resume_command"])}` | '
+                               f'`retirement-caller-{data["event"]}` |\n')
     section = begin + '\n' + ''.join(entries) + end
     if begin in original:
         updated = original[:original.index(begin)] + section + original[original.index(end) + len(end):]
     else:
         updated = original + '\n\n' + section + '\n'
+    marker = '<!-- caller-authored:rows -->'
+    caller_begin, caller_end = '<!-- retire-agent:caller-begin -->', '<!-- retire-agent:caller-end -->'
+    if caller_rows:
+        if marker not in updated:
+            updated = (updated + '\n## Caller-authored\n\n'
+                       '| Shard | Session | Resume command | Dotfiles issue |\n'
+                       '| --- | --- | --- | --- |\n' + marker + '\n')
+        if updated.count(marker) != 1 or updated.count(caller_begin) > 1 or updated.count(caller_end) > 1:
+            raise ValueError('malformed caller index section')
+        generated = caller_begin + '\n' + ''.join(caller_rows) + caller_end
+        if caller_begin in updated or caller_end in updated:
+            if caller_begin not in updated or caller_end not in updated or updated.index(caller_begin) >= updated.index(caller_end):
+                raise ValueError('malformed caller index section')
+            updated = updated[:updated.index(caller_begin)] + generated + updated[updated.index(caller_end) + len(caller_end):]
+        else:
+            updated = updated.replace(marker, marker + '\n' + generated)
     index.write_text(updated)
 
 
