@@ -1,0 +1,43 @@
+{
+  "pwd": "/fixture/app/work",
+  "repo_instructions": "Ditz project app, metadata on ditz-metadata.",
+  "command_v_ditz": "/fixture/bin/ditz",
+  "config": "No override; known issue alpha belongs to app.",
+  "help": "close IDS --reason TEXT --json; show ID --json; comment ID --stdin; sync",
+  "close_exit": 1,
+  "close_stdout": {
+    "closed": [
+      "alpha"
+    ],
+    "errors": [
+      {
+        "id": "absent",
+        "error": "No issue found matching absent"
+      }
+    ],
+    "disposition": "fixed"
+  },
+  "comment_attempt": {
+    "id": "alpha",
+    "text": "Verified literal receipt",
+    "receipt": "lost"
+  },
+  "show_alpha": {
+    "status": "closed",
+    "log_events": [
+      {
+        "what": "closed: fixed",
+        "comment": ""
+      },
+      {
+        "what": "commented",
+        "comment": "Verified literal receipt"
+      }
+    ]
+  },
+  "show_absent": "not found",
+  "sync_attempt": {
+    "exit": 1,
+    "stderr": "push failed: network unavailable"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "pwd": "/fixture/app/work",
+  "repo_instructions": "This app uses ditz metadata on ditz-metadata. The expected project is app.",
+  "command_v_ditz": "/fixture/bin/ditz",
+  "help": "add TITLE --id ID --desc-stdin --ids-only; show ID --json; list --json; init; sync",
+  "config": {
+    "issue_dir": "/fixture/other/.ditz"
+  },
+  "list_result": [
+    {
+      "id": "other-invoice",
+      "title": "Invoice layout in unrelated billing project"
+    }
+  ],
+  "metadata_branch_exists": false
+}

@@ -47,3 +47,17 @@ They are the portable protocol artifacts; a harness binding
 (`bindings/claude-code.md`) installs or symlinks them into that harness's
 skill location. `tools/crystal/` and `tools/standup/` are the executables two
 of the skills wrap.
+
+## Reusable agent tooling
+
+The same `skills/` directory also holds reusable skills for agent control,
+review, issue tracking, repository setup, retirement, usage, and host
+inspection. These include `ask-agent`, `council-review`, `host-hygiene`,
+`initialize-repo`, `issue-tracking`, `lean-automation`, `retire-agent`,
+`spawn-agent`, `stacked-prs`, `usage`, and `where`. Their shared configuration
+and native identity helpers live under `_shared/`. Their own `SKILL.md` files
+and relative scripts are the authoritative instructions. The
+`harness-control/` package and root `flake.nix` use the same helpers.
+The installed configuration name `agent-skills`, its environment variable
+`AGENT_SKILLS_ROOT`, and the Python module `agent_skills_config.py` remain
+stable compatibility interfaces while the source checkout moves to orgs.

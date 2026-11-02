@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-harness-control"
+version = "0.1.0"
+description = "Pinned self-status and lifecycle MCP server for terminal agents"
+requires-python = ">=3.10"
+dependencies = ["mcp>=1.2.0,<2"]
+
+[tool.setuptools]
+py-modules = [
+  "_skills_native",
+  "codex_status",
+  "harness_control",
+  "harness_identity",
+  "harness_status",
+  "server",
+  "session_binding",
+]

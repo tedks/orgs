@@ -1,0 +1,453 @@
+# tier-drift model catalog.
+#
+# This is the one input you edit by hand. When a model ships, add an entry
+# and re-run; `tier-drift` also warns about any model it sees in your logs
+# that is missing here.
+#
+# Rules this file is held to (catalog.py validates them):
+#   - Every score names its SOURCE. The same model's SWE-bench Verified score
+#     was measured 12 points apart by different sources, so insights only
+#     treat a comparison as strong when both scores share a source.
+#   - Leave a field out rather than guess. A missing price or release date
+#     makes the model drop out of the insights that need it, which is
+#     correct; an invented one produces a confident wrong recommendation.
+#   - cache_read_basis says whether a cached-input rate was published or is
+#     assumed at one tenth of input. Cached reads are routinely over 95% of
+#     a long agentic workload's input tokens, so the difference matters.
+#
+# tier: 1 cheap, 2 mid, 3 flagship, 4 frontier. It is a price class within
+#   a vendor, not a capability ranking: claude-opus-5 (tier 3) outscores
+#   claude-fable-5 (tier 4) on SWE-bench Verified.
+# status: active | legacy (still served, older) | superseded (a newer model
+#   exists; availability unconfirmed) | deprecated | retired
+# successor: a same-vendor model that is a drop-in upgrade at the same or
+#   lower price. Only set it when that is true.
+
+catalog_version = 1
+as_of = "2026-09-21"
+
+# ----------------------------------------------------------------- sources
+
+[sources.anthropic]
+kind = "vendor"
+name = "Anthropic release notes and launch announcements"
+url = "https://platform.claude.com/docs/en/release-notes/overview"
+
+[sources.anthropic-system-card]
+kind = "vendor"
+name = "Anthropic system card (averaged over repeated trials)"
+
+[sources.openai]
+kind = "vendor"
+name = "OpenAI launch benchmark tables"
+url = "https://openai.com/index/gpt-6-astra/"
+
+[sources.aggregate]
+kind = "third-party"
+name = "Third-party benchmark aggregators (harness varies by site)"
+
+[sources.arc-prize]
+kind = "third-party"
+name = "ARC Prize Foundation"
+
+# -------------------------------------------------------------- benchmarks
+
+[benchmarks.swe-bench-verified]
+name = "SWE-bench Verified"
+note = "Saturating above 95% and contaminated: some tasks' gold patches were in training data."
+
+[benchmarks.swe-bench-pro]
+name = "SWE-bench Pro"
+note = "Scale AI's contamination-resistant successor to SWE-bench Verified."
+
+[benchmarks.terminal-bench-2-1]
+name = "Terminal-Bench 2.1"
+
+[benchmarks.terminal-bench-4-0]
+name = "Terminal-Bench 4.0"
+note = "Published by both Anthropic and OpenAI on the same version."
+
+[benchmarks.terminal-bench-science-0-1]
+name = "Terminal-Bench-Science 0.1"
+
+[benchmarks.frontier-bench-0-1]
+name = "Frontier-Bench v0.1"
+
+[benchmarks.frontiercode-1-1-main]
+name = "FrontierCode 1.1 (Main)"
+
+[benchmarks.frontiercode-1-1-extended]
+name = "FrontierCode 1.1 (Extended)"
+
+[benchmarks.arc-agi-2]
+name = "ARC-AGI-2"
+
+[benchmarks.arc-agi-3]
+name = "ARC-AGI-3"
+
+[benchmarks.gpqa-diamond]
+name = "GPQA Diamond"
+
+[benchmarks.hle-tools]
+name = "Humanity's Last Exam (with tools)"
+
+[benchmarks.gdpval-aa-v2]
+name = "GDPval-AA v2"
+unit = "Elo"
+
+[benchmarks.osworld-verified]
+name = "OSWorld-Verified"
+
+[benchmarks.osworld-2-0]
+name = "OSWorld 2.0"
+
+[benchmarks.deepswe-1-1]
+name = "DeepSWE v1.1"
+
+[benchmarks.frontiermath-t4]
+name = "FrontierMath Tier 4"
+
+[benchmarks.sre-bench]
+name = "SRE-Bench (1 attempt)"
+
+# ============================================================== Anthropic
+
+[[models]]
+id = "claude-fable-5-1"
+vendor = "Anthropic"
+family = "Fable"
+tier = 4
+released = "2026-09-01"
+status = "active"
+context = 1_000_000
+price = { in = 10.0, out = 50.0, cache_read = 0.25, cache_read_basis = "published" }
+scores = [
+  { bench = "terminal-bench-4-0", score = 55.8, source = "anthropic" },
+  { bench = "terminal-bench-science-0-1", score = 52.6, source = "anthropic" },
+  { bench = "swe-bench-pro", score = 81.2, source = "aggregate" },
+  { bench = "arc-agi-2", score = 90.0, source = "arc-prize" },
+]
+
+[[models]]
+id = "claude-fable-5"
+vendor = "Anthropic"
+family = "Fable"
+tier = 4
+released = "2026-06-09"
+status = "legacy"
+context = 1_000_000
+price = { in = 10.0, out = 50.0, cache_read = 1.0, cache_read_basis = "published" }
+successor = "claude-fable-5-1"
+scores = [
+  { bench = "swe-bench-verified", score = 95.0, source = "anthropic" },
+  { bench = "swe-bench-pro", score = 80.0, source = "anthropic" },
+  { bench = "terminal-bench-4-0", score = 42.0, source = "anthropic" },
+  { bench = "terminal-bench-science-0-1", score = 24.7, source = "anthropic" },
+  { bench = "frontier-bench-0-1", score = 33.7, source = "anthropic" },
+  # OpenAI's own GPT-6 Astra table, which put Fable 5 ahead of Astra here.
+  { bench = "frontiercode-1-1-main", score = 53.5, source = "openai" },
+  { bench = "frontiercode-1-1-extended", score = 64.9, source = "openai" },
+]
+
+[[models]]
+id = "claude-opus-5"
+vendor = "Anthropic"
+family = "Opus"
+tier = 3
+released = "2026-07-24"
+status = "active"
+context = 1_000_000
+price = { in = 5.0, out = 25.0, cache_read = 0.5, cache_read_basis = "assumed-0.1x" }
+scores = [
+  { bench = "swe-bench-verified", score = 96.0, source = "anthropic" },
+  { bench = "swe-bench-pro", score = 79.2, source = "anthropic" },
+  { bench = "frontier-bench-0-1", score = 43.3, source = "anthropic" },
+  { bench = "arc-agi-3", score = 30.2, source = "anthropic" },
+  { bench = "gpqa-diamond", score = 84.1, source = "anthropic" },
+  { bench = "frontiercode-1-1-main", score = 53.4, source = "openai" },
+]
+
+[[models]]
+id = "claude-opus-4-8"
+vendor = "Anthropic"
+family = "Opus"
+tier = 3
+released = "2026-05-28"
+status = "active"
+context = 1_000_000
+price = { in = 5.0, out = 25.0, cache_read = 0.5, cache_read_basis = "assumed-0.1x" }
+successor = "claude-opus-5"
+scores = [
+  { bench = "swe-bench-verified", score = 88.6, source = "aggregate" },
+  # Anthropic's Sonnet 5 launch table (30 June 2026): one harness, one day.
+  { bench = "swe-bench-pro", score = 69.2, source = "anthropic" },
+  { bench = "hle-tools", score = 57.9, source = "anthropic" },
+  { bench = "gdpval-aa-v2", score = 1615, source = "anthropic" },
+  # Anthropic's Opus 5 launch.
+  { bench = "frontier-bench-0-1", score = 18.7, source = "anthropic" },
+  { bench = "arc-agi-3", score = 1.5, source = "anthropic" },
+]
+
+[[models]]
+id = "claude-opus-4-7"
+vendor = "Anthropic"
+family = "Opus"
+tier = 3
+released = "2026-04-16"
+status = "active"
+context = 1_000_000
+price = { in = 5.0, out = 25.0, cache_read = 0.5, cache_read_basis = "assumed-0.1x" }
+successor = "claude-opus-5"
+scores = [{ bench = "swe-bench-verified", score = 87.6, source = "aggregate" }]
+
+[[models]]
+id = "claude-opus-4-6"
+vendor = "Anthropic"
+family = "Opus"
+tier = 3
+released = "2026-02-05"
+status = "active"
+context = 1_000_000
+price = { in = 5.0, out = 25.0, cache_read = 0.5, cache_read_basis = "assumed-0.1x" }
+successor = "claude-opus-5"
+scores = [{ bench = "swe-bench-verified", score = 80.84, source = "anthropic-system-card" }]
+
+[[models]]
+id = "claude-opus-4-5-20251101"
+aliases = ["claude-opus-4-5"]
+vendor = "Anthropic"
+family = "Opus"
+tier = 3
+released = "2025-11-24"
+status = "legacy"
+context = 200_000
+price = { in = 5.0, out = 25.0, cache_read = 0.5, cache_read_basis = "assumed-0.1x" }
+successor = "claude-opus-5"
+scores = [{ bench = "swe-bench-verified", score = 80.9, source = "anthropic" }]
+
+[[models]]
+id = "claude-sonnet-5"
+vendor = "Anthropic"
+family = "Sonnet"
+tier = 2
+released = "2026-06-30"
+status = "active"
+context = 1_000_000
+price = { in = 2.0, out = 10.0, cache_read = 0.2, cache_read_basis = "assumed-0.1x" }
+scores = [
+  # Third-party only; another aggregator reported 72.7. Treat as approximate.
+  { bench = "swe-bench-verified", score = 85.2, source = "aggregate" },
+  { bench = "swe-bench-pro", score = 63.2, source = "anthropic" },
+  { bench = "terminal-bench-2-1", score = 80.4, source = "anthropic" },
+  { bench = "osworld-verified", score = 81.2, source = "anthropic" },
+  { bench = "hle-tools", score = 57.4, source = "anthropic" },
+  { bench = "gdpval-aa-v2", score = 1618, source = "anthropic" },
+]
+
+[[models]]
+id = "claude-sonnet-4-6"
+vendor = "Anthropic"
+family = "Sonnet"
+tier = 2
+released = "2026-02-17"
+status = "active"
+context = 1_000_000
+# Anthropic's release notes list $2.50/$10; the Claude API model catalogue and
+# the Sonnet 5 launch comparison both list $3/$15. Two of three sources agree.
+price = { in = 3.0, out = 15.0, cache_read = 0.3, cache_read_basis = "assumed-0.1x" }
+successor = "claude-sonnet-5"
+scores = [
+  { bench = "swe-bench-pro", score = 58.1, source = "anthropic" },
+  { bench = "terminal-bench-2-1", score = 67.0, source = "anthropic" },
+  { bench = "osworld-verified", score = 78.5, source = "anthropic" },
+  { bench = "hle-tools", score = 46.8, source = "anthropic" },
+]
+
+[[models]]
+id = "claude-sonnet-4-5-20250929"
+aliases = ["claude-sonnet-4-5"]
+vendor = "Anthropic"
+family = "Sonnet"
+tier = 2
+released = "2025-09-29"
+status = "legacy"
+context = 200_000
+price = { in = 3.0, out = 15.0, cache_read = 0.3, cache_read_basis = "assumed-0.1x" }
+successor = "claude-sonnet-5"
+
+[[models]]
+id = "claude-haiku-4-5-20251001"
+aliases = ["claude-haiku-4-5"]
+vendor = "Anthropic"
+family = "Haiku"
+tier = 1
+released = "2025-10-15"
+status = "active"
+context = 200_000
+price = { in = 1.0, out = 5.0, cache_read = 0.1, cache_read_basis = "assumed-0.1x" }
+
+# ================================================================= OpenAI
+
+[[models]]
+id = "gpt-6-astra"
+vendor = "OpenAI"
+family = "GPT-6"
+tier = 4
+released = "2026-09-03"
+status = "active"
+context = 1_050_000
+price = { in = 10.0, out = 50.0, cache_read = 1.0, cache_read_basis = "published" }
+scores = [
+  { bench = "terminal-bench-4-0", score = 57.9, source = "openai" },
+  { bench = "deepswe-1-1", score = 74.1, source = "openai" },
+  { bench = "osworld-2-0", score = 72.6, source = "openai" },
+  { bench = "frontiermath-t4", score = 97.6, source = "openai" },
+  { bench = "sre-bench", score = 88.0, source = "openai" },
+  { bench = "frontiercode-1-1-main", score = 53.3, source = "openai" },
+  { bench = "frontiercode-1-1-extended", score = 64.5, source = "openai" },
+]
+
+[[models]]
+id = "gpt-5.6-sol"
+vendor = "OpenAI"
+family = "GPT-5.6"
+tier = 3
+released = "2026-07-09"
+status = "active"
+# List price. OpenAI cut Sol's API price by over 20% for three months from
+# 2026-08-21; the list rate is kept so comparisons are not tied to a promo.
+price = { in = 5.0, out = 30.0, cache_read = 0.5, cache_read_basis = "assumed-0.1x" }
+scores = [
+  { bench = "terminal-bench-4-0", score = 37.3, source = "openai" },
+  { bench = "deepswe-1-1", score = 72.7, source = "openai" },
+  { bench = "osworld-2-0", score = 65.7, source = "openai" },
+  { bench = "frontiermath-t4", score = 83.0, source = "openai" },
+  { bench = "sre-bench", score = 55.9, source = "openai" },
+  # From Anthropic's Opus 5 launch table.
+  { bench = "arc-agi-3", score = 7.8, source = "anthropic" },
+]
+
+[[models]]
+id = "gpt-5.6-terra"
+vendor = "OpenAI"
+family = "GPT-5.6"
+tier = 2
+released = "2026-07-09"
+status = "active"
+# After OpenAI's 2026-07-30 cut (launched at $2.50/$15).
+price = { in = 2.0, out = 12.0, cache_read = 0.2, cache_read_basis = "assumed-0.1x" }
+
+[[models]]
+id = "gpt-5.6-luna"
+vendor = "OpenAI"
+family = "GPT-5.6"
+tier = 1
+released = "2026-07-09"
+status = "active"
+# After OpenAI's 2026-07-30 cut (launched at $1/$6).
+price = { in = 0.2, out = 1.2, cache_read = 0.02, cache_read_basis = "assumed-0.1x" }
+
+[[models]]
+id = "gpt-5.5"
+vendor = "OpenAI"
+family = "GPT-5.5"
+tier = 3
+released = "2026-04-23"
+status = "superseded"
+
+[[models]]
+id = "gpt-5.4"
+vendor = "OpenAI"
+family = "GPT-5.4"
+tier = 3
+released = "2026-03-05"
+status = "superseded"
+
+[[models]]
+id = "gpt-5.3-codex"
+vendor = "OpenAI"
+family = "GPT-5.3"
+tier = 3
+released = "2026-02-05"
+status = "superseded"
+
+[[models]]
+id = "gpt-5.2-codex"
+vendor = "OpenAI"
+family = "GPT-5.2"
+tier = 3
+status = "superseded"
+
+[[models]]
+id = "gpt-5.2"
+vendor = "OpenAI"
+family = "GPT-5.2"
+tier = 3
+released = "2025-12-11"
+status = "superseded"
+
+[[models]]
+id = "gpt-5.1-codex-max"
+vendor = "OpenAI"
+family = "GPT-5.1"
+tier = 3
+released = "2025-11-19"
+status = "superseded"
+
+[[models]]
+id = "gpt-5.1-codex"
+vendor = "OpenAI"
+family = "GPT-5.1"
+tier = 3
+released = "2025-11-19"
+status = "superseded"
+
+[[models]]
+id = "gpt-5.1-codex-mini"
+vendor = "OpenAI"
+family = "GPT-5.1"
+tier = 1
+status = "superseded"
+
+[[models]]
+id = "gpt-5-codex"
+vendor = "OpenAI"
+family = "GPT-5"
+tier = 3
+status = "superseded"
+
+# ================================================================= Google
+# Release dates and prices were not established for the Gemini line, so
+# these entries identify and tier the models but take no part in price or
+# adoption-lag insights until those fields are filled in.
+
+[[models]]
+id = "gemini-3.1-pro"
+# Antigravity reports its human-readable model setting, not an API id.
+aliases = ["gemini-3.1-pro-preview", "Gemini 3.1 Pro (High)", "Gemini 3.1 Pro (Low)"]
+vendor = "Google"
+family = "Gemini 3.1"
+tier = 3
+status = "active"
+
+[[models]]
+id = "gemini-3-flash"
+aliases = ["gemini-3-flash-preview"]
+vendor = "Google"
+family = "Gemini 3"
+tier = 2
+status = "active"
+
+[[models]]
+id = "gemini-3.1-flash-lite"
+vendor = "Google"
+family = "Gemini 3.1"
+tier = 1
+status = "active"
+
+[[models]]
+id = "gemini-2.5-pro"
+vendor = "Google"
+family = "Gemini 2.5"
+tier = 3
+status = "superseded"
