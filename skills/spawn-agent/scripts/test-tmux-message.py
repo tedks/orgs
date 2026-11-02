@@ -623,6 +623,7 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaisesRegex(m.DeliveryError, 'image-placeholder'):
             deliver(t)
         self.assertEqual(t.actions, [])
+        self.assertEqual((t.pastes, t.enters), (0, 0))
 
     def test_claude_wrapped_image_placeholder_defers_before_any_input(self):
         frame = codex_fixture_frame('SYNTHETIC-claude-image-placeholder-wrapped')
