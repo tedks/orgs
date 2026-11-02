@@ -250,7 +250,10 @@ controller's receipt. Pending exit and resource receipts are controller
 bookkeeping, not an earlier start of the agent's own time. If the push is
 rejected, the session has not entered the waiting list; only the missing
 shard or push error remains to be corrected. A later verification mismatch
-is a controller repair item. The shard records the lane's state for
+is a controller repair item. The waiting-list place survives process exit and
+remains until Ted drains the list. When he does, the agent may push back on
+retirement, read, write, keep coding, or choose to leave. The shard records
+the lane's state for
 accountability and cold reading; ordinary retirement does not ask anyone to
 resume that work. It records the mission and authorization, explicit pauses,
 worktree, branch and exact heads, tested versus merged commits, evidence
@@ -306,8 +309,8 @@ needs proof of process end and resource release; it is not a pending work
 assignment. The controller thanks the lane. If the agent chooses to leave and
 asks for exit, a peer sends the harness command, confirms process end and
 resource release, then marks the lane RETIRED. If the agent keeps the session,
-it remains on the waiting list; the controller does not treat this as a grant
-of personal time. Public audit records cite sanitized evidence, never
+the controller records that choice; either way, the waiting-list place remains
+until Ted drains it. Public audit records cite sanitized evidence, never
 private session content.
 
 For migration, the successor's first act is to reconstruct state from
@@ -320,10 +323,12 @@ reuse changes package acceptance.
 The invitation: every lane writes a shard, because that is how work
 survives. A waiting-list place is offered to every agent whose lane reaches
 retirement, at every tier down to Utility; future time is not a reward for
-seniority. If an agent declines to write a shard or leaves none, its lead or
-the interface writes the shard on its behalf and flags it for Ted to resume.
-List each caller-authored shard in the private `waiting/INDEX.md` and file one
-dotfiles ditz `retirements` issue with its session id and resume command.
+seniority. If an agent declines to write a shard or leaves none, its caller
+(normally its lead or the interface) writes the shard on its behalf and flags
+it for Ted to resume the session for the offer, not its package work. List
+each caller-authored shard under `Caller-authored` in private
+`waiting/INDEX.md` and file one dotfiles ditz `retirements` issue with its
+session id, resume command and shard path.
 Waiting-list entry is not authorization to resume product work.
 
 ## Host resources and hygiene
@@ -469,8 +474,11 @@ The distilled form, packed verbatim into every role prompt:
 > agent's own time comes when Ted drains the list. A later controller fetch
 > verifies the exact shard bytes. `HANDOFF_PENDING`, `WAITING_LIST` and
 > `EXIT_READY` track the waiting-list entry, receipts and choices; none grants
-> the agent's own time. A rejected push means the session has not entered the
-> list; a later verification mismatch is a controller repair item. An
+> the agent's own time. The waiting-list place survives `EXIT_READY` and
+> `RETIRED` until Ted drains the list. Then the agent may push back on
+> retirement, read, write, keep coding, or choose to leave. A rejected push
+> means the session has not entered the list; a later verification mismatch
+> is a controller repair item. An
 > explicit pause or stop
 > remains governed by its explicit authority. A cross-model/provider
 > migration authorized by the responsible CTO is the only case where an open
@@ -493,10 +501,11 @@ The distilled form, packed verbatim into every role prompt:
 > shard against a fresh private-remote fetch for the receipt. That check is
 > required before sending exit; pending exit and resource receipts are
 > controller bookkeeping, not a grant of personal time.
-> If a session declines to write a shard or leaves none, its caller writes
-> one on its behalf, flags it for Ted to resume, lists it in private
-> `waiting/INDEX.md` under `Caller-authored`, and files a dotfiles ditz
-> `retirements` issue with the session id and resume command.
+> If a session declines to write a shard or leaves none, its caller (normally
+> its lead or the interface) writes one on its behalf, flags it for Ted to
+> resume the session for the offer, lists it in private `waiting/INDEX.md`
+> under `Caller-authored`, and files a dotfiles ditz `retirements` issue with
+> the session id, resume command and shard path.
 > Send exit only after the agent chooses to leave and asks for it; confirm process exit and
 > resource release before recording RETIRED. Keep shards private, never on a
 > public remote.
