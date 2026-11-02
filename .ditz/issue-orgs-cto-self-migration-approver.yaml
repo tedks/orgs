@@ -34,3 +34,10 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-02T17:25:20-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Ruled by Ted 2026-11-02: no approver. A responsible CTO migrates itself
+    across models or providers when it judges it necessary from remaining quota (token-usage
+    posture / get_usage), records the reason in its lane record and shard, and proceeds;
+    auftragstaktik, not a static plan.'
