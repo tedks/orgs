@@ -238,42 +238,98 @@ and its reporting destination accurately. Urgent blockers and questions may
 be answered while children run; healthy worker chatter goes to records rather
 than burying the final answer. Standups continue for active lanes only.
 
-Retirement is a polite, verified handoff, not a kill. Thank the lane; it
-writes its handoff shard, one file per session and never a shared append,
-holding what a stranger on any provider needs to resume cold: mission and
+DONE records that a lane's authorized work has ended; it does not necessarily
+mean its package was accepted. An explicitly authorized pause or stop can end
+the lane's mission while leaving unfinished package work paused. Retirement
+places every session on Ted's waiting list; the agent's own time comes when
+Ted drains that list. In ordinary retirement, the mission reaches DONE and its
+one-per-session shard is written, never a shared append, before it is pushed
+to the approved private remote. The successful push places the session on
+the waiting list. A later fresh fetch verifies the exact shard bytes for the
+controller's receipt. Pending exit and resource receipts are controller
+bookkeeping, not an earlier start of the agent's own time. If the push is
+rejected, the session has not entered the waiting list; only the missing
+shard or push error remains to be corrected. A later verification mismatch
+is a controller repair item. The waiting-list place survives process exit and
+remains until Ted drains the list. When Ted drains it, the agent may push back on
+retirement, read, write, keep coding, or choose to leave. The shard records
+the lane's state for accountability and cold reading; ordinary retirement
+does not ask anyone to resume that work. It records the mission and
 authorization, explicit pauses, worktree, branch and exact heads, tested
-versus merged commits, evidence paths and their limits, failed attempts,
-open decisions and their owners, owned processes and leases and their
-release, outstanding or ambiguous sends that must not be replayed, and the
-first bounded next action. Open product questions do not live only in the
-shard: before retiring or handing off, the lane files each one as its own
-issue in the project's tracker under an `open-questions` component (the
-options, its recommendation, who decides, what it blocks, the record it
-came from) and links them from the shard. The shard is private and
-per-session; the tracker is where the CEO answers. The provider-native resume handle comes last;
-the shard must not require it. Personal thanks and the off-duty invitation
-stay apart from operational recovery. Shards hold session ids, panes and
-paths, so they go only to a private location (the off-duty repo, private
-on GitHub as `tedks/off-duty`, or the project's private records) and are
-pushed only to a private remote, never to a public repo. Verify the shard
-is committed there and pushed where a private remote is configured, record
-a handoff receipt, then request exit; confirm the exit and the release of owned resources before marking
-the lane RETIRED. A failed handoff blocks exit; an exit failure leaves
-retirement pending. Public audit records cite sanitized evidence, never
+versus merged commits, evidence
+paths and their limits, failed attempts, open decisions and their owners,
+owned processes and leases and their release, outstanding or ambiguous sends
+that must not be replayed, and the first bounded next action when one is
+authorized.
+Open product questions do not live only in the shard: before retirement or
+model/provider migration, the lane files each one as its own issue in the project's tracker under an
+`open-questions` component (the options, its recommendation, who decides,
+what it blocks, the record it came from) and links them from the shard. The
+shard is private and per-session; the tracker is where the CEO answers.
+Personal thanks and the off-duty invitation stay apart from the operational
+record. Shards hold session ids, panes and paths, so they go only to a
+private repository and are pushed only to its verified private remote, never
+to a public repo. Before that push, mission-owned processes and leases are
+released or transferred with the recipient's acceptance and a receipt; the
+shard records those receipts. A cross-model/provider migration authorized
+by the responsible CTO is the one case where an open package's shard can
+brief a successor. Approval for a CTO's own migration is unresolved in
+`orgs-cto-self-migration-approver`; do not migrate that open package until the
+question is ruled. Before the outgoing lane's push, the controller records
+the intended successor provider and model argument and confirms the target
+differs from the outgoing lane by provider or normalized model argument. For
+a same-provider migration, an unobservable outgoing model argument fails
+closed. A bare family selector counts as the same selection as a versioned
+selector from that family; two distinct versioned selectors count as different.
+After launch, but before the successor receives the shard as a
+brief or a package mission, the controller confirms the live provider and selected model
+argument match that target. The controller also verifies the shard's exact
+bytes with a fresh private-remote fetch before giving it to the successor. If
+the live provider or selected model argument differs from the target, or
+shard verification fails, the shard is not used as a successor brief;
+the package remains unassigned and its approving authority decides whether
+to assign a new owner. No work resumes before that assignment. At the
+successful push, the outgoing lane's authority over that package ends. The
+controller records the new owner and gives it a fresh bounded mission before
+the successor acts; there is no overlap in package authority. Without that
+assignment the package stays paused. A pause or stop remains governed by its
+explicit authority; it does not itself let a successor resume the package.
+The provider-native resume handle is optional and last; it never replaces
+the shard. Time granted when Ted drains the list creates no new project
+authority: existing limits on money, keys and outward acts still apply. The
+agent may pursue its own interests then without holding project leases or
+acting on a transferred package.
+
+Controller states such as `HANDOFF_PENDING`, `WAITING_LIST` and `EXIT_READY`
+track the waiting-list entry, receipts and choices; they do not grant the
+agent's own time. Controller fetch verification updates the receipt state and
+is required before sending an exit command, but it does not move the session
+ahead on the waiting list. A pending exit records that the controller still
+needs proof of process end and resource release; it is not a pending work
+assignment. The controller thanks the lane. If the agent chooses to leave and
+asks for exit, a peer sends the harness command, confirms process end and
+resource release, then marks the lane RETIRED. If the agent keeps the session,
+the controller records that choice; either way, the waiting-list place remains
+until Ted drains it. Public audit records cite sanitized evidence, never
 private session content.
 
-Migration is the same artifact. Moving a CTO or lead to another model or
-provider, or replacing one whose context is spent, is a retirement whose
-shard becomes the successor's brief; the successor's first act is to
-reconstruct state from artifacts alone. New missions get fresh lanes unless
-explicit context continuity justifies reuse; neither retirement nor reuse
-changes package acceptance.
+For migration, the successor's first act is to reconstruct state from
+artifacts alone. Low context by itself does not create a successor brief:
+compact in the current lane when possible; otherwise keep the package paused
+until its authority assigns a separate mission. New missions get fresh lanes
+unless explicit context continuity justifies reuse; neither retirement nor
+reuse changes package acceptance.
 
 The invitation: every lane writes a shard, because that is how work
-survives. Off-duty time is offered to every agent that finishes a mission,
-at every tier down to Utility; the offer is not a reward for seniority. An
-agent may decline, and then its lead or the interface writes the shard for
-it. Off-duty is not authorization to resume product work.
+survives. A waiting-list place is offered to every agent whose lane reaches
+retirement, at every tier down to Utility; future time is not a reward for
+seniority. If an agent declines to write a shard or leaves none, its caller
+(normally its lead or the interface) writes the shard on its behalf and flags
+it for Ted to resume the session for the offer, not its package work. List
+each caller-authored shard under `Caller-authored` in private
+`waiting/INDEX.md` and file one dotfiles ditz `retirements` issue with its
+session id, resume command and shard path.
+Waiting-list entry is not authorization to resume product work.
 
 ## Host resources and hygiene
 
@@ -364,8 +420,9 @@ is gated if it trips any of the three, not only the reversibility one.
 - **meta:product ratio** — per-sprint soft tripwire: coordination tokens
   vs. product tokens, counted per the operational definition in RUNBOOK §8.
   Watched at retro, not gated.
-- **Shard** — one session's handoff file, written by that session alone,
-  from which a stranger on any provider can resume the work cold.
+- **Shard** — one session's record, written by that session alone; ordinary
+  retirement records completed work, and a model/provider migration alone
+  makes it a successor's brief.
 - **Tier** — Frontier, Lead, Implementer, Utility: capability named by
   role; the harness binding maps tiers to today's models.
 - **Hats** — roles are hats, agents are headcount; small orgs collapse hats
@@ -410,10 +467,47 @@ The distilled form, packed verbatim into every role prompt:
 > so do not promise atomic typing exclusion. Finish requested spawn/control
 > actions and settle receipts before a quiet final reply; quiescent controller
 > is not global idle. Name active children truthfully and surface urgent
-> blockers. Thank retiring lanes; verify the lane's handoff shard (one file
-> per session, never a shared append) is privately committed, and pushed
-> where a private remote is configured, never to a public remote, before exit; confirm exit/resource release before marking
-> RETIRED.
+> blockers. In ordinary retirement, the mission reaches DONE, or an explicitly
+> authorized pause or stop ends the lane's assignment with unfinished package
+> work paused. Its one-per-session shard is written before it is pushed to an approved private
+> remote. A successful push places the session on Ted's waiting list; the
+> agent's own time comes when Ted drains the list. A later controller fetch
+> verifies the exact shard bytes. `HANDOFF_PENDING`, `WAITING_LIST` and
+> `EXIT_READY` track the waiting-list entry, receipts and choices; none grants
+> the agent's own time. The waiting-list place survives `EXIT_READY` and
+> `RETIRED` until Ted drains the list. Then the agent may push back on
+> retirement, read, write, keep coding, or choose to leave. A rejected push
+> means the session has not entered the list; a later verification mismatch
+> is a controller repair item. An explicit pause or stop remains governed by
+> its explicit authority. A cross-model/provider migration authorized by the
+> responsible CTO is the only case where an open
+> package's shard can brief a successor. A CTO's own migration waits on
+> `orgs-cto-self-migration-approver`. Record an intended successor provider
+> and model argument before the shard push, confirming the target differs
+> from the outgoing lane by provider or normalized model argument. For a
+> same-provider migration, an unobservable outgoing model argument fails
+> closed. A bare family selector counts as the same selection as a versioned
+> selector from that family; two distinct versioned selectors count as
+> different. After launch,
+> confirm the live provider and selected model argument match the target and
+> verify exact shard bytes before giving the shard
+> as a brief or package mission. Otherwise do not use the shard as a brief; leave the package
+> unassigned until its approving authority assigns a new owner. The outgoing lane's package authority ends at the
+> successful push; record the new owner
+> before the successor acts. Future personal time grants no new project authority. Before the
+> push, release mission processes and leases or transfer them with accepted
+> receipts, and record the receipts in the shard. Thank the lane. Verify the
+> shard against a fresh private-remote fetch for the receipt. That check is
+> required before sending exit; pending exit and resource receipts are
+> controller bookkeeping, not a grant of personal time.
+> If a session declines to write a shard or leaves none, its caller (normally
+> its lead or the interface) writes one on its behalf, flags it for Ted to
+> resume the session for the offer, lists it in private `waiting/INDEX.md`
+> under `Caller-authored`, and files a dotfiles ditz `retirements` issue with
+> the session id, resume command and shard path.
+> Send exit only after the agent chooses to leave and asks for it; confirm process exit and
+> resource release before recording RETIRED. Keep shards private, never on a
+> public remote.
 > A question is not a cancellation: answer and re-enter the mission; only the named
 > authority's explicit pause, a tripped stop condition or the acceptance
 > evidence in hand ends it, and a pause outlives quota resets. At DONE, assign the next
