@@ -140,7 +140,13 @@ def composer(frame, expected_codex_text=None, expected_codex_footer=None):
             if harness == "codex" and styles.dim_span(raw[idx], first):
                 kind = "empty"
                 text = ""
-            elif harness == "claude" and first.startswith('Try '):
+            elif (harness == "claude" and
+                  (first.startswith('Try ') or
+                   (end == idx + 1 and styles.dim_span(raw[idx], first)))):
+                # Claude also paints arbitrary idle suggestions in dim text.
+                # Dim style is a heuristic: the reversible Space/BSpace
+                # probe in ready() must verify that the text disappears
+                # before any paste is authorized.
                 kind = "suggestion"
         return Input(kind, text, idx, end, cursor, harness)
     return Input("unknown")
@@ -482,6 +488,7 @@ class Sender:
         previous = None
         stable_since = self.clock()
         probed = False
+        probe_empty_credit = False
         last_reason = "unsupported-layout"
         seen_composer = False
         consecutive_known = 0
@@ -491,6 +498,8 @@ class Sender:
             fp = inp.fingerprint()
             if now >= deadline:
                 break
+            if probe_empty_credit and inp.kind != "empty":
+                probe_empty_credit = False
             if inp.kind == "modal":
                 raise DeliveryError("modal")
             if inp.kind == "unknown":
@@ -519,7 +528,14 @@ class Sender:
                 stable_since = now
             twice = consecutive_known >= 2 and previous is not None and fp == previous
             previous = fp
-            if twice and now - stable_since >= getattr(self.o, "stable_window", self.o.stable_wait):
+            # The full stability window was already observed before probing a
+            # suggestion. The default 8-second window within a 10-second
+            # readiness budget cannot fit twice; require two fresh empty
+            # samples after the probe instead of restarting that window.
+            # Any intervening nonempty or unreadable sample revokes the credit.
+            settled = (now - stable_since >= getattr(self.o, "stable_window", self.o.stable_wait)
+                       or (probe_empty_credit and inp.kind == "empty"))
+            if twice and settled:
                 if inp.kind == "empty":
                     return frame, inp
                 if (inp.kind == "text" and (not self.typed or styles.command_draft(inp.text))
@@ -541,6 +557,7 @@ class Sender:
                     # suggestion should disappear. Never clear actual text.
                     self.tmux.keys("Space", "BSpace")
                     probed = True
+                    probe_empty_credit = True
                     previous = None
                     stable_since = self.clock()
                 elif inp.kind in {"text", "suggestion"}:
@@ -576,7 +593,10 @@ class Sender:
             raise DeliveryError("input-changed-before-clear")
         if check.kind == "text" and not self.at_end(check):
             home = check
-            self.tmux.keys("End")
+            # Claude Code 2.1.314 in a scratch tmux pane honored Ctrl-E but
+            # ignored terminal End; Codex uses End. Verify the resulting
+            # cursor before appending. Multiline Claude drafts may defer.
+            self.tmux.keys("C-e" if check.harness == "claude" else "End")
             while True:
                 before, check = self.sample()
                 remaining = self.readiness_deadline - self.clock()
