@@ -1,0 +1,27 @@
+id: skills-council-vs-council-review-dedupe
+title: 'Reconcile the global skill set after promotion: council vs council-review,
+  review vs council, ledger naming'
+desc: 'Since dotfiles PR #228 (2026-11-02) all 25 orgs skills are global on every
+  host. Two pairs now overlap in every agent''s skill list: `council` (orgs process
+  skill: cross-provider review to fixpoint) and `council-review` (the reusable skill
+  that implements the same council with the provider-seat matrix the global instructions
+  describe), and `review` (lead''s one-rung-up review) next to both. The global instructions
+  still name /council-review. Decide one of: (a) make `council` the single entry point
+  and turn `council-review` into a thin alias or delete it, updating the global instructions
+  and the merge-gate text; (b) keep both with descriptions that say which to use when;
+  (c) rename. Also check `ledger` (orgs event log) does not collide with how agents
+  refer to the CTO''s ledger file. Owner: dotfiles CTO; Implementer lane after the
+  retirement tool change lands.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-02T18:39:02-00:00
+references: []
+log_events:
+- time: 2026-11-02T18:39:02-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
