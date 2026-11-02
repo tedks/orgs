@@ -151,7 +151,8 @@ For caller-authored shards, the controller lists the shard under
 `Caller-authored` in private `waiting/INDEX.md` and files a dotfiles
 `retirements` issue with the session id, resume command and shard path. A
 missing entry or issue is a controller repair item; it does not cancel the
-place earned by the successful shard push.
+place earned by the successful shard push. The controller attempts both
+records promptly after the push and tracks failures until repaired.
 Mission processes and leases must be released or accepted-transferred before
 the push, with receipts recorded in the shard. The agent may choose to leave
 while the session remains on the waiting list.
