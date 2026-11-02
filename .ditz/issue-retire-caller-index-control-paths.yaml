@@ -1,0 +1,26 @@
+id: retire-caller-index-control-paths
+title: Define caller index handling for control-character worktree paths
+desc: 'Council nit from orgs PR #35. Caller resume commands are validated against
+  the pinned session and rendered copyably in waiting/INDEX.md using numeric character
+  references. The private shard and dotfiles issue retain the plain command. Raw INDEX.md
+  is less readable, and a worktree path containing control characters has no defined
+  copy/paste behavior in a rendered table.
+
+
+  Follow up: decide whether to reject control-character worktree paths before caller
+  publication or add an explicit alternate display for them. Keep normal paths and
+  the private shard/issue command exact. This does not block PR #35: ordinary paths
+  passed a rendered GFM round-trip check and the full local gates.'
+type: task
+component: skills
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-02T19:21:51-00:00
+references: []
+log_events:
+- time: 2026-11-02T19:21:51-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
