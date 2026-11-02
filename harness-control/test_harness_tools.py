@@ -134,6 +134,16 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
                     args=['token-usage'], returncode=0, stdout=json.dumps(expired_five_hour), stderr='')):
             self.assertEqual(server._read_usage_posture(), expired_five_hour)
+        expired_anthropic_weekly = {**posture,
+                                    'scores': {'openai': 1.2, 'anthropic': None},
+                                    'used_percent': {'openai': 60, 'anthropic': None},
+                                    'stale': {'openai': False, 'anthropic': True},
+                                    'staleness': {**posture['staleness'], 'stale': True,
+                                                  'expired': {'anthropic.seven_day': 3600}}}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0, stdout=json.dumps(expired_anthropic_weekly), stderr='')):
+            self.assertEqual(server._read_usage_posture(), expired_anthropic_weekly)
         for stdout in ('not json', '[]', '{"reason":"missing provider"}',
                        '{"provider":"Mars"}', '{"provider":"openai"}'):
             with patch('shutil.which', return_value='/bin/token-usage'), \
@@ -162,8 +172,18 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
             {**posture, 'scores': {'openai': float('nan'), 'anthropic': 0.8}},
             {**posture, 'scores': {'openai': None, 'anthropic': 0.8}},
             {**posture, 'used_percent': {'openai': None, 'anthropic': 40}},
-            {**posture, 'staleness': {**posture['staleness'], 'expired': {'unknown': 10}}},
-            {**posture, 'staleness': {**posture['staleness'], 'expired': {'openai': -1}}},
+            {**posture, 'staleness': {**posture['staleness'], 'stale': True,
+                                      'expired': {'unknown': 10}}},
+            {**expired, 'staleness': {**expired['staleness'], 'expired': {'openai': -1}}},
+            {**expired, 'staleness': {**expired['staleness'], 'expired': {'openai': True}}},
+            {**expired, 'staleness': {**expired['staleness'], 'expired': []}},
+            {**expired, 'staleness': {**expired['staleness'], 'stale': False}},
+            {**expired, 'scores': posture['scores']},
+            {**expired_five_hour, 'used_percent': {'openai': 60, 'anthropic': None}},
+            {**expired_anthropic_weekly, 'used_percent': posture['used_percent']},
+            {**expired, 'stale': {'openai': False, 'anthropic': False}},
+            {**expired, 'gated': {'openai': True, 'anthropic': False}},
+            {**expired_anthropic_weekly, 'stale': {'openai': False, 'anthropic': False}},
             {**posture, 'used_percent': {'openai': float('inf'), 'anthropic': 40}},
             {**posture, 'staleness': None},
             {**posture, 'staleness': {**posture['staleness'], 'path': '/private'}},
