@@ -140,8 +140,11 @@ new source path before any host cutover.
   owner name in the source merge message. OpenAI and Claude council seats
   found no code issue but require Ted's ruling on copying that history; agy
   was unavailable at quota.
-- [ ] Complete the exact-head `nix flake check`, receive the publication
-  ruling, push the source sync, and report `CONSOL-CHECKPOINT-3` step 1.
+- [x] (2026-11-02) `nix flake check` passed all three checks on code head
+  `6439ef6`. `nix build --no-link --print-out-paths .#harness-control`
+  produced `/nix/store/bi636ifwx1fvhf3c66lan0cjmj6yyif5-harness-control`.
+- [ ] Receive the publication ruling, push the source sync, and report
+  `CONSOL-CHECKPOINT-3` step 1.
 - [ ] Merge orgs PR #34 and private dotfiles PR #224 through normal PR merges;
   then deploy framework0 and tower0, record splinter1 pending, archive source,
   and report DONE in the ordered Phase 3 sequence.
