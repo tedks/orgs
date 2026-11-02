@@ -98,6 +98,12 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
             run.assert_called_once_with(
                 ['/bin/token-usage', 'posture', '--no-scan', '--json'], capture_output=True,
                 text=True, encoding='utf-8', errors='strict', timeout=5, check=False)
+        stale_with_no_expiry = {**posture,
+                                'staleness': {**posture['staleness'], 'stale': True, 'expired': {}}}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0, stdout=json.dumps(stale_with_no_expiry), stderr='')):
+            self.assertEqual(server._read_usage_posture(), stale_with_no_expiry)
         # The current producer adds `expired` even when empty. After a weekly
         # reset it emits null scores and usage for that expired meter.
         current = {**posture, 'staleness': {**posture['staleness'], 'expired': {}}}
@@ -192,7 +198,8 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
                                       'expired': {'unknown': 10}}},
             {**expired, 'staleness': {**expired['staleness'], 'expired': {'openai': -1}}},
             {**expired, 'staleness': {**expired['staleness'], 'expired': {'openai': True}}},
-            {**posture, 'staleness': {**posture['staleness'], 'stale': True, 'expired': []}},
+            {**stale_with_no_expiry,
+             'staleness': {**stale_with_no_expiry['staleness'], 'expired': []}},
             {**expired, 'staleness': {**expired['staleness'], 'stale': False}},
             {**expired, 'scores': posture['scores']},
             {**expired_five_hour, 'used_percent': {'openai': 60, 'anthropic': None}},
