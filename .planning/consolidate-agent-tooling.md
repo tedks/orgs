@@ -143,6 +143,11 @@ new source path before any host cutover.
 - [x] (2026-11-02) `nix flake check` passed all three checks on code head
   `6439ef6`. `nix build --no-link --print-out-paths .#harness-control`
   produced `/nix/store/bi636ifwx1fvhf3c66lan0cjmj6yyif5-harness-control`.
+- [x] (2026-11-02) A fresh fake-HOME install of dotfiles PR #224 against
+  local orgs `853d4f2` linked exactly 12 reusable skills for each client,
+  linked zero process skills, and passed the installed MCP smoke test. The
+  executable resolved to the same Nix output above. Filed and synced the
+  nonblocking council nits in `orgs-claude-suggestion-probe-hardening`.
 - [ ] Receive the publication ruling, push the source sync, and report
   `CONSOL-CHECKPOINT-3` step 1.
 - [ ] Merge orgs PR #34 and private dotfiles PR #224 through normal PR merges;
