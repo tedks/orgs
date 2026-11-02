@@ -1,9 +1,12 @@
 # Consolidate agent tooling into orgs
 
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
-`consolidation` branch. Current state: Phase 2 final source sync reached a clean
-two-seat convergence at code head `1736451`. Draft public orgs PR #34 preserves
-the agent-skills and tier-drift imports, with source master as a merge parent.
+`consolidation` branch. Current state: Ted authorized Phase 3 on 2026-11-02.
+Step 1 has a local normal merge of agent-skills master `387f86f9` at `3ccd3b9`
+and a current-tree fixture repair at `6439ef6`. Both council seats found the
+code clean but require Ted's ruling before the public push: upstream #16's
+already-public fixture history retains three identifying footer lines, despite
+the repaired orgs tree. The branch has not been pushed for this step.
 The private installer draft PR #224 is pushed at `0ac21d7` with clean native
 and Claude convergence reviews. Public tracker histories are merged at
 `e92c5f3`. Org master protection is active as ruleset `26175107`. Ted approved
@@ -13,8 +16,8 @@ host-anonymized ratios; the publication question is closed, with provenance
 follow-up filed. Source PRs #13 and #14 are merged and their master tip
 `d2117cd` is a normal merge parent of this branch. The final sync gates passed
 at `4147cc1` and again after the posture-contract fix at `1736451`. The fresh
-scratch install passed at the exact fix head.
-Fleet cutover still awaits `CONSOL-CUTOVER-OK`. No live host links have changed.
+scratch install passed at the exact fix head. No live host links, PR merges,
+or archive settings have changed in Phase 3 yet.
 
 ## Purpose / Big Picture
 
@@ -118,7 +121,30 @@ new source path before any host cutover.
 - [x] (2026-10-30) `nix flake check` passed all three checks on code head
   `1736451` after the posture fix. The package built at
   `/nix/store/i32n7mj4phdlsamxb97xi9kfiavp8x30-harness-control`.
-- [ ] Await explicit `CONSOL-CUTOVER-OK` for host changes and archive work.
+- [x] (2026-11-02) Received `CONSOL-CUTOVER-OK` with ordered Phase 3 steps and
+  a separate post-DONE ruling to promote all 13 process skills globally.
+- [x] (2026-11-02) Fetched source master `387f86f9ea181aae1ca9d82a3d27a39f20133777`
+  (merged PR #16) and merged it normally as second parent of `3ccd3b9`.
+  All eight changed path blobs matched source exactly at that merge.
+- [x] (2026-11-02) The orgs setup-leak guard rejected three captured statusline
+  footer values from source #16. `6439ef6` replaces their identity, checkout
+  path, and quota percentages with synthetic values in the current tree while
+  preserving ANSI byte counts, line counts, cursor fixtures, and source history.
+  Leak guard 4/4, tmux-message 138/138, config 21/21, shell/live transport,
+  and scaffold sync passed on this tree.
+- [x] (2026-11-02) Scanned all seven newly reachable commits, 17 new blobs,
+  and commit messages for fleet names, owner/home paths, addresses, UUIDs,
+  usage values, process markers, and SSH notes. The only real identifying
+  matches are the same three already-public fixture footer lines in source
+  history. Other matches are synthetic UUID/context examples and a public
+  owner name in the source merge message. OpenAI and Claude council seats
+  found no code issue but require Ted's ruling on copying that history; agy
+  was unavailable at quota.
+- [ ] Complete the exact-head `nix flake check`, receive the publication
+  ruling, push the source sync, and report `CONSOL-CHECKPOINT-3` step 1.
+- [ ] Merge orgs PR #34 and private dotfiles PR #224 through normal PR merges;
+  then deploy framework0 and tower0, record splinter1 pending, archive source,
+  and report DONE in the ordered Phase 3 sequence.
 
 ## Surprises & Discoveries
 
@@ -190,6 +216,11 @@ new source path before any host cutover.
   acceptance should include #218 landing (or Ted explicitly accepting
   unavailable posture) and an unmocked `get_usage` check. Real Claude client
   skill discovery remains a separate pre-cutover acceptance check.
+- Public agent-skills PR #16 retained real CTO statusline footer values in
+  three fixtures while redacting transcript and suggestion text. A normal
+  source-history merge makes those already-public blobs reachable in orgs
+  even though its working tree is sanitized. The leak guard scans only the
+  current tree. Ted's ruling on copying that history is pending before push.
 
 ## Decision Log
 
@@ -240,6 +271,12 @@ new source path before any host cutover.
   Rationale: `CONSOL-R3` requires the fleet source to reject direct pushes,
   force pushes, and deletion without adding impossible Actions checks.
   Date/Author: 2026-10-29, Ted ruling implemented by orgs-consolidation lane.
+- Decision: preserve the #16 source merge locally but defer its public push
+  pending Ted's ruling on the three previously public footer values in history.
+  Rationale: the current-tree repair satisfies the leak guard, while a normal
+  history-preserving merge retains the original blobs. Rewriting history would
+  break the required ancestry. This is an outward publication boundary.
+  Date/Author: 2026-11-02, orgs-consolidation lane.
 
 ## Outcomes & Retrospective
 
@@ -252,7 +289,9 @@ private installer draft PR #224 reached a clean council fixpoint;
 real Claude client discovery remains a pre-cutover acceptance check. The
 tracker merge and master protection are delivered. The final source sync,
 posture-contract convergence, exact-fix Nix check, and fresh scratch install
-passed. Host cutover remains gated.
+passed. Ted authorized Phase 3; the local #16 sync and fixture repair await
+his specific ruling on copying the source's already-public footer blobs into
+orgs history. No Phase 3 public push or deployment has occurred.
 
 ## Context and Orientation
 
