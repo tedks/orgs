@@ -2,11 +2,11 @@
 
 This ExecPlan follows `.planning/PLANS.md`. It is a living record for the
 `consolidation` branch. Current state: Ted authorized Phase 3 on 2026-11-02.
-Step 1 has a local normal merge of agent-skills master `387f86f9` at `3ccd3b9`
-and a current-tree fixture repair at `6439ef6`. Both council seats found the
-code clean but require Ted's ruling before the public push: upstream #16's
-already-public fixture history retains three identifying footer lines, despite
-the repaired orgs tree. The branch has not been pushed for this step.
+Step 1 is pushed: agent-skills master `387f86f9` is a normal merge parent
+of `3ccd3b9`, and `6439ef6` sanitizes the current fixture footers. Ted approved
+copying the already-public #16 history under `CONSOL-PR16-HISTORY-OK`.
+The code council and exact-code-head gates passed; PR #34 remains draft until
+its review record is posted and it is merged through the protected PR path.
 The private installer draft PR #224 is pushed at `0ac21d7` with clean native
 and Claude convergence reviews. Public tracker histories are merged at
 `e92c5f3`. Org master protection is active as ruleset `26175107`. Ted approved
@@ -159,8 +159,12 @@ new source path before any host cutover.
   clone it. The private #224 tree merges cleanly with current dotfiles master
   in `git merge-tree`; only `CLAUDE.md` changed on both sides, in separate
   paragraphs. No host links were changed.
-- [ ] Receive the publication ruling, push the source sync, and report
-  `CONSOL-CHECKPOINT-3` step 1.
+- [x] (2026-11-02) Ted ruled `CONSOL-PR16-HISTORY-OK`: copy the already-public
+  source history as is; current-tree fixture sanitization is sufficient.
+  Pushed branch head `ccfd1f4` with the source merge and repair, verified
+  `origin/consolidation` is up to date. This resolves the council's publication
+  decision; no unknown history matches remain from the seven-commit scan.
+- [ ] Post the step 1 PR review record and `CONSOL-CHECKPOINT-3` receipt.
 - [ ] Merge orgs PR #34 and private dotfiles PR #224 through normal PR merges;
   then deploy framework0 and tower0, record splinter1 pending, archive source,
   and report DONE in the ordered Phase 3 sequence.
@@ -239,7 +243,8 @@ new source path before any host cutover.
   three fixtures while redacting transcript and suggestion text. A normal
   source-history merge makes those already-public blobs reachable in orgs
   even though its working tree is sanitized. The leak guard scans only the
-  current tree. Ted's ruling on copying that history is pending before push.
+  current tree. Ted explicitly approved copying that already-public history
+  on 2026-11-02; the orgs working tree remains sanitized.
 
 ## Decision Log
 
@@ -290,12 +295,12 @@ new source path before any host cutover.
   Rationale: `CONSOL-R3` requires the fleet source to reject direct pushes,
   force pushes, and deletion without adding impossible Actions checks.
   Date/Author: 2026-10-29, Ted ruling implemented by orgs-consolidation lane.
-- Decision: preserve the #16 source merge locally but defer its public push
-  pending Ted's ruling on the three previously public footer values in history.
-  Rationale: the current-tree repair satisfies the leak guard, while a normal
-  history-preserving merge retains the original blobs. Rewriting history would
-  break the required ancestry. This is an outward publication boundary.
-  Date/Author: 2026-11-02, orgs-consolidation lane.
+- Decision: preserve and publish #16 source history with the current fixture
+  footers sanitized.
+  Rationale: `CONSOL-PR16-HISTORY-OK` expressly approved copying the three
+  already-public footer values in reachable history while keeping normal
+  ancestry. The current tree passes the leak guard.
+  Date/Author: 2026-11-02, Ted ruling implemented by orgs-consolidation lane.
 
 ## Outcomes & Retrospective
 
@@ -308,9 +313,8 @@ private installer draft PR #224 reached a clean council fixpoint;
 real Claude client discovery remains a pre-cutover acceptance check. The
 tracker merge and master protection are delivered. The final source sync,
 posture-contract convergence, exact-fix Nix check, and fresh scratch install
-passed. Ted authorized Phase 3; the local #16 sync and fixture repair await
-his specific ruling on copying the source's already-public footer blobs into
-orgs history. No Phase 3 public push or deployment has occurred.
+passed. Ted authorized Phase 3 and the #16 history copy. Step 1 is pushed;
+PR merges, host deployment, and archiving remain in the ordered next steps.
 
 ## Context and Orientation
 
