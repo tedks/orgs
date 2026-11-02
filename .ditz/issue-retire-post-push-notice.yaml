@@ -28,8 +28,8 @@ type: task
 component: open-questions
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: unstarted
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-10-29T21:22:16-00:00
 references: []
 log_events:
@@ -37,3 +37,9 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-02T19:22:06-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Ted ruled no post-push notice to the retired lane. The push places the
+    session on the waiting list; controller records exit and resource receipts. Doctrine
+    merged in PR #32.'
