@@ -148,6 +148,17 @@ new source path before any host cutover.
   linked zero process skills, and passed the installed MCP smoke test. The
   executable resolved to the same Nix output above. Filed and synced the
   nonblocking council nits in `orgs-claude-suggestion-probe-hardening`.
+- [x] (2026-11-02) An unmocked MCP `get_usage` call through the built package
+  on framework0 accepted the merged dotfiles #218 `token-usage posture`
+  output and returned an available posture. The direct CLI has the expected
+  top-level and staleness fields. No private usage values were logged.
+- [x] (2026-11-02) Read-only deployment preflight: framework0's canonical
+  dotfiles and orgs master worktrees are clean at `21dd4b7` and `de0bf25`.
+  Tower0 has an ordinary clean tracked dotfiles master at `edaff1c` plus three
+  pre-existing untracked directories; orgs is absent, so its installer must
+  clone it. The private #224 tree merges cleanly with current dotfiles master
+  in `git merge-tree`; only `CLAUDE.md` changed on both sides, in separate
+  paragraphs. No host links were changed.
 - [ ] Receive the publication ruling, push the source sync, and report
   `CONSOL-CHECKPOINT-3` step 1.
 - [ ] Merge orgs PR #34 and private dotfiles PR #224 through normal PR merges;
