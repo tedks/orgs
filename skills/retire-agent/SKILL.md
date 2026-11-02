@@ -32,7 +32,8 @@ rollout.
 
 ## Modes
 
-- `scripts/retire.sh %PANE --retire`: thank the agent, preserve its handoff,
+- `scripts/retire.sh %PANE --retire`: quote Ted's
+  [retirement offer](references/offer.md) verbatim, preserve its handoff,
   verify the private remote copy, then request exit.
 - `scripts/retire.sh %PANE --waiting`: the same sequence, with the pending
   human decision and its owner named in the shard.
@@ -41,9 +42,15 @@ rollout.
   plus the orgs doctrine's ROLES.md. Reconstruct state from artifacts alone
   and write the first durable record before acting.
 
-Offer thanks and off-duty time to **every** agent, including Utility. An agent
-may decline; the caller then writes the same operational shard with `author:
-"caller"` and `declined: true`, honestly naming the source and uncertainty.
+Offer the waiting-list message to **every** agent, including Utility. An agent
+may decline or report DONE without leaving a shard. In either case the caller
+writes the same operational shard with `author: "caller"`, a
+`caller_authored` marker naming the lead and Ted's resume authority, and an
+`exact_resume_command` as its last field. Use `declined: true` for a decline
+or `no_agent_shard: true` for a reported DONE with no file. The controller
+adds a `Caller-authored` INDEX row and syncs a dotfiles `retirements` issue
+with the session ID, resume command, and private shard path before exit.
+Honestly name the source and uncertainty.
 Do not invent an agent's own-word thanks. Personal thanks are separate from
 operational recovery. Off-duty is not authorization to resume product work.
 
@@ -90,7 +97,8 @@ or another command, enable shell `pipefail` so the caller retains that status.
 Use `--wait 1200` for a 10–20 minute shard; the maximum is 1800 seconds.
 The script emits a private state path on failure. `scripts/retire.sh %PANE --resume PATH` continues
 observation after a delivered offer, without resending it. After an observed
-decline, author the assigned shard then use `scripts/retire.sh %PANE --resume PATH --caller-shard`.
+decline or a reported DONE with no shard, author the assigned shard then use
+`scripts/retire.sh %PANE --resume PATH --caller-shard`.
 Only a proven pre-paste deferral permits `scripts/retire.sh %PANE --resume PATH --retry-deferred offer`
 (or `exit`). An ambiguous offer with a pinned positive paste and Enter can be
 observed on `scripts/retire.sh %PANE --resume PATH` without replay: only a final assistant

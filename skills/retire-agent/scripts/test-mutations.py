@@ -24,7 +24,7 @@ mutations = [
     ('ambiguous offer no live binding dependency', 'size, digest = attempt.get(\'payload_bytes\'), attempt.get(\'payload_sha256\')', 'self.native_binding()\n        size, digest = attempt.get(\'payload_bytes\'), attempt.get(\'payload_sha256\')', 'test_ambiguous_offer_uses_original_bytes_after_binding_disappears'),
     ('previous offer digest upgrade', 'if legacy:\n            original = self.offer_payload', 'if False:\n            original = self.offer_payload', 'test_previous_version_ambiguous_offer_is_verified_and_upgraded'),
     ('ambiguous cached DONE reobservation', "if ambiguous_offer or self.state.get('disposition') != 'DONE':", "if self.state.get('disposition') != 'DONE':", 'test_ambiguous_offer_rechecks_cached_done_after_bad_shard'),
-    ('ambiguous caller decline reobservation', "if self.observe() != 'DECLINED':", 'if False:', 'test_ambiguous_offer_caller_decline_requires_current_marker'),
+    ('ambiguous caller decline reobservation', "if self.observe() != self.state['disposition']:", 'if False:', 'test_ambiguous_offer_caller_decline_requires_current_marker'),
     ('narrowed event namespace', "r'[0-9a-f]{32}\\.json'", "r'[0-9a-f]{33}\\.json'", 'test_malformed_state_and_history_preserved'),
     ('history event filename identity', "if existing.stem != previous['id']:", 'if False:', 'test_historical_event_filename_id_mismatch_preserved'),
     ('native Codex UI footer', "and len(tail) == 1", 'and False', 'test_codex_ui_footer_allows_marker_completion'),
@@ -122,6 +122,8 @@ for label, before, after, test in mutations:
         directory = directory / 'skills/retire-agent/scripts'
         directory.mkdir(parents=True)
         shutil.copytree(HERE.parents[1] / '_shared', directory.parents[1] / '_shared')
+        (directory.parent / 'references').mkdir()
+        shutil.copy2(HERE.parent / 'references' / 'offer.md', directory.parent / 'references' / 'offer.md')
         (directory / 'retire.py').write_text(mutated if label not in builder_mutations | helper_mutations else source)
         (directory / 'build-index.py').write_text(mutated if label in builder_mutations else builder_source)
         if label in helper_mutations:

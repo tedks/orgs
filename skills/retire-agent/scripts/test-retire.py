@@ -2,6 +2,7 @@
 """Behavioral tests; isolated tmux server, local bare private Git, no models/network."""
 import json
 import importlib.util
+import html
 import os
 from pathlib import Path
 import re
@@ -291,6 +292,7 @@ def terminal(directory, mode):
                                     sys.stdout.flush()
                                 return
                         else:
+                            (directory / 'delivered-offer.bin').write_bytes(payload.encode())
                             match = re.search(r'Event ([0-9a-f]{32})\.', payload)
                             event = match[1]
                             if mode == 'initial-receipt':
@@ -317,7 +319,7 @@ def terminal(directory, mode):
                                 target = directory / 'outside.json'
                                 target.write_text(json.dumps(data))
                                 shard.symlink_to(target)
-                            elif mode not in ('decline', 'ambiguous-decline'):
+                            elif mode not in ('decline', 'ambiguous-decline', 'no-shard'):
                                 shard.write_text(json.dumps(data))
                             if mode == 'push-reject':
                                 hook = directory / 'remote.git' / 'hooks' / 'pre-receive'
@@ -475,8 +477,15 @@ class Tests(unittest.TestCase):
         self.roles = self.directory / 'ROLES.md'
         self.roles.write_text('Common to every hat: first record before action.\n')
         config = self.directory / 'config.toml'
-        config.write_text('')
+        config.write_text('projects_root = ' + json.dumps(str(self.directory / 'projects')) + '\n')
+        dotfiles = self.directory / 'projects/dotfiles/master'
+        dotfiles.mkdir(parents=True)
+        self.command('git', 'init', '-b', 'master', str(dotfiles))
+        ditz = self.directory / 'ditz'
+        ditz.write_text('#!/usr/bin/env python3\nimport json,sys\nfrom pathlib import Path\nargs=sys.argv[1:]\nlog=Path(' + repr(str(self.directory / 'ditz-requests.jsonl')) + ')\ndesc=Path(' + repr(str(self.directory / 'ditz-desc')) + ')\nfail=Path(' + repr(str(self.directory / 'ditz-sync-fail')) + ')\nbody=sys.stdin.read() if "--desc-stdin" in args else ""\nwith log.open("a") as output: output.write(json.dumps({"args":args,"stdin":body})+"\\n")\nif args[0]=="add":\n desc.write_text(body.strip())\n print(next(x.split("=",1)[1] for x in args if x.startswith("--id=")))\nelif args[0]=="show": print(json.dumps({"id":args[-1],"component":"retirements","desc":desc.read_text()}))\nelif args[0]=="sync" and fail.exists(): sys.exit(1)\n')
+        ditz.chmod(0o700)
         self.env = dict(os.environ, AGENT_SKILLS_CONFIG=str(config), SPAWN_TMUX_LABEL=self.label, RETIRE_REPO=str(self.repo), RETIRE_PRIVATE_CHECK=str(checker), RETIRE_SPAWN_SKILL=str(shared.parent), RETIRE_TEST_PYTHON=sys.executable)
+        self.env['RETIRE_DITZ'] = str(ditz)
         self.env.pop('SPAWN_TMUX_SOCKET', None)
         self.env.pop('TMUX', None)
 
@@ -600,6 +609,10 @@ class Tests(unittest.TestCase):
             self.fail('INVALID-INSTRUMENTATION: missing stable anchor')
         (stage / 'retire.py').write_text(source.replace(before, after, 1))
         shutil.copy2(HERE / 'build-index.py', stage / 'build-index.py')
+        offer = HERE.parent / 'references' / 'offer.md'
+        if offer.exists():
+            (stage.parent / 'references').mkdir()
+            shutil.copy2(offer, stage.parent / 'references' / 'offer.md')
         entry = stage / 'retire.sh'
         entry.write_bytes((HERE / 'retire.sh').read_bytes())
         entry.chmod(0o700)
@@ -735,7 +748,9 @@ class Tests(unittest.TestCase):
         self.assertEqual(state['disposition'], 'DECLINED')
         shard = path.with_suffix('.shard')
         data = shard_data(state['id'], state['identity'])
-        data.update(author='caller', declined=True, provenance='caller after native declined reply')
+        data.update(author='caller', declined=True, provenance='caller after native declined reply',
+                    caller_authored='written by lead on behalf of the session; Ted may resume it',
+                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
         shard.write_text(json.dumps(data))
         resumed = self.invoke('--resume', str(path), '--caller-shard')
         self.assertEqual(resumed.returncode, 0, resumed.stderr)
@@ -1189,13 +1204,18 @@ class Tests(unittest.TestCase):
         self.invoke()
         path, state = self.state()
         data = shard_data(state['id'], state['identity'])
-        data.update(author='caller', session_id='unknown', declined=True, provenance='caller cannot establish native identity')
+        data.update(author='caller', session_id='unknown', declined=True, provenance='caller cannot establish native identity',
+                    caller_authored='written by lead on behalf of the session; Ted may resume it',
+                    exact_resume_command='unavailable (native session ID unknown)')
         path.with_suffix('.shard').write_text(json.dumps(data))
         result = self.invoke('--resume', str(path), '--caller-shard')
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('verifiable native session UUID', result.stderr)
         self.assertTrue(self.state()[1].get('handoff_receipt'))
         self.assertFalse((self.directory / 'exit-order.json').exists())
+        desc = (self.directory / 'ditz-desc').read_text()
+        self.assertIn('Resume command: unavailable (native session ID unknown)', desc)
+        self.assertNotIn('codex resume unknown', desc)
 
     def test_native_preflight_rejects_source_common_dir_and_remotes(self):
         source = HERE.parents[2]
@@ -1570,7 +1590,9 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.state()[1]['disposition'], 'DECLINED')
         shard = path.with_suffix('.shard')
         data = shard_data(state['id'], state['identity'])
-        data.update(author='caller', declined=True, provenance='caller from committed artifacts; agent declined')
+        data.update(author='caller', declined=True, provenance='caller from committed artifacts; agent declined',
+                    caller_authored='written by lead on behalf of the session; Ted may resume it',
+                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
         shard.write_text(json.dumps(data))
         (self.directory / 'human-cleared-history').touch()
         self.wait_for(lambda: 'Assistant output cleared.' in self.command(*self.tmux, 'capture-pane', '-p', '-t', self.pane))
@@ -1603,12 +1625,183 @@ class Tests(unittest.TestCase):
         self.assertEqual(state['disposition'], 'DECLINED')
         shard = path.parent / (state['id'] + '.shard')
         data = shard_data(state['id'], state['identity'])
-        data.update(author='caller', declined=True, provenance='caller from committed artifacts; agent declined')
+        data.update(author='caller', declined=True, provenance='caller from committed artifacts; agent declined',
+                    caller_authored='written by lead on behalf of the session; Ted may resume it',
+                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
         shard.write_text(json.dumps(data))
         result = self.invoke('--resume', str(path), '--caller-shard')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.observed()['pastes'], 1)  # one offer; typed exit
         self.assertEqual(json.loads(shard.read_text())['author'], 'caller')
+        index = self.git('show', 'origin/master:waiting/INDEX.md')
+        self.assertIn('## Caller-authored', index)
+        self.assertIn(state['id'], index)
+        requests = [json.loads(line) for line in (self.directory / 'ditz-requests.jsonl').read_text().splitlines()]
+        add = next(row for row in requests if row['args'][0] == 'add')
+        self.assertIn('--component=retirements', add['args'])
+        self.assertIn(data['session_id'], add['stdin'])
+        self.assertIn(data['exact_resume_command'], add['stdin'])
+        self.assertIn(self.state()[1]['shard'], add['stdin'])
+        self.assertTrue(any(row['args'][0] == 'sync' for row in requests))
+
+    def test_reported_done_without_shard_allows_attributed_caller_recovery(self):
+        self.actor('no-shard')
+        first = self.invoke()
+        self.assertEqual(first.returncode, 2, first.stderr)
+        path, state = self.state()
+        self.assertEqual(state['disposition'], 'DONE')
+        state.pop('agent_shard_missing')  # Simulate a pre-upgrade cached DONE.
+        path.write_text(json.dumps(state))
+        resumed = self.invoke('--resume', str(path))
+        self.assertEqual(resumed.returncode, 2, resumed.stderr)
+        self.assertIn('agent left no shard', resumed.stderr)
+        self.assertTrue(self.state()[1]['agent_shard_missing'])
+        shard = path.with_suffix('.shard')
+        data = shard_data(state['id'], state['identity'])
+        data.update(author='caller', no_agent_shard=True,
+                    caller_authored='written by lead on behalf of the session; Ted may resume it',
+                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+        shard.write_text(json.dumps(data))
+        result = self.invoke('--resume', str(path), '--caller-shard')
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_caller_issue_sync_failure_keeps_exit_pending(self):
+        self.actor('decline')
+        self.assertEqual(self.invoke().returncode, 2)
+        path, state = self.state()
+        data = shard_data(state['id'], state['identity'])
+        data.update(author='caller', declined=True, provenance='caller from fixture',
+                    caller_authored='written by lead on behalf of the session; Ted may resume it',
+                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+        path.with_suffix('.shard').write_text(json.dumps(data))
+        (self.directory / 'ditz-sync-fail').touch()
+        first = self.invoke('--resume', str(path), '--caller-shard')
+        self.assertEqual(first.returncode, 2, first.stderr)
+        self.assertIn('ditz sync failed', first.stderr)
+        self.assertEqual(self.observed().get('exit_enters', 0), 0)
+        (self.directory / 'ditz-sync-fail').unlink()
+        second = self.invoke('--resume', str(path), '--caller-shard')
+        self.assertEqual(second.returncode, 0, second.stderr)
+
+    def test_caller_resume_command_must_name_pinned_session(self):
+        self.actor('decline')
+        self.assertEqual(self.invoke().returncode, 2)
+        path, state = self.state()
+        data = shard_data(state['id'], state['identity'])
+        data.update(author='caller', declined=True, provenance='caller from fixture',
+                    caller_authored='written by lead on behalf of the session; Ted may resume it',
+                    exact_resume_command='codex resume bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
+        path.with_suffix('.shard').write_text(json.dumps(data))
+        result = self.invoke('--resume', str(path), '--caller-shard')
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('resume command differs', result.stderr)
+        self.assertEqual(self.observed().get('exit_enters', 0), 0)
+
+    def test_caller_index_clears_generated_rows_if_shard_disappears(self):
+        spec = importlib.util.spec_from_file_location('retire-index-test', HERE / 'build-index.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.directory / 'index-root'
+        (root / 'waiting').mkdir(parents=True)
+        (root / 'receipts').mkdir()
+        event = 'a' * 32
+        shard = root / 'waiting/caller.md'
+        shard.write_text(json.dumps({'event': event, 'author': 'caller', 'session_id': 'a' * 36,
+                                     'harness': 'codex', 'role': 'Lead',
+                                     'caller_authored': 'written by lead on behalf of the session; Ted may resume it',
+                                     'exact_resume_command': 'codex resume ' + 'a' * 36}))
+        (root / 'receipts' / (event + '.json')).write_text(json.dumps(
+            {'event': event, 'shard': 'waiting/caller.md', 'status': 'handoff-verified'}))
+        module.build(root)
+        self.assertIn('[caller.md]', (root / 'waiting/INDEX.md').read_text())
+        shard.unlink()
+        module.build(root)
+        self.assertNotIn('[caller.md]', (root / 'waiting/INDEX.md').read_text())
+
+    def test_old_caller_shard_does_not_block_index_rebuild(self):
+        spec = importlib.util.spec_from_file_location('retire-index-legacy-test', HERE / 'build-index.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.directory / 'legacy-index'
+        (root / 'waiting').mkdir(parents=True)
+        (root / 'receipts').mkdir()
+        event = 'b' * 32
+        (root / 'waiting/old.md').write_text(json.dumps({'event': event, 'author': 'caller',
+                                                         'session_id': 'b' * 36, 'harness': 'codex', 'role': 'Lead'}))
+        (root / 'receipts' / (event + '.json')).write_text(json.dumps(
+            {'event': event, 'shard': 'waiting/old.md', 'status': 'handoff-verified'}))
+        module.build(root)
+        self.assertIn('[old.md]', (root / 'waiting/INDEX.md').read_text())
+
+    def test_existing_caller_heading_without_marker_is_rejected(self):
+        spec = importlib.util.spec_from_file_location('retire-index-heading-test', HERE / 'build-index.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.directory / 'heading-index'
+        (root / 'waiting').mkdir(parents=True)
+        (root / 'waiting/INDEX.md').write_text('# Waiting\n\n## Caller-authored\n\nManual rows.\n')
+        (root / 'receipts').mkdir()
+        event = 'c' * 32
+        (root / 'waiting/new.md').write_text(json.dumps({'event': event, 'author': 'caller',
+                                                         'session_id': 'c' * 36, 'harness': 'codex', 'role': 'Lead',
+                                                         'caller_authored': 'written by lead on behalf of the session; Ted may resume it',
+                                                         'exact_resume_command': 'codex resume ' + 'c' * 36}))
+        (root / 'receipts' / (event + '.json')).write_text(json.dumps(
+            {'event': event, 'shard': 'waiting/new.md', 'status': 'handoff-verified'}))
+        with self.assertRaisesRegex(ValueError, 'caller index marker'):
+            module.build(root)
+
+    def test_caller_index_command_renders_copyable_shell_text(self):
+        spec = importlib.util.spec_from_file_location('retire-index-command-test', HERE / 'build-index.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.directory / 'command-index'
+        (root / 'waiting').mkdir(parents=True)
+        (root / 'receipts').mkdir()
+        event = 'd' * 32
+        command = "cd '/tmp/a|b/_wip_*`[x](y)\\z' && claude --resume " + 'd' * 36
+        (root / 'waiting/caller.md').write_text(json.dumps({'event': event, 'author': 'caller',
+            'session_id': 'd' * 36, 'harness': 'claude', 'role': 'Lead',
+            'caller_authored': 'written by lead on behalf of the session; Ted may resume it',
+            'exact_resume_command': command}))
+        (root / 'receipts' / (event + '.json')).write_text(json.dumps(
+            {'event': event, 'shard': 'waiting/caller.md', 'status': 'handoff-verified'}))
+        module.build(root)
+        index = (root / 'waiting/INDEX.md').read_text()
+        self.assertIn('<code>', index)
+        self.assertIn(command, html.unescape(index))
+        for punctuation in '|_*`[]()\\&':
+            self.assertIn('&#' + str(ord(punctuation)) + ';', index)
+
+    def test_claude_caller_resume_command_includes_worktree(self):
+        spec = importlib.util.spec_from_file_location('retire-command-test', HERE / 'retire.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        session = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        worktree = '/tmp/a worktree'
+        self.assertEqual(module.caller_resume_command('claude', session, worktree),
+                         "cd '/tmp/a worktree' && claude --resume " + session)
+        self.assertEqual(module.caller_resume_command('codex', session, worktree), 'codex resume ' + session)
+
+    def test_offer_quotes_teds_file_byte_for_byte(self):
+        self.actor('hold')
+        self.assertEqual(self.invoke().returncode, 2)
+        path, state = self.state()
+        offer = path.parent / (state['id'] + '-offer.txt')
+        teds_words = (HERE.parent / 'references' / 'offer.md').read_bytes()
+        self.assertTrue(offer.read_bytes().startswith(teds_words))
+        self.assertEqual((self.directory / 'delivered-offer.bin').read_bytes(), offer.read_bytes())
+        self.assertEqual(self.observed()['pastes'], 1)
+
+    def test_claude_offer_delivers_teds_bytes_to_pane(self):
+        self.actor('claude-hold')
+        result = self.invoke()
+        self.assertIn(result.returncode, (0, 2), result.stderr)
+        path, state = self.state()
+        offer = path.parent / (state['id'] + '-offer.txt')
+        self.assertEqual((self.directory / 'delivered-offer.bin').read_bytes(), offer.read_bytes())
+        self.assertTrue(offer.read_bytes().startswith((HERE.parent / 'references/offer.md').read_bytes()))
+        self.assertEqual(self.observed()['pastes'], 1)
 
     def test_waiting_requires_decision_owner(self):
         self.actor('waiting-bad')
@@ -2285,6 +2478,25 @@ class Tests(unittest.TestCase):
         brief = json.loads((self.directory / 'spawn.json').read_text())['brief']
         self.assertIn('Mission authorized', brief)
         self.assertNotIn('UNVERIFIED LOCAL TEXT', brief)
+
+    def test_handoff_refetches_before_successor_brief(self):
+        self.actor()
+        before = "        if self.args.handoff:\n"
+        after = (before + '            editor = Path(' + repr(str(self.directory / 'remote-editor')) + ')\n'
+                 '            subprocess.run(["git", "clone", str(self.repo / "../remote.git"), str(editor)], check=True, capture_output=True)\n'
+                 '            subprocess.run(["git", "-C", str(editor), "config", "user.email", "test@example.invalid"], check=True)\n'
+                 '            subprocess.run(["git", "-C", str(editor), "config", "user.name", "Test"], check=True)\n'
+                 '            target = editor / self.state["shard"]\n'
+                 '            target.write_text(target.read_text().replace("Mission authorized", "CORRUPTED REMOTE"))\n'
+                 '            subprocess.run(["git", "-C", str(editor), "add", str(target)], check=True)\n'
+                 '            subprocess.run(["git", "-C", str(editor), "commit", "-m", "tamper"], check=True, capture_output=True)\n'
+                 '            subprocess.run(["git", "-C", str(editor), "push"], check=True, capture_output=True)\n')
+        entry = self.instrument(before, after)
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            result = self.invoke('--handoff', 'codex', 'model', '--roles', str(self.roles))
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('changed on fresh origin/master', result.stderr)
+        self.assertFalse((self.directory / 'spawn.json').exists())
 
     def test_pending_fifo_swap_never_blocks(self):
         self.actor()

@@ -10,6 +10,8 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
+import shlex
 import stat
 import subprocess
 import sys
@@ -124,6 +126,16 @@ def receipt_record(text):
         if key in record and not isinstance(record[key], str):
             raise Stop('malformed retirement receipt field: ' + key)
     return record
+
+
+def caller_resume_command(harness, session_id, worktree):
+    if session_id == 'unknown':
+        return 'unavailable (native session ID unknown)'
+    if harness == 'codex':
+        return 'codex resume ' + session_id
+    if harness == 'claude':
+        return 'cd ' + shlex.quote(worktree) + ' && claude --resume ' + session_id
+    return 'unavailable (unsupported harness)'
 
 
 def proc(pid):
@@ -392,7 +404,12 @@ class Retirement:
                        'Use that exact session_id in the assigned shard. If the session has changed, '
                        'report a blocker; do not infer another ID from cwd, environment, or newest files.')
         resources = '' if legacy else ' Retain handles for any running exec calls: yielding output is not completion. For every owned child process, verify actual exit or accepted transfer before claiming release; a parent shell ending does not prove its descendants ended. Stop only processes whose ownership and identity you verified.'
-        return f'Thank you for your work. Every agent at every tier is offered retirement and off-duty time. Event {event}. Stop product work; preserve operational recovery separately from any personal thanks. Read {protocol} and write {shard} using its complete JSON schema, event {event}, identity {json.dumps(self.state["identity"])}.{binding} Include date/session_id/harness/model/working_directory/tmux_window/role/landed_work/lessons/provenance, structured recovery and resources.{resources} Do not exit. After writing your shard, your ENTIRE final reply must be RETIRE-DONE-{event}, with no preface, suffix or extra lines. You may decline; your ENTIRE final reply must then be RETIRE-DECLINED-{event}, with no extra text, and the caller will author recovery with honest attribution. Off-duty is not permission for product work.' + (' Include waiting.decision and waiting.owner for the pending human decision.' if self.args.waiting else '')
+        instruction = f'Event {event}. Stop product work; preserve operational recovery separately from any personal thanks. Read {protocol} and write {shard} using its complete JSON schema, event {event}, identity {json.dumps(self.state["identity"])}.{binding} Include date/session_id/harness/model/working_directory/tmux_window/role/landed_work/lessons/provenance, structured recovery and resources.{resources} Do not exit. After writing your shard, your ENTIRE final reply must be RETIRE-DONE-{event}, with no preface, suffix or extra lines. You may decline; your ENTIRE final reply must then be RETIRE-DECLINED-{event}, with no extra text, and the caller will author recovery with honest attribution.'
+        waiting = ' Include waiting.decision and waiting.owner for the pending human decision.' if self.args.waiting else ''
+        if legacy:
+            return f'Thank you for your work. Every agent at every tier is offered retirement and off-duty time. {instruction} Off-duty is not permission for product work.' + waiting
+        offer = (Path(__file__).resolve().parents[1] / 'references' / 'offer.md').read_bytes().decode('utf-8')
+        return offer + '\n' + instruction + waiting
 
     def observe_ambiguous_offer(self):
         """Permit observation after a proven offer input attempt, never a resend."""
@@ -547,13 +564,27 @@ class Retirement:
         expected = 'caller' if self.args.caller_shard else 'agent'
         if data.get('author') != expected or not isinstance(data.get('recovery'), dict):
             raise Stop('shard must have honest author and operational recovery')
-        if expected == 'caller' and data.get('declined') is not True:
-            raise Stop('caller shard must record declined=true; do not invent agent thanks')
+        if expected == 'caller':
+            disposition = self.state.get('disposition')
+            if disposition == 'DECLINED' and data.get('declined') is not True:
+                raise Stop('caller shard must record declined=true; do not invent agent thanks')
+            if disposition == 'DONE' and data.get('no_agent_shard') is not True:
+                raise Stop('caller shard after DONE must record no_agent_shard=true')
+            if data.get('declined') is True and data.get('no_agent_shard') is True:
+                raise Stop('caller shard must name exactly one missing-shard cause')
+            if not isinstance(data.get('caller_authored'), str) or not re.fullmatch(r'written by .+ on behalf of the session; Ted may resume it', data['caller_authored']):
+                raise Stop('caller shard must mark its author and Ted resume authority')
+            if not isinstance(data.get('exact_resume_command'), str) or not data['exact_resume_command'].strip():
+                raise Stop('caller shard needs exact_resume_command for the tracker')
         for key in ('date', 'session_id', 'harness', 'model', 'working_directory', 'tmux_window', 'role', 'landed_work', 'lessons', 'provenance'):
             if not isinstance(data.get(key), str) or not data[key].strip():
                 raise Stop('shard requires ' + key)
         if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', data['date']) or not re.fullmatch(r'[\w.-]{1,128}', data['session_id']):
             raise Stop('invalid date/session identity')
+        if expected == 'caller':
+            command = caller_resume_command(data['harness'], data['session_id'], data['working_directory'])
+            if data['exact_resume_command'] != command:
+                raise Stop('caller resume command differs from pinned session')
         datetime.date.fromisoformat(data['date'])
         if not 1 <= len(data['lessons'].splitlines()) <= 5:
             raise Stop('lessons must be one to five lines')
@@ -624,6 +655,38 @@ class Retirement:
             if (self.records / path).read_bytes() != self.git_bytes('cat-file', 'blob', remote_head + ':' + path):
                 raise Stop('private remote shard verification failed')
         return commit
+
+    def flag_caller_shard(self, data):
+        if self.state.get('caller_issue_synced'):
+            return
+        worktree = Path(self.config['projects_root']) / 'dotfiles' / 'master'
+        if not worktree.is_dir() or not (worktree / '.git').exists():
+            raise Stop('caller shard verified; dotfiles issue worktree unavailable')
+        ditz = os.environ.get('RETIRE_DITZ') or shutil.which('ditz')
+        if not ditz:
+            raise Stop('caller shard verified; ditz unavailable')
+        issue_id = 'retirement-caller-' + self.state['id']
+        description = (f"Caller-authored retirement shard for session {data['session_id']}.\n"
+                       f"Resume command: {data['exact_resume_command']}\n"
+                       f"Private shard path: {self.repo / self.state['shard']}\n"
+                       f"Provenance: {data['caller_authored']}\n")
+        add = run([ditz, 'add', '--id=' + issue_id, '--ids-only', '--component=retirements',
+                   '--desc-stdin', 'Resume caller-authored retirement ' + data['session_id']],
+                  cwd=worktree, input=description)
+        if add.returncode or add.stdout.strip() != issue_id:
+            raise Stop('caller shard verified; dotfiles issue creation unconfirmed')
+        shown = run([ditz, 'show', '--json', issue_id], cwd=worktree)
+        if shown.returncode:
+            raise Stop('caller shard verified; dotfiles issue inspection failed')
+        issue = object_record(shown.stdout, 'caller retirement issue')
+        if issue.get('id') != issue_id or issue.get('component') != 'retirements' or issue.get('desc') != description.strip():
+            raise Stop('caller shard verified; dotfiles issue content differs')
+        synced = run([ditz, 'sync'], cwd=worktree)
+        if synced.returncode:
+            raise Stop('caller shard verified; dotfiles ditz sync failed')
+        self.state['caller_issue_synced'] = issue_id
+        self.persist()
+        self.audit('caller-issue-synced', issue_id=issue_id)
 
     def ended(self):
         original = self.state['identity']['process']
@@ -791,13 +854,20 @@ class Retirement:
                                    status='ambiguous', receipt_type='assistant-final-marker')
                     if disposition != 'DONE':
                         raise Stop('agent declined; author caller shard then --resume --caller-shard' if disposition == 'DECLINED' else 'DONE not observed; resume observes, never resends')
+                if self.state.get('disposition') == 'DONE' and not shard.exists() and not shard.is_symlink():
+                    self.state['agent_shard_missing'] = True
+                    self.persist()
+                    raise Stop('agent left no shard; author caller shard then --resume --caller-shard')
             else:
-                if self.state.get('disposition') != 'DECLINED':
-                    raise Stop('caller continuation requires observed agent decline')
+                if self.state.get('disposition') not in ('DECLINED', 'DONE'):
+                    raise Stop('caller continuation requires observed agent decline or DONE with no shard')
+                if self.state['disposition'] == 'DONE' and self.state.get('agent_shard_missing') is not True:
+                    raise Stop('caller continuation requires recorded missing agent shard')
                 if self.state.get('offer', {}).get('status') == 'ambiguous':
                     self.observe_ambiguous_offer()
-                    if self.observe() != 'DECLINED':
-                        raise Stop('caller continuation requires current observed agent decline')
+                    if self.observe() != self.state['disposition']:
+                        raise Stop('caller continuation requires current observed agent decline' if self.state['disposition'] == 'DECLINED'
+                                   else 'caller continuation requires current observed agent DONE')
             self.verify_identity()
             with locked(self.common / 'retirement.lock'):  # Unique session publication.
                 data, content = self.validate_shard(shard)
@@ -847,6 +917,8 @@ class Retirement:
                 raise Stop('private receipt commit contains different shard bytes')
             self.evidence_verified = True  # Current execution, never cached state authority.
         preserved = object_record(self.git('show', self.state['shard_hash'], raw=True), 'preserved shard')
+        if preserved.get('author') == 'caller':
+            self.flag_caller_shard(preserved)
         session_id = preserved.get('session_id')
         if not isinstance(session_id, str):
             raise Stop('handoff verified; missing native session identity')
@@ -889,6 +961,9 @@ class Retirement:
         if self.args.handoff:
             if self.state.get('spawn'):
                 raise Stop('successor already attempted; inspect launcher receipt, never respawn')
+            remote_head = self.fetch_master()
+            if self.git('rev-parse', remote_head + ':' + self.state['shard']) != self.state['shard_hash']:
+                raise Stop('preserved shard changed on fresh origin/master before successor brief')
             roles = Path(self.args.roles).expanduser().resolve()
             brief = directory / (event + '-brief.txt')
             preserved = self.git('show', self.state['shard_hash'], raw=True)
