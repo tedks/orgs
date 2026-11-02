@@ -45,3 +45,18 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-02T18:21:45-00:00
+  who: Ted Smith
+  what: commented
+  comment: "Ted's RET-R3 ruling, 2026-11-02 (orgs PR #32 merged as fa65ca1): the doctrine
+    is the contract; do not revise it to match a helper mismatch. Two claims from
+    this issue have different dispositions:\n\n1. Exit: the helper requests exit after
+    private shard verification. This matches the doctrine as Ted interprets it. \u201CVoluntary\u201D
+    also permits the agent to leave on its own; no exit-semantics code change is authorized.\n2.
+    Handoff ordering: the current --handoff path briefs the successor before a fresh
+    fetch verifies the shard on origin/master. This is a known gap. After RET-GO-ORGS,
+    add a failing test and change the order so the successor receives the brief only
+    after that fresh-fetch verification. Fold it into step 4 if bounded to less than
+    a day; if larger, leave this issue open and report the estimate.\n\nStep 4 behavior
+    scope otherwise remains the verbatim Ted-authored offer and caller-authored shard/INDEX/ditz
+    flagging. Cutover gate remains in force; no retire-agent code edit before RET-GO-ORGS."
