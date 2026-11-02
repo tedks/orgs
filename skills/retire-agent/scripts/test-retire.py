@@ -2,6 +2,7 @@
 """Behavioral tests; isolated tmux server, local bare private Git, no models/network."""
 import json
 import importlib.util
+import html
 import os
 from pathlib import Path
 import re
@@ -1750,6 +1751,27 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'caller index marker'):
             module.build(root)
 
+    def test_caller_index_command_renders_copyable_shell_text(self):
+        spec = importlib.util.spec_from_file_location('retire-index-command-test', HERE / 'build-index.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.directory / 'command-index'
+        (root / 'waiting').mkdir(parents=True)
+        (root / 'receipts').mkdir()
+        event = 'd' * 32
+        command = "cd '/tmp/a|b' && claude --resume " + 'd' * 36
+        (root / 'waiting/caller.md').write_text(json.dumps({'event': event, 'author': 'caller',
+            'session_id': 'd' * 36, 'harness': 'claude', 'role': 'Lead',
+            'caller_authored': 'written by lead on behalf of the session; Ted may resume it',
+            'exact_resume_command': command}))
+        (root / 'receipts' / (event + '.json')).write_text(json.dumps(
+            {'event': event, 'shard': 'waiting/caller.md', 'status': 'handoff-verified'}))
+        module.build(root)
+        index = (root / 'waiting/INDEX.md').read_text()
+        self.assertIn('<code>', index)
+        self.assertIn(command, html.unescape(index))
+        self.assertIn('&#124;', index)
+
     def test_claude_caller_resume_command_includes_worktree(self):
         spec = importlib.util.spec_from_file_location('retire-command-test', HERE / 'retire.py')
         module = importlib.util.module_from_spec(spec)
@@ -1768,6 +1790,7 @@ class Tests(unittest.TestCase):
         teds_words = (HERE.parent / 'references' / 'offer.md').read_bytes()
         self.assertTrue(offer.read_bytes().startswith(teds_words))
         self.assertEqual((self.directory / 'delivered-offer.bin').read_bytes(), offer.read_bytes())
+        self.assertEqual(self.observed()['pastes'], 1)
 
     def test_claude_offer_delivers_teds_bytes_to_pane(self):
         self.actor('claude-hold')
@@ -1777,6 +1800,7 @@ class Tests(unittest.TestCase):
         offer = path.parent / (state['id'] + '-offer.txt')
         self.assertEqual((self.directory / 'delivered-offer.bin').read_bytes(), offer.read_bytes())
         self.assertTrue(offer.read_bytes().startswith((HERE.parent / 'references/offer.md').read_bytes()))
+        self.assertEqual(self.observed()['pastes'], 1)
 
     def test_waiting_requires_decision_owner(self):
         self.actor('waiting-bad')
