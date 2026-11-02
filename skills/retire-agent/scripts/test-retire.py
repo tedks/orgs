@@ -1759,7 +1759,7 @@ class Tests(unittest.TestCase):
         (root / 'waiting').mkdir(parents=True)
         (root / 'receipts').mkdir()
         event = 'd' * 32
-        command = "cd '/tmp/a|b' && claude --resume " + 'd' * 36
+        command = "cd '/tmp/a|b/_wip_*`[x](y)\\z' && claude --resume " + 'd' * 36
         (root / 'waiting/caller.md').write_text(json.dumps({'event': event, 'author': 'caller',
             'session_id': 'd' * 36, 'harness': 'claude', 'role': 'Lead',
             'caller_authored': 'written by lead on behalf of the session; Ted may resume it',
@@ -1770,7 +1770,8 @@ class Tests(unittest.TestCase):
         index = (root / 'waiting/INDEX.md').read_text()
         self.assertIn('<code>', index)
         self.assertIn(command, html.unescape(index))
-        self.assertIn('&#124;', index)
+        for punctuation in '|_*`[]()\\&':
+            self.assertIn('&#' + str(ord(punctuation)) + ';', index)
 
     def test_claude_caller_resume_command_includes_worktree(self):
         spec = importlib.util.spec_from_file_location('retire-command-test', HERE / 'retire.py')

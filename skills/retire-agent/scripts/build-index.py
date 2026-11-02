@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Regenerate retire-agent's bounded index section in an isolated worktree."""
 import json
-import html
 from pathlib import Path
 import re
 import sys
@@ -66,7 +65,8 @@ def build(root, session_id='', event_id=''):
         if data.get('author') == 'caller' and (data.get('caller_authored') or data.get('exact_resume_command')):
             if not data.get('caller_authored') or not data.get('exact_resume_command'):
                 raise ValueError('caller shard missing attribution or resume command')
-            command = html.escape(str(data['exact_resume_command']).replace('\n', ' '), quote=False).replace('|', '&#124;')
+            command = ''.join(character if character.isalnum() or character == ' '
+                              else f'&#{ord(character)};' for character in str(data['exact_resume_command']))
             caller_rows.append(f'| [{shard.name}]({shard.name}) | {cell(data["session_id"])} | '
                                f'<code>{command}</code> | '
                                f'`retirement-caller-{data["event"]}` |\n')
