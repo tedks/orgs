@@ -385,9 +385,7 @@ def _read_usage_posture() -> dict:
     providers = ('openai', 'anthropic')
     expected_keys = {'provider', 'scores', 'used_percent', 'resets_at', 'stale', 'staleness', 'gated', 'reason'}
     numeric_maps = ('scores', 'used_percent')
-    weekly_meter = {'openai': 'openai', 'anthropic': 'anthropic.seven_day'}
     staleness = posture.get('staleness') if isinstance(posture, dict) else None
-    expired = staleness.get('expired', {}) if isinstance(staleness, dict) else None
     def finite_number(value):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return False
@@ -400,27 +398,40 @@ def _read_usage_posture() -> dict:
             or not isinstance(posture.get('reason'), str)
             or not all(isinstance(posture.get(key), dict) and set(posture[key]) == set(providers)
                        for key in (*numeric_maps, 'resets_at', 'stale', 'gated'))
-            or not isinstance(staleness, dict)
-            or set(staleness) not in ({'stale', 'newest_observed', 'age_seconds'},
-                                     {'stale', 'newest_observed', 'age_seconds', 'expired'})
-            or not isinstance(expired, dict)
-            or not set(expired) <= {'openai', 'anthropic.seven_day', 'anthropic.five_hour'}
-            or any(isinstance(age, bool) or not isinstance(age, int) or age < 0
-                   for age in expired.values())
-            or any((value is not None if weekly_meter[provider] in expired
-                    else not finite_number(value))
-                   for key in numeric_maps for provider, value in posture[key].items())
             or any(not isinstance(value, (str, int, float)) or isinstance(value, bool)
                    or (not finite_number(value) if not isinstance(value, str) else False)
                    for value in posture['resets_at'].values())
             or not all(isinstance(value, bool) for value in posture['stale'].values())
             or not all(isinstance(value, bool) for value in posture['gated'].values())
+            or not isinstance(staleness, dict)
+            or set(staleness) not in ({'stale', 'newest_observed', 'age_seconds'},
+                                      {'stale', 'newest_observed', 'age_seconds', 'expired'})
             or not isinstance(staleness.get('stale'), bool)
             or not isinstance(staleness.get('newest_observed'), str)
             or isinstance(staleness.get('age_seconds'), bool)
             or not isinstance(staleness.get('age_seconds'), int)
             or staleness['age_seconds'] < 0):
         return {'state': 'unavailable', 'reason': 'token_usage_posture_malformed'}
+    expired = staleness.get('expired', {})
+    if (not isinstance(expired, dict)
+            or not set(expired) <= {'openai', 'anthropic.seven_day', 'anthropic.five_hour'}
+            or any(isinstance(age, bool) or not isinstance(age, int) or age < 0
+                   for age in expired.values())
+            or (expired and not staleness['stale'])
+            or ('openai' in expired and (not posture['stale']['openai'] or posture['gated']['openai']))
+            or ('anthropic.seven_day' in expired and not posture['stale']['anthropic'])
+            or ('anthropic.seven_day' in expired and 'anthropic.five_hour' in expired
+                and posture['gated']['anthropic'])):
+        return {'state': 'unavailable', 'reason': 'token_usage_posture_malformed'}
+    null_scores = {'openai': 'openai' in expired,
+                   'anthropic': 'anthropic.seven_day' in expired or 'anthropic.five_hour' in expired}
+    null_used = {'openai': 'openai' in expired,
+                 'anthropic': 'anthropic.seven_day' in expired}
+    for key, required_null in (('scores', null_scores), ('used_percent', null_used)):
+        for provider in providers:
+            value = posture[key][provider]
+            if (value is None) != required_null[provider] or (value is not None and not finite_number(value)):
+                return {'state': 'unavailable', 'reason': 'token_usage_posture_malformed'}
     return posture
 
 
