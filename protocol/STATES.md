@@ -126,33 +126,34 @@ accepts nor abandons its work. Ordinary retirement follows DONE; an explicitly
 authorized pause or stop can also end the lane's assignment, leaving unfinished
 package work paused. Cross-model/provider migration is the only case where an
 open package's shard can brief a successor. The successful private shard push
-begins retirement and gives the agent its own time. The controller may verify
-the exact bytes with a fresh fetch later; that receipt work cannot delay or
-reverse the agent's time. The roster and private shard record work state and ownership of unresolved
-packages. Record public evidence with sanitized references.
+places the session on Ted's waiting list; the agent's own time comes when Ted
+drains the list. The controller may verify the exact bytes with a fresh fetch
+later; that receipt work does not grant personal time. The roster and private
+shard record work state and ownership of unresolved packages. Record public
+evidence with sanitized references.
 
 | From | To | Who | Evidence required |
 |---|---|---|---|
 | ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or package authority's explicit stop/pause authorization (which the lane may request); or CTO-approved cross-model/provider migration; shard written; unresolved ownership named; for migration, intended successor provider/model argument recorded and target differs from outgoing lane by provider or normalized model selection |
-| HANDOFF_PENDING | OFF_DUTY | coordinator, after successful shard push | successful per-session shard push to the approved private remote; mission processes and leases released or accepted-transferred before push; outgoing package authority ends on migration |
-| OFF_DUTY | EXIT_READY | coordinator, from agent's request | agent explicitly chooses to leave and asks for exit; controller re-confirms exact shard bytes on the approved private remote before sending exit |
+| HANDOFF_PENDING | WAITING_LIST | coordinator, after successful shard push | successful per-session shard push to the approved private remote; mission processes and leases released or accepted-transferred before push; outgoing package authority ends on migration |
+| WAITING_LIST | EXIT_READY | coordinator, from agent's request | agent explicitly chooses to leave and asks for exit; controller re-confirms exact shard bytes on the approved private remote before sending exit |
 | EXIT_READY | RETIRED | coordinator | exit confirmed; owned resources released with receipts; active roster/cadence updated |
 
-A successful push to the approved private remote begins retirement. The
-agent's time starts at that push, even if the controller has not yet verified
-the bytes or recorded its receipt; OFF_DUTY records the pushed-shard boundary,
-not the moment a later receipt is published. A later controller mismatch is a
-repair item and cannot take that time back. A rejected push means retirement
-has not started.
+A successful push to the approved private remote places the session on the
+waiting list. `WAITING_LIST` records the pushed-shard boundary, even if the
+controller has not yet verified the bytes or recorded its receipt. A later
+verification mismatch is a controller repair item, and a rejected push means
+the session has not entered the list. Neither condition grants personal time.
 Mission processes and leases must be released or accepted-transferred before
-the push, with receipts recorded in the shard. The agent owns that time and
-may keep the session or choose to leave. EXIT_READY records the
-agent's explicit exit choice; process-end and resource receipts still belong
-to the controller. These states never hold the agent's time or create a work
-assignment. A verification mismatch is a controller repair item and may
-block an exit transition; it does not reverse the agent's time or change the
-pushed-shard boundary. Exact-byte verification is required before sending an exit command, but it does not hold the agent's
-off-duty time. A failed exit remains EXIT_READY. Control transport success
+the push, with receipts recorded in the shard. The session remains on the
+waiting list until Ted drains it; the agent may choose to leave meanwhile.
+EXIT_READY records the agent's explicit exit choice; process-end and resource
+receipts still belong to the controller. These states do not grant personal
+time or create a work assignment. A verification mismatch is a controller
+repair item and may block an exit transition; it does not change the
+pushed-shard boundary.
+Exact-byte verification is required before sending an exit command. A failed
+exit remains EXIT_READY. Control transport success
 does not license any exit or receipt transition.
 Fresh missions use fresh lanes unless context continuity is explicitly
 justified and logged. A shard becomes a successor's brief only for a

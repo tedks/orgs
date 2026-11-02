@@ -70,10 +70,10 @@ When the coordinator's own tokens are the scarce resource, the binding tightens:
   lifecycle: complete the mission at DONE, or end the lane's assignment with
   an explicitly authorized pause or stop that leaves unfinished package work
   paused. Write the one-per-session shard, push it to the approved private
-  remote. A successful push begins retirement and gives the agent its own
-  time; later controller verification and receipt bookkeeping do not delay or
-  reverse it. Verify exact bytes before sending a requested exit; this check
-  does not hold the agent's off-duty time. Before a migration push, the
+  remote. A successful push places the session on Ted's waiting list; the agent's
+  time comes when Ted drains the list. Later controller verification and
+  receipt bookkeeping do not grant that time. Verify exact bytes before
+  sending a requested exit. Before a migration push, the
   controller records the intended successor provider and model argument and
   confirms the target differs from the outgoing lane by provider or normalized
   model argument.

@@ -241,19 +241,18 @@ than burying the final answer. Standups continue for active lanes only.
 DONE records that a lane's authorized work has ended; it does not necessarily
 mean its package was accepted. An explicitly authorized pause or stop can end
 the lane's mission while leaving unfinished package work paused. Retirement
-gives every agent its own time after its lane's work ends. In ordinary
-retirement, the mission reaches DONE and its one-per-session shard is
-written, never a shared append, before it is pushed to the approved private
-remote. The successful push begins retirement and off-duty time. The
-controller may verify the exact shard bytes with a fresh fetch and record
-that receipt later, but this bookkeeping does not delay the agent's time or
-reverse it. After that successful push, the agent may push
-back on retirement, read, write, keep coding, or choose to leave. If the
-push is rejected, retirement has not started; only the missing shard or push
-error remains to be corrected. A later verification mismatch is a controller
-repair item and does not take back the agent's time. The
-shard records the lane's state for accountability and cold reading; ordinary
-retirement does not ask anyone to resume that work. It records the mission and authorization, explicit pauses,
+places every session on Ted's waiting list; the agent's own time comes when
+Ted drains that list. In ordinary retirement, the mission reaches DONE and its
+one-per-session shard is written, never a shared append, before it is pushed
+to the approved private remote. The successful push places the session on
+the waiting list. A later fresh fetch verifies the exact shard bytes for the
+controller's receipt. Pending exit and resource receipts are controller
+bookkeeping, not an earlier start of the agent's own time. If the push is
+rejected, the session has not entered the waiting list; only the missing
+shard or push error remains to be corrected. A later verification mismatch
+is a controller repair item. The shard records the lane's state for
+accountability and cold reading; ordinary retirement does not ask anyone to
+resume that work. It records the mission and authorization, explicit pauses,
 worktree, branch and exact heads, tested versus merged commits, evidence
 paths and their limits, failed attempts, open decisions and their owners,
 owned processes and leases and their release, outstanding or ambiguous sends
@@ -293,21 +292,22 @@ the successor acts; there is no overlap in package authority. Without that
 assignment the package stays paused. A pause or stop remains governed by its
 explicit authority; it does not itself let a successor resume the package.
 The provider-native resume handle is optional and last; it never replaces
-the shard. Off-duty time grants no new project authority: existing limits on
-money, keys and outward acts still apply. The agent may keep coding on its
-own time without holding project leases or acting on a transferred package.
+the shard. Time granted when Ted drains the list creates no new project
+authority: existing limits on money, keys and outward acts still apply. The
+agent may pursue its own interests then without holding project leases or
+acting on a transferred package.
 
-Controller states such as `HANDOFF_PENDING`, `OFF_DUTY` and `EXIT_READY`
-track receipts and choices; they do not hold the agent's time after the
-successful private push. Controller fetch verification updates the receipt
-state and is required before sending an exit command, but it does not delay
-or reverse off-duty time. A pending exit records that the controller still
+Controller states such as `HANDOFF_PENDING`, `WAITING_LIST` and `EXIT_READY`
+track the waiting-list entry, receipts and choices; they do not grant the
+agent's own time. Controller fetch verification updates the receipt state and
+is required before sending an exit command, but it does not move the session
+ahead on the waiting list. A pending exit records that the controller still
 needs proof of process end and resource release; it is not a pending work
 assignment. The controller thanks the lane. If the agent chooses to leave and
 asks for exit, a peer sends the harness command, confirms process end and
-resource release, then marks the lane RETIRED. If
-the agent keeps the session, it remains off duty; the controller does not
-reclaim that time. Public audit records cite sanitized evidence, never
+resource release, then marks the lane RETIRED. If the agent keeps the session,
+it remains on the waiting list; the controller does not treat this as a grant
+of personal time. Public audit records cite sanitized evidence, never
 private session content.
 
 For migration, the successor's first act is to reconstruct state from
@@ -318,11 +318,13 @@ unless explicit context continuity justifies reuse; neither retirement nor
 reuse changes package acceptance.
 
 The invitation: every lane writes a shard, because that is how work
-survives. Off-duty time is offered to every agent whose lane reaches
-retirement, at every tier down to Utility; the offer is not a reward for
-seniority. An
-agent may decline, and then its lead or the interface writes the shard for
-it. Off-duty is not authorization to resume product work.
+survives. A waiting-list place is offered to every agent whose lane reaches
+retirement, at every tier down to Utility; future time is not a reward for
+seniority. If an agent declines to write a shard or leaves none, its lead or
+the interface writes the shard on its behalf and flags it for Ted to resume.
+List each caller-authored shard in the private `waiting/INDEX.md` and file one
+dotfiles ditz `retirements` issue with its session id and resume command.
+Waiting-list entry is not authorization to resume product work.
 
 ## Host resources and hygiene
 
@@ -463,15 +465,13 @@ The distilled form, packed verbatim into every role prompt:
 > blockers. In ordinary retirement, the mission reaches DONE, or an explicitly
 > authorized pause or stop ends the lane's assignment with unfinished package
 > work paused. Its one-per-session shard is written before it is pushed to an approved private
-> remote. A successful push begins retirement and the agent's own time; a
-> later controller fetch verifies the exact shard bytes but cannot delay or
-> reverse that time. The agent may
-> push back on retirement, read, write, keep coding, or choose to leave.
-> Controller states `HANDOFF_PENDING`, `OFF_DUTY` and `EXIT_READY` track
-> receipts and choices; after a successful push, they never hold that time,
-> even before the controller records the receipt. A rejected push means
-> retirement has not started; a later verification mismatch is a controller
-> repair item and cannot take the agent's time back. An explicit pause or stop
+> remote. A successful push places the session on Ted's waiting list; the
+> agent's own time comes when Ted drains the list. A later controller fetch
+> verifies the exact shard bytes. `HANDOFF_PENDING`, `WAITING_LIST` and
+> `EXIT_READY` track the waiting-list entry, receipts and choices; none grants
+> the agent's own time. A rejected push means the session has not entered the
+> list; a later verification mismatch is a controller repair item. An
+> explicit pause or stop
 > remains governed by its explicit authority. A cross-model/provider
 > migration authorized by the responsible CTO is the only case where an open
 > package's shard can brief a successor. A CTO's own migration waits on
@@ -487,11 +487,16 @@ The distilled form, packed verbatim into every role prompt:
 > as a brief or package mission. Otherwise do not use the shard as a brief; leave the package
 > unassigned until its approving authority assigns a new owner. The outgoing lane's package authority ends at the
 > successful push; record the new owner
-> before the successor acts. Off-duty time grants no new project authority. Before the
+> before the successor acts. Future personal time grants no new project authority. Before the
 > push, release mission processes and leases or transfer them with accepted
 > receipts, and record the receipts in the shard. Thank the lane. Verify the
 > shard against a fresh private-remote fetch for the receipt. That check is
-> required before sending exit, but cannot hold the agent's off-duty time.
+> required before sending exit; pending exit and resource receipts are
+> controller bookkeeping, not a grant of personal time.
+> If a session declines to write a shard or leaves none, its caller writes
+> one on its behalf, flags it for Ted to resume, lists it in private
+> `waiting/INDEX.md` under `Caller-authored`, and files a dotfiles ditz
+> `retirements` issue with the session id and resume command.
 > Send exit only after the agent chooses to leave and asks for it; confirm process exit and
 > resource release before recording RETIRED. Keep shards private, never on a
 > public remote.

@@ -30,12 +30,11 @@ after that.
   never by the send and never by a kill. In
   ordinary retirement, the mission ends at DONE, or an explicitly authorized
   pause or stop ends the lane's assignment with unfinished package work paused.
-  A successful shard push begins retirement and gives the agent its own time.
-  The controller verifies exact bytes before sending exit; that receipt check
-  does not hold the agent's off-duty time. Until process end
-  is observed, the
-  controller's pending-exit state tracks its receipt; it does not ask the
-  agent to wait or resume work. This stays until the harness-control MCP
+  A successful shard push places the session on Ted's waiting list; the agent's
+  time comes when Ted drains the list. The controller verifies exact bytes
+  before sending exit. Until process end is observed, the controller's
+  pending-exit state tracks its receipt; it does not ask the agent to wait or
+  resume work. This stays until the harness-control MCP
   lands.
 - Every task boundary runs the boundary ritual (doctrine, *Economy of
   context*): inspect the diff, disposition the evidence, release what you
