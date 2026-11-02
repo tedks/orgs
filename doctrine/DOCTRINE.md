@@ -251,12 +251,12 @@ bookkeeping, not an earlier start of the agent's own time. If the push is
 rejected, the session has not entered the waiting list; only the missing
 shard or push error remains to be corrected. A later verification mismatch
 is a controller repair item. The waiting-list place survives process exit and
-remains until Ted drains the list. When he does, the agent may push back on
+remains until Ted drains the list. When Ted drains it, the agent may push back on
 retirement, read, write, keep coding, or choose to leave. The shard records
-the lane's state for
-accountability and cold reading; ordinary retirement does not ask anyone to
-resume that work. It records the mission and authorization, explicit pauses,
-worktree, branch and exact heads, tested versus merged commits, evidence
+the lane's state for accountability and cold reading; ordinary retirement
+does not ask anyone to resume that work. It records the mission and
+authorization, explicit pauses, worktree, branch and exact heads, tested
+versus merged commits, evidence
 paths and their limits, failed attempts, open decisions and their owners,
 owned processes and leases and their release, outstanding or ambiguous sends
 that must not be replayed, and the first bounded next action when one is
@@ -478,10 +478,9 @@ The distilled form, packed verbatim into every role prompt:
 > `RETIRED` until Ted drains the list. Then the agent may push back on
 > retirement, read, write, keep coding, or choose to leave. A rejected push
 > means the session has not entered the list; a later verification mismatch
-> is a controller repair item. An
-> explicit pause or stop
-> remains governed by its explicit authority. A cross-model/provider
-> migration authorized by the responsible CTO is the only case where an open
+> is a controller repair item. An explicit pause or stop remains governed by
+> its explicit authority. A cross-model/provider migration authorized by the
+> responsible CTO is the only case where an open
 > package's shard can brief a successor. A CTO's own migration waits on
 > `orgs-cto-self-migration-approver`. Record an intended successor provider
 > and model argument before the shard push, confirming the target differs

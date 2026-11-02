@@ -90,15 +90,15 @@ When the coordinator's own tokens are the scarce resource:
   or stop that leaves unfinished package work paused. Write the one-per-
   session shard, and push it to the approved private remote. A successful
   push places the session on Ted's waiting list; the agent's own time comes
-  when Ted drains the list. Later controller verification and receipt bookkeeping do
-  not grant that time. Before a migration push, the controller records the
-  intended successor provider and model argument, then confirms the target
-  differs from the outgoing lane by provider or normalized model argument.
-  A CTO's own migration waits on `orgs-cto-self-migration-approver`. After
-  launch, and before the successor receives the shard as a brief or a package
-  mission,
-  the controller confirms the live provider and selected model argument match
-  that target and verifies the shard's exact bytes. Otherwise the
+  when Ted drains the list. Later controller verification and receipt
+  bookkeeping do not grant that time. Before a migration push, the controller
+  records the intended successor provider and model argument, then confirms
+  the target differs from the outgoing lane by provider or normalized model
+  argument. A CTO's own migration waits on
+  `orgs-cto-self-migration-approver`. After launch, before the successor
+  receives the shard as a brief or package mission, the controller confirms
+  the live provider and selected model argument match that target and
+  verifies the shard's exact bytes. Otherwise the
   shard is not used as a successor brief; the package remains unassigned and
   its approving authority decides whether to assign a new owner. No work
   resumes before that assignment. A model/provider migration is the only case where

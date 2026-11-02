@@ -135,7 +135,7 @@ evidence with sanitized references.
 | From | To | Who | Evidence required |
 |---|---|---|---|
 | ACTIVE | HANDOFF_PENDING | coordinator | mission DONE or package authority's explicit stop/pause authorization (which the lane may request); or CTO-approved cross-model/provider migration; shard written; unresolved ownership named; for migration, intended successor provider/model argument recorded and target differs from outgoing lane by provider or normalized model selection |
-| HANDOFF_PENDING | WAITING_LIST | coordinator, after successful shard push | successful per-session shard push to the approved private remote; mission processes and leases released or accepted-transferred before push; caller-authored cases listed under `Caller-authored` in private `waiting/INDEX.md` with a dotfiles `retirements` issue (session id, resume command, shard path); outgoing package authority ends on migration |
+| HANDOFF_PENDING | WAITING_LIST | coordinator, after successful shard push | successful per-session shard push to the approved private remote; mission processes and leases released or accepted-transferred before push; outgoing package authority ends on migration |
 | WAITING_LIST | EXIT_READY | coordinator, from agent's request | agent explicitly chooses to leave and asks for exit; controller re-confirms exact shard bytes on the approved private remote before sending exit |
 | EXIT_READY | RETIRED | coordinator | exit confirmed; owned resources released with receipts; active roster/cadence updated |
 
@@ -147,6 +147,11 @@ the session has not entered the list. Neither condition grants personal time.
 The waiting-list place is a durable record, separate from the controller's
 current lifecycle state; it survives `EXIT_READY` and `RETIRED` until Ted
 drains the list.
+For caller-authored shards, the controller lists the shard under
+`Caller-authored` in private `waiting/INDEX.md` and files a dotfiles
+`retirements` issue with the session id, resume command and shard path. A
+missing entry or issue is a controller repair item; it does not cancel the
+place earned by the successful shard push.
 Mission processes and leases must be released or accepted-transferred before
 the push, with receipts recorded in the shard. The agent may choose to leave
 while the session remains on the waiting list.
