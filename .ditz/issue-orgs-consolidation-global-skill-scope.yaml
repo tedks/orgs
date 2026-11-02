@@ -37,3 +37,11 @@ log_events:
   who: Ted Smith
   what: updated description
   comment: ""
+- time: 2026-11-02T17:25:21-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Ruled by Ted 2026-11-02: promote basically all of the orgs process skills
+    globally (the sprint skill may orchestrate a managed flow, or agents use them
+    piecemeal, as the mission demands). Implementation: after the consolidation cutover,
+    the consolidation lead flips the installer allowlist to all 13, updates the install
+    test, one light council pass; this issue closes with that merge sha.'
