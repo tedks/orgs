@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import stat
 import subprocess
 import sys
@@ -125,6 +126,16 @@ def receipt_record(text):
         if key in record and not isinstance(record[key], str):
             raise Stop('malformed retirement receipt field: ' + key)
     return record
+
+
+def caller_resume_command(harness, session_id, worktree):
+    if session_id == 'unknown':
+        return 'unavailable (native session ID unknown)'
+    if harness == 'codex':
+        return 'codex resume ' + session_id
+    if harness == 'claude':
+        return 'cd ' + shlex.quote(worktree) + ' && claude --resume ' + session_id
+    return 'unavailable (unsupported harness)'
 
 
 def proc(pid):
@@ -559,7 +570,9 @@ class Retirement:
                 raise Stop('caller shard must record declined=true; do not invent agent thanks')
             if disposition == 'DONE' and data.get('no_agent_shard') is not True:
                 raise Stop('caller shard after DONE must record no_agent_shard=true')
-            if not re.fullmatch(r'written by .+ on behalf of the session; Ted may resume it', data.get('caller_authored', '')):
+            if data.get('declined') is True and data.get('no_agent_shard') is True:
+                raise Stop('caller shard must name exactly one missing-shard cause')
+            if not isinstance(data.get('caller_authored'), str) or not re.fullmatch(r'written by .+ on behalf of the session; Ted may resume it', data['caller_authored']):
                 raise Stop('caller shard must mark its author and Ted resume authority')
             if not isinstance(data.get('exact_resume_command'), str) or not data['exact_resume_command'].strip():
                 raise Stop('caller shard needs exact_resume_command for the tracker')
@@ -568,9 +581,9 @@ class Retirement:
                 raise Stop('shard requires ' + key)
         if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', data['date']) or not re.fullmatch(r'[\w.-]{1,128}', data['session_id']):
             raise Stop('invalid date/session identity')
-        if expected == 'caller' and data['session_id'] != 'unknown':
-            command = {'codex': 'codex resume ', 'claude': 'claude --resume '}.get(data['harness'])
-            if command and data['exact_resume_command'] != command + data['session_id']:
+        if expected == 'caller':
+            command = caller_resume_command(data['harness'], data['session_id'], data['working_directory'])
+            if data['exact_resume_command'] != command:
                 raise Stop('caller resume command differs from pinned session')
         datetime.date.fromisoformat(data['date'])
         if not 1 <= len(data['lessons'].splitlines()) <= 5:
@@ -655,7 +668,7 @@ class Retirement:
         issue_id = 'retirement-caller-' + self.state['id']
         description = (f"Caller-authored retirement shard for session {data['session_id']}.\n"
                        f"Resume command: {data['exact_resume_command']}\n"
-                       f"Private shard path: {self.state['shard']}\n"
+                       f"Private shard path: {self.repo / self.state['shard']}\n"
                        f"Provenance: {data['caller_authored']}\n")
         add = run([ditz, 'add', '--id=' + issue_id, '--ids-only', '--component=retirements',
                    '--desc-stdin', 'Resume caller-authored retirement ' + data['session_id']],
@@ -841,9 +854,10 @@ class Retirement:
                                    status='ambiguous', receipt_type='assistant-final-marker')
                     if disposition != 'DONE':
                         raise Stop('agent declined; author caller shard then --resume --caller-shard' if disposition == 'DECLINED' else 'DONE not observed; resume observes, never resends')
-                    if not shard.exists():
-                        self.state['agent_shard_missing'] = True
-                        self.persist()
+                if self.state.get('disposition') == 'DONE' and not shard.exists() and not shard.is_symlink():
+                    self.state['agent_shard_missing'] = True
+                    self.persist()
+                    raise Stop('agent left no shard; author caller shard then --resume --caller-shard')
             else:
                 if self.state.get('disposition') not in ('DECLINED', 'DONE'):
                     raise Stop('caller continuation requires observed agent decline or DONE with no shard')

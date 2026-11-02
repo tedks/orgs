@@ -62,11 +62,12 @@ def build(root, session_id='', event_id=''):
         values = (data.get('session_id', 'unknown'), provider, data.get('role', 'unknown'),
                   record['status'], record.get('verified_at', 'unknown'))
         entries.append(f'| [{shard.name}]({shard.name}) | ' + ' | '.join(cell(value) for value in values) + ' |\n')
-        if data.get('author') == 'caller':
+        if data.get('author') == 'caller' and (data.get('caller_authored') or data.get('exact_resume_command')):
             if not data.get('caller_authored') or not data.get('exact_resume_command'):
                 raise ValueError('caller shard missing attribution or resume command')
+            command = str(data['exact_resume_command']).replace('&', '&amp;').replace('|', '&#124;').replace('`', '&#96;').replace('\n', ' ')
             caller_rows.append(f'| [{shard.name}]({shard.name}) | {cell(data["session_id"])} | '
-                               f'`{cell(data["exact_resume_command"])}` | '
+                               f'`{command}` | '
                                f'`retirement-caller-{data["event"]}` |\n')
     section = begin + '\n' + ''.join(entries) + end
     if begin in original:
@@ -75,8 +76,10 @@ def build(root, session_id='', event_id=''):
         updated = original + '\n\n' + section + '\n'
     marker = '<!-- caller-authored:rows -->'
     caller_begin, caller_end = '<!-- retire-agent:caller-begin -->', '<!-- retire-agent:caller-end -->'
-    if caller_rows:
+    if caller_rows or caller_begin in updated or caller_end in updated:
         if marker not in updated:
+            if re.search(r'(?m)^## Caller-authored\s*$', updated):
+                raise ValueError('existing Caller-authored heading needs caller index marker')
             updated = (updated + '\n## Caller-authored\n\n'
                        '| Shard | Session | Resume command | Dotfiles issue |\n'
                        '| --- | --- | --- | --- |\n' + marker + '\n')

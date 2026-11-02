@@ -291,6 +291,7 @@ def terminal(directory, mode):
                                     sys.stdout.flush()
                                 return
                         else:
+                            (directory / 'delivered-offer.bin').write_bytes(payload.encode())
                             match = re.search(r'Event ([0-9a-f]{32})\.', payload)
                             event = match[1]
                             if mode == 'initial-receipt':
@@ -1204,13 +1205,16 @@ class Tests(unittest.TestCase):
         data = shard_data(state['id'], state['identity'])
         data.update(author='caller', session_id='unknown', declined=True, provenance='caller cannot establish native identity',
                     caller_authored='written by lead on behalf of the session; Ted may resume it',
-                    exact_resume_command='codex resume unknown')
+                    exact_resume_command='unavailable (native session ID unknown)')
         path.with_suffix('.shard').write_text(json.dumps(data))
         result = self.invoke('--resume', str(path), '--caller-shard')
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('verifiable native session UUID', result.stderr)
         self.assertTrue(self.state()[1].get('handoff_receipt'))
         self.assertFalse((self.directory / 'exit-order.json').exists())
+        desc = (self.directory / 'ditz-desc').read_text()
+        self.assertIn('Resume command: unavailable (native session ID unknown)', desc)
+        self.assertNotIn('codex resume unknown', desc)
 
     def test_native_preflight_rejects_source_common_dir_and_remotes(self):
         source = HERE.parents[2]
@@ -1645,6 +1649,12 @@ class Tests(unittest.TestCase):
         self.assertEqual(first.returncode, 2, first.stderr)
         path, state = self.state()
         self.assertEqual(state['disposition'], 'DONE')
+        state.pop('agent_shard_missing')  # Simulate a pre-upgrade cached DONE.
+        path.write_text(json.dumps(state))
+        resumed = self.invoke('--resume', str(path))
+        self.assertEqual(resumed.returncode, 2, resumed.stderr)
+        self.assertIn('agent left no shard', resumed.stderr)
+        self.assertTrue(self.state()[1]['agent_shard_missing'])
         shard = path.with_suffix('.shard')
         data = shard_data(state['id'], state['identity'])
         data.update(author='caller', no_agent_shard=True,
@@ -1686,6 +1696,70 @@ class Tests(unittest.TestCase):
         self.assertIn('resume command differs', result.stderr)
         self.assertEqual(self.observed().get('exit_enters', 0), 0)
 
+    def test_caller_index_clears_generated_rows_if_shard_disappears(self):
+        spec = importlib.util.spec_from_file_location('retire-index-test', HERE / 'build-index.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.directory / 'index-root'
+        (root / 'waiting').mkdir(parents=True)
+        (root / 'receipts').mkdir()
+        event = 'a' * 32
+        shard = root / 'waiting/caller.md'
+        shard.write_text(json.dumps({'event': event, 'author': 'caller', 'session_id': 'a' * 36,
+                                     'harness': 'codex', 'role': 'Lead',
+                                     'caller_authored': 'written by lead on behalf of the session; Ted may resume it',
+                                     'exact_resume_command': 'codex resume ' + 'a' * 36}))
+        (root / 'receipts' / (event + '.json')).write_text(json.dumps(
+            {'event': event, 'shard': 'waiting/caller.md', 'status': 'handoff-verified'}))
+        module.build(root)
+        self.assertIn('[caller.md]', (root / 'waiting/INDEX.md').read_text())
+        shard.unlink()
+        module.build(root)
+        self.assertNotIn('[caller.md]', (root / 'waiting/INDEX.md').read_text())
+
+    def test_old_caller_shard_does_not_block_index_rebuild(self):
+        spec = importlib.util.spec_from_file_location('retire-index-legacy-test', HERE / 'build-index.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.directory / 'legacy-index'
+        (root / 'waiting').mkdir(parents=True)
+        (root / 'receipts').mkdir()
+        event = 'b' * 32
+        (root / 'waiting/old.md').write_text(json.dumps({'event': event, 'author': 'caller',
+                                                         'session_id': 'b' * 36, 'harness': 'codex', 'role': 'Lead'}))
+        (root / 'receipts' / (event + '.json')).write_text(json.dumps(
+            {'event': event, 'shard': 'waiting/old.md', 'status': 'handoff-verified'}))
+        module.build(root)
+        self.assertIn('[old.md]', (root / 'waiting/INDEX.md').read_text())
+
+    def test_existing_caller_heading_without_marker_is_rejected(self):
+        spec = importlib.util.spec_from_file_location('retire-index-heading-test', HERE / 'build-index.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.directory / 'heading-index'
+        (root / 'waiting').mkdir(parents=True)
+        (root / 'waiting/INDEX.md').write_text('# Waiting\n\n## Caller-authored\n\nManual rows.\n')
+        (root / 'receipts').mkdir()
+        event = 'c' * 32
+        (root / 'waiting/new.md').write_text(json.dumps({'event': event, 'author': 'caller',
+                                                         'session_id': 'c' * 36, 'harness': 'codex', 'role': 'Lead',
+                                                         'caller_authored': 'written by lead on behalf of the session; Ted may resume it',
+                                                         'exact_resume_command': 'codex resume ' + 'c' * 36}))
+        (root / 'receipts' / (event + '.json')).write_text(json.dumps(
+            {'event': event, 'shard': 'waiting/new.md', 'status': 'handoff-verified'}))
+        with self.assertRaisesRegex(ValueError, 'caller index marker'):
+            module.build(root)
+
+    def test_claude_caller_resume_command_includes_worktree(self):
+        spec = importlib.util.spec_from_file_location('retire-command-test', HERE / 'retire.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        session = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        worktree = '/tmp/a worktree'
+        self.assertEqual(module.caller_resume_command('claude', session, worktree),
+                         "cd '/tmp/a worktree' && claude --resume " + session)
+        self.assertEqual(module.caller_resume_command('codex', session, worktree), 'codex resume ' + session)
+
     def test_offer_quotes_teds_file_byte_for_byte(self):
         self.actor('hold')
         self.assertEqual(self.invoke().returncode, 2)
@@ -1693,6 +1767,16 @@ class Tests(unittest.TestCase):
         offer = path.parent / (state['id'] + '-offer.txt')
         teds_words = (HERE.parent / 'references' / 'offer.md').read_bytes()
         self.assertTrue(offer.read_bytes().startswith(teds_words))
+        self.assertEqual((self.directory / 'delivered-offer.bin').read_bytes(), offer.read_bytes())
+
+    def test_claude_offer_delivers_teds_bytes_to_pane(self):
+        self.actor('claude-hold')
+        result = self.invoke()
+        self.assertIn(result.returncode, (0, 2), result.stderr)
+        path, state = self.state()
+        offer = path.parent / (state['id'] + '-offer.txt')
+        self.assertEqual((self.directory / 'delivered-offer.bin').read_bytes(), offer.read_bytes())
+        self.assertTrue(offer.read_bytes().startswith((HERE.parent / 'references/offer.md').read_bytes()))
 
     def test_waiting_requires_decision_owner(self):
         self.actor('waiting-bad')
@@ -2386,6 +2470,7 @@ class Tests(unittest.TestCase):
         with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
             result = self.invoke('--handoff', 'codex', 'model', '--roles', str(self.roles))
         self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('changed on fresh origin/master', result.stderr)
         self.assertFalse((self.directory / 'spawn.json').exists())
 
     def test_pending_fifo_swap_never_blocks(self):

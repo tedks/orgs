@@ -123,14 +123,20 @@ uncertainty, and `caller_authored: "written by <lead> on behalf of the session;
 Ted may resume it"`. Record `declined: true` for a decline or
 `no_agent_shard: true` for a reported DONE with no file. The controller records
 the missing file before allowing that latter path. Supply the known native
-session ID and `exact_resume_command` as the last field; an unknown identity
-cannot establish verified retirement. Never invent the agent's own-word
-thanks. A caller may include an actual quotation only with
+session ID and `exact_resume_command` as the last field. Codex uses
+`codex resume <session-id>`; Claude uses `cd <working-directory> && claude
+--resume <session-id>` with shell quoting. If the native ID is unknown, record
+`unavailable (native session ID unknown)` instead of a runnable command; the
+shard and issue can be preserved, but verified retirement stays pending.
+Never invent the agent's own-word thanks. A caller may include an actual
+quotation only with
 `thanks_provenance: "quoted-agent"`. Then invoke
 `--resume PRIVATE_STATE --caller-shard` in the same mode. The private push
 creates a `Caller-authored` INDEX row; after fresh remote verification, the
 controller creates and syncs one dotfiles ditz issue under `retirements` with
-the session ID, resume command, and shard path before requesting exit.
+the session ID, resume command, and private shard path before requesting exit.
+The INDEX row names the deterministic issue ID when the shard is pushed; if
+issue sync fails, exit stays pending for a deliberate retry.
 
 The checkout must already have private `origin/master`. Privacy is checked for
 every fetch/push URL. GitHub uses authenticated `gh repo view` with an explicit
