@@ -423,6 +423,8 @@ def _read_usage_posture() -> dict:
             or ('anthropic.seven_day' in expired and 'anthropic.five_hour' in expired
                 and posture['gated']['anthropic'])):
         return {'state': 'unavailable', 'reason': 'token_usage_posture_malformed'}
+    # The producer marks stale[provider] from its weekly meter; an expired
+    # five-hour meter makes the overall posture stale without changing that flag.
     null_scores = {'openai': 'openai' in expired,
                    'anthropic': 'anthropic.seven_day' in expired or 'anthropic.five_hour' in expired}
     null_used = {'openai': 'openai' in expired,
