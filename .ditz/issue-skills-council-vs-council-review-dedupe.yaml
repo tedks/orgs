@@ -51,3 +51,14 @@ log_events:
     Dotfiles owns the matching installer allowlist and global-instructions update;
     source removal will wait for its compatibility receipt. No unrelated runtime repairs
     are included in this package.'
+- time: 2026-11-03T04:10:54-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Lead source branch council-unification is pushed at 459a95afbd5836f7848b0c1d382b50aa9d5e6075;
+    draft PR #39 is ready for orgs CTO final-head audit. One canonical council-review
+    skill replaces the duplicate source/link; active callers and state/template semantics
+    are aligned. Present provider council seats converged CLEAN through exact head;
+    one foreign seat was EMPTY and recorded. Required local gates passed at exact
+    head. Dotfiles #230 compatibility is confirmed deployed; #231 global wording follows
+    orgs merge. Leave this issue in progress for CTO merge disposition. Follow-up
+    docs nit: council-plan-cto-role-clarity.'
