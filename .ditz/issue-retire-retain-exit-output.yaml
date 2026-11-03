@@ -60,3 +60,16 @@ log_events:
 
     Triage records accountability and next action; it does not itself start an implementation
     lane or change an existing pause.'
+- time: 2026-11-03T04:19:16-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Reproduced during retirement of the completed council-unification lane
+    after PR #39. The guarded helper published the private agent-authored shard, sent
+    one typed exit with Enter, and the pinned Codex actor ended; its dedicated pane
+    auto-closed, losing the fresh native exit notice. Formal retirement remains pending-exit.
+    The controller omitted narrow output retention before invoking the known-unrepaired
+    helper. No target process was killed, no exit replay or notice synthesis was used.
+    Stopped only the owned observer after confirming that the vanished pane made further
+    polling unable to recover evidence. Product integration is merged/deployed and
+    does not require resumption. Private event evidence retained by CTO; shared pre-exit
+    guard remains the bounded repair.'
