@@ -16,7 +16,7 @@ skill below for the procedure.
 | §4 Execution (worker loop) | `skills/implement` |
 | §5 Standup | `skills/standup` (wraps `tools/standup/`) |
 | §5b Huddle | `skills/huddle` |
-| §6 Review ladder | `skills/review` (freeze + one-rung-up) + `skills/council` (cross-provider) |
+| §6 Review ladder | `skills/review` (freeze + one-rung-up) + `skills/council-review` (cross-provider exploratory review or formal gate) |
 | §7 Speculative merge check | `skills/crystal` (wraps `tools/crystal/`) |
 | §8 Integration & closure | `skills/integrate` + `skills/retro` |
 | context packing (the firewall) | `skills/pack` |

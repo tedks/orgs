@@ -33,10 +33,10 @@ originate them.
 ## Gate
 
 The spec merges only after a **council round on the spec itself is CLEAN**
-(use `orgs-council`). A boundary error caught here is cheap; caught after
+(use `council-review`). A boundary error caught here is cheap; caught after
 fan-out it is an amendment. Record the spec's CLEAN council in `orgs-ledger`.
 A spec is **substantive** — it is never the "trivial docs-only" change that
-`orgs-council` lets skip a round; this gate is unconditional.
+`council-review` lets skip a round; this gate is unconditional.
 
 ## Changes after merge
 

@@ -6,8 +6,10 @@ description: The accountable lead's one-rung-up review to fixpoint. Freeze the t
 # orgs-review — the lead's one-rung-up review
 
 Review refines work upward. The ladder per package is: the implementer's
-**self-review** (inside `orgs-implement`) → **`orgs-council`** (cross-provider)
-→ **this skill**, the accountable lead's one-rung-up review. Council CLEAN plus
+**self-review** (inside `orgs-implement`) → **`council-review`** (cross-provider)
+→ **this skill**, the accountable lead's one-rung-up review. `council-review`
+owns provider seats and formal council convergence; this skill owns the lead
+verdict, feedback and acceptance map. Council CLEAN plus
 this review CLEAN moves the package to **ACCEPTED** (`STATES.md`, event
 `lead-review`). There is one lead rung, not a hierarchy of them — the council
 supplies the diversity that catches what a same-provider rung cannot.

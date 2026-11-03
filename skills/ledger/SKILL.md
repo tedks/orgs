@@ -5,8 +5,9 @@ description: Append to the org's event log and maintain status entries. Every or
 
 # orgs-ledger — the event log
 
-The ledger is the sprint's durable memory: what happened, in what causal
-order, and why. Every skill appends to it. It is what lets a standup, a
+The ledger is the sprint's durable event memory: what happened, in what causal
+order, and why. It records `council-review` findings and the accountable lead's
+separate `orgs-review` verdict. Every skill appends to it. It is what lets a standup, a
 takeover, or a cold-start audit reconstruct state from committed artifacts
 alone.
 
