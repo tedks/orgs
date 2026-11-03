@@ -67,7 +67,10 @@ Observe the composer twice, one `--stable-window` apart (default: the
 `human-typing`; use `--backoff --max-wait 60` for bounded waiting. An unchanged
 draft is preserved: append a newline and the outgoing message, verify the
 combined input, then submit both. Results record only the co-submitted draft
-length, never its contents. Exception: a verified stable command-shaped draft
+length, never its contents. A Claude composer containing `[Image #N]`, even
+when the marker wraps across rows, defers as `image-placeholder`; the image is
+opaque and must never be co-submitted. This check precedes command-draft
+handling. Exception to co-submission: a verified stable command-shaped draft
 is cleared without execution, then the outgoing message is sent only after
 empty input is verified. Its context may pre-empt the command. Results include
 `cleared_command_draft_length` after empty input is verified, and

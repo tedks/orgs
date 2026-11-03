@@ -32,6 +32,8 @@ spec.loader.exec_module(styles)
 
 PROMPT = re.compile(r"^\s*([›❯])(?:[ \u00a0]|$)(.*)$")
 PASTE = re.compile(r"\[Pasted (?:text|Text)(?:[^\]\n]*)\]", re.I)
+# Match after normalized() removes composer whitespace, including row breaks.
+IMAGE_PLACEHOLDER = re.compile(r"\[Image#[0-9]+\]", re.I)
 FOOTER = re.compile(r"^\s*(?:.*(?:Context \d+%|\d+% context left| · )|tab to queue message|\? for shortcuts|esc to interrupt)", re.I)
 MODAL = re.compile(r"Quick safety check|Yes, I trust this folder|No, exit|Do you trust the contents|Press enter to continue|Would you like to (?:proceed|run)|Do you want to (?:proceed|allow)|Allow once|Esc to cancel", re.I)
 QUEUE = re.compile(r"Messages to be submitted|queued messages?", re.I)
@@ -496,6 +498,11 @@ class Sender:
             frame, inp = self.sample()
             now = self.clock()
             fp = inp.fingerprint()
+            # Screen text cannot establish ownership of an attached image.
+            # Visual wrapping may split the placeholder across composer rows.
+            # Never append or submit alongside its visible placeholder.
+            if inp.harness == "claude" and IMAGE_PLACEHOLDER.search(normalized(inp.text)):
+                raise DeliveryError("image-placeholder")
             if now >= deadline:
                 break
             if probe_empty_credit and inp.kind != "empty":
