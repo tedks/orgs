@@ -1,0 +1,24 @@
+id: council-finding-disposition-binding
+title: Consider binding council finding dispositions to identifiers in PR round records
+desc: 'From PR #40 round 1 (OpenAI seat I5): clearance trusts the round''s unresolved_findings
+  count, a runner declaration, with no per-finding identity or disposition evidence
+  in the record. PR #40 fixed the exploitable part (a later outcome record can no
+  longer lower a round''s count; --unresolved is required). Deferred rationale: binding
+  findings to ids would turn the helper into a findings tracker, which ORGS-COUNCIL-RULING-5
+  did not ask for; dispositions remain the accountable lead''s readable PR summary
+  and, in org sprints, orgs-ledger review-finding events, audited by orgs-review.
+  Revisit if the ten-round measurement or an audit shows undispositioned findings
+  slipping through. Owner: Orgs CTO.'
+type: task
+component: council-review
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T07:25:42-00:00
+references: []
+log_events:
+- time: 2026-11-03T07:25:42-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
