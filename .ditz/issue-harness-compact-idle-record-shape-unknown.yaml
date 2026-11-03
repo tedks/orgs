@@ -30,3 +30,14 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:27-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Lead; live=priority queue.
+
+    Next/disposition: Use sanitized current native-record fixtures to reproduce probe
+    failure; verify correct harness routing and actionable peer-relay fallback without
+    recording transcript content.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
