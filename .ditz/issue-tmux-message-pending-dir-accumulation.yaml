@@ -25,3 +25,16 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:47-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Lead; live=priority design
+    queue.
+
+    Next/disposition: Implement exact-entry, ownership-checked pending-payload management;
+    preserve deliberate retry and ambiguous-send evidence. Coordinate actual host
+    cleanup with dotfiles CTO, using an enumerated reviewed list and no shared-temp
+    glob deletion.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
