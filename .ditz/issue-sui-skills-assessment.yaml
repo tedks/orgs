@@ -13,8 +13,8 @@ type: task
 component: research
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: reorg
 creation_time: 2026-10-18T06:19:22-00:00
 references: []
 log_events:
@@ -50,3 +50,10 @@ log_events:
     commissioning more work. Third-party integration and vendoring remain Ted\u2019s
     decision.\nTriage records accountability and next action; it does not itself start
     an implementation lane or change an existing pause."
+- time: 2026-11-03T00:51:41-00:00
+  who: Ted Smith
+  what: 'closed: reorg'
+  comment: 'Superseded: the owning dotfiles CTO confirmed this was a stale cross-project
+    copy. The assessment and analyzer are complete in the owning project; follow-up
+    tracking remains there and no orgs lane is active. Detailed private-project merge
+    evidence is retained in the private CTO record.'
