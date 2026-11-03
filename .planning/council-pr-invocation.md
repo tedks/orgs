@@ -16,7 +16,8 @@ Before this change, a merge gate needed a caller to type `/council-review formal
 - [x] (2026-11-03) Round 1 formal council at the first frozen head (baseline workflow): Anthropic and OpenAI seats received findings; Google EMPTY (usage limit). The CTO's audit and the independent acceptance review reported overlapping findings. All are dispositioned below and fixed in this delta.
 - [x] (2026-11-03) Round 2 on the fix delta `2f0f9c3..46ca515`: OpenAI (identity-verified resume) and Anthropic (same live native reviewer) received findings; Google EMPTY again (usage limit). Two CTO audits and the acceptance review's second pass are folded in; dispositions below; fixed in the next delta.
 - [x] (2026-11-03) Round 3 on `46ca515..f27ff2b`: OpenAI (identity-verified resume) received findings; Anthropic (same live native reviewer) returned CLEAN with two nits; Google EMPTY (usage limit). The acceptance review's third pass was CLEAN with nits; the CTO's fifth audit asked for alternate-seat disposition at an unchanged head. Dispositions below; fixed in the next delta under one stated invariant.
-- [ ] Round 4 on the next fix delta, to fixpoint.
+- [x] (2026-11-03) Round 4 on `f27ff2b..daf6d27`: Anthropic and OpenAI (identity-verified resume) both received findings in the same class the CTO's seventh audit reproduced (receipt order treated as review order); Google EMPTY (usage limit, not re-probed after three failures reporting a multi-day reset). Fixed in the next delta by tightening the invariant.
+- [ ] Round 5 on the next fix delta, to fixpoint.
 - [ ] Post gate and council receipts on PR #40; send the finalized interface to the CTO; report READY.
 
 ## Assumptions
@@ -40,6 +41,7 @@ The repository has a GitHub remote and the `gh` CLI is authenticated wherever a 
 - Decision: The `formal <sha> [base]` alias is retained for exactly one host rollout: accepted in the rollout that first deploys PR rounds, removed by the next `council-review` change deployed to hosts. It routes through the PR round, expands abbreviated SHAs, and is refused unless it names the PR's head and merge-base; without an open PR it is refused (`formal-without-pr`), because a gate without a PR is declared by a governing workflow. Rationale: orgs has no release tags; the host rollout is the unit callers experience. Date/Author: 2026-11-03, Lead.
 - Decision: Measurement: unit is one completed production round; window is the first ten across all repositories after the recorded deploy time (`tally --since`); mistakes are caller refusals, captured automatically by the helper as shape and code and carried once by the next posted round from the checkout; valid alias use is adoption; evaluation runs pass `--evaluation`; public records never carry raw argument text. Rationale: the ruling asks for evidence without ceremony and without a per-PR reset; the CTO asked for one start point and evaluator exclusion. Date/Author: 2026-11-03, Lead (after CTO early checks 1-2 and the acceptance review).
 - Decision: One invariant governs findings. A seat's findings stand from the first posting of its received findings outcome until that seat later posts a received clean outcome, or another seat posts a received review in a round at the current head whose open record was posted after the findings; that round's prompts carry the standing findings and their dispositions. EMPTY outcomes, covered entries and silence examine nothing. Clearance requires no standing finding; planning dispatches covered seats as disposition reviews while findings stand. Rationale: three successive patches (late findings, EMPTY finder, covered-only round) were instances of one rule; PR #39's policy already lets a present seat examine a missing finder's resolution, including a rejected finding, without a push or a newly mandatory provider. Date/Author: 2026-11-03, Lead (after round 3 and CTO audits 5-6), recorded before the implementing edit was finalized.
+- Decision: The findings invariant, version 2, supersedes the first. A finding is `{round, seat}`. It stands until a later round examines it: a non-void round at the current head or an ancestor of it, opened after the finding was posted, whose open record lists that finding in its `standing` snapshot (the snapshot its prompts carried), with at least one received dispatched review. No seat is exempt, the finder included. Rationale: the first version let a seat's "latest" verdict be chosen by arrival time, so a late clean on an older head erased newer findings, and it inferred from timing alone that a round's prompts carried a finding. Evidence must come from what a round was given and reviewed, recorded explicitly, never from receipt order. Date/Author: 2026-11-03, Lead (after round 4 and CTO audit 7).
 - Decision: `plan` parses the typed argument itself rather than taking separate `--pr`/`--route` flags. Rationale: separate flags let the recorded shape disagree with what was resolved, and required the runner to report refusals by hand. Date/Author: 2026-11-03, Lead (round 1).
 
 ## Round 1 triage
@@ -68,9 +70,15 @@ Fixed under the findings invariant (Decision Log). After a late finding blocked,
 
 Anthropic's nits. An empty "fix" push could turn an EMPTY finder into a limit while the other seats reviewed an empty delta (N11): under the invariant the finder's findings still stand after any push, the plan lists them as `standing_findings`, and every prompt in the next round carries them, so the present seats judge them explicitly; a fixture asserts the listing. `target_tip` keeps an ignored `reported` parameter (N12): rejected with reason, because the mutation check uses it to restore the stale-`baseRefOid` source; its docstring says so. With the invariant in place, the former per-state `empty_status` check became redundant (its mutant survived) and was removed, so the rule lives in one function.
 
+## Round 4 triage
+
+Round 4 reviewed `f27ff2b..daf6d27`. Dispositions:
+
+Fixed under invariant version 2 (Decision Log). A late clean outcome on an older head became the seat's latest verdict and erased its newer finding, so a later all-EMPTY round could clear (Anthropic C3; OpenAI C1; CTO audit 7): a finding is now its own `{round, seat}` and is examined only by a later round that lists it, so no arrival, by any seat, erases it; fixture reproduces the audit's exact history. A finding posted between `plan` and the open comment counted as examined by that round (OpenAI C2): the open record's `standing` snapshot binds what the round's prompts carried; fixture posts a finding after the snapshot. The prompt-carry rule was prose only, so a hand-trimmed round counted as examination (Anthropic N13): the same snapshot makes it explicit, and a round that does not list a finding examines nothing; fixture with a hand-trimmed record. A mutant restores the version-1 timing-only examination and is killed.
+
 ## Outcomes & Retrospective
 
-At the round-3 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (100 scenarios, 20 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle.
+At the round-4 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (103 scenarios, 21 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
 
 ## Context and Orientation
 
@@ -92,7 +100,7 @@ From the worktree root:
     nix develop --command bash -lc 'PYTHONDONTWRITEBYTECODE=1 python3 tests/test_config.py && PYTHONDONTWRITEBYTECODE=1 python3 tests/test_setup_leaks.py && skills/spawn-agent/scripts/test-tmux-message.sh && skills/initialize-repo/scripts/test-sync-check.sh'
     git diff --check origin/master...HEAD
 
-Expected: `Ran 100 tests ... OK`; every `mutant ...: killed`; `Skill is valid!`; the remaining gates pass.
+Expected: `Ran 103 tests ... OK`; every `mutant ...: killed`; `Skill is valid!`; the remaining gates pass.
 
 ## Validation and Acceptance
 
@@ -117,3 +125,5 @@ Plan revision note: after round 1, recorded the fix delta, the triage of every f
 Plan revision note: after round 2, recorded the second triage (target-tip liveness, late findings, void frames, refusal identity and unknown capture) and the updated counts.
 
 Plan revision note: after round 3, recorded the single findings invariant and the third triage, removed the separate late-findings rule, and fixed formatting.
+
+Plan revision note: after round 4, replaced the invariant with version 2 (finding identity and explicit standing snapshot instead of arrival order) and recorded the fourth triage.
