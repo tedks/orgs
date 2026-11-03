@@ -1,0 +1,27 @@
+id: reland-archived-agent-skills-prs
+title: 'Re-land agent-skills PRs #17 (image placeholders fail closed) and #18 (get_usage
+  accepts expired posture) in orgs; the source repo is archived'
+desc: 'agent-skills was archived on 2026-11-02 with these two reviewed-CLEAN PRs still
+  open: #17 "Defer Claude image placeholders as opaque input" (head 7a4cee9, modal
+  lead M4; sender tests 144, fixtures, mutation test) and #18 "Accept expired quota
+  posture in get_usage" (head eb8f580, usage lane; harness-control validator fix with
+  failing-first regression, 15 tool tests + mutations, Nix check). Both must land
+  in orgs: cherry-pick their commits onto orgs master with the path mapping skills/*
+  -> skills/* and harness-control/* -> harness-control/*, keep authorship, rerun the
+  exact gates (sender tests; harness tool tests with mutation check; nix flake check),
+  one light council pass each on the re-landed delta (they were reviewed to fixpoint
+  already), merge, then deploy: orgs master pull on framework0 and tower0 and install-harness-control
+  for #18. Then tmux-message-dim-suggestion-is-not-input if under two hours.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T00:24:47-00:00
+references: []
+log_events:
+- time: 2026-11-03T00:24:47-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
