@@ -26,7 +26,10 @@ block, from a line that is exactly the marker to a line beginning with
 or malformed block is a malformed record, never discussion. Any other
 comment is ordinary discussion, whatever it quotes: the marker inline, in a
 block quote, a fenced example, this reference, or a whole record pasted
-after some text. The JSON has `schema: "council-review-round"`,
+after some text. One deliberate exception follows from the edited rule
+below: once edited, a comment with an unfenced exact marker line (such as a
+record pasted after some text) is unknown evidence, so fence any record you
+quote if you may edit the comment later. The JSON has `schema: "council-review-round"`,
 `version: 1`, `phase` (`open` or `outcome`), `repo` (`owner/name`), `pr`,
 `round_id` (`<first 12 hex of head>-<UTC time>-<random hex>`, bound to the
 record's own head), and the round's frame:
@@ -114,7 +117,9 @@ block; GitHub's web editor may also return the body with CRLF line endings.
 So is a trusted comment that cannot be read well enough to know (corrupt
 JSON, a newer schema version), and an edited trusted comment that still has
 a line that is exactly the marker outside fenced code, even if the edit put
-text above the header. An edited discussion comment stays discussion, so an
+text above the header. Fences are read as CommonMark reads them: only a
+fence of the opener's character, at least as long, closes it, and a fence
+that never closes hides nothing. An edited discussion comment stays discussion, so an
 honest typo fix to a comment that quotes a record in a fence, a block quote
 or indented code blocks nothing. Any unknown comment refuses clearance until
 it is gone. If it was a
