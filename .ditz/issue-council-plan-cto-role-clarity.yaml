@@ -1,0 +1,21 @@
+id: council-plan-cto-role-clarity
+title: Clarify CTO ownership wording in council consolidation ExecPlan
+desc: "The public ExecPlan for orgs PR #39 says \u201CThe CTO owns dotfiles and merge
+  sequencing\u201D in its recovery section. The dotfiles CTO owns installer/global
+  wording and deployments; the orgs CTO owns final-head audit and orgs merge. Clarify
+  the sentence in a later documentation edit. Deferred from PR #39 because its exact
+  final head has passed the formal council and local gates; this wording is non-blocking
+  and the two owners are named elsewhere in the plan and PR."
+type: task
+component: docs
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T04:10:54-00:00
+references: []
+log_events:
+- time: 2026-11-03T04:10:54-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
