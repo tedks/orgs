@@ -22,6 +22,7 @@ revisions, or the PR moved during resolution).
 import argparse
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -42,6 +43,7 @@ MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$")
 REF_NAME = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 ROUND_ID = re.compile(r"^[0-9a-f]{12}-\d{8}T\d{6}Z-[0-9a-f]{6}$")
 EVENT_ID = re.compile(r"^[0-9a-f]{8}$")
+DIGEST = re.compile(r"^[0-9a-f]{12}$")
 # Provider seats, in council order, with the ask-agent CLI and Lead-tier model.
 SEATS = {
     "anthropic": {"cli": "claude", "model": "opus"},
@@ -212,10 +214,11 @@ def validate(rec, repo, pr):
         return "an open record must dispatch or cover at least one seat"
     standing = rec.get("standing")
     if not isinstance(standing, list) or not all(
-            isinstance(f, dict) and set(f) == {"round", "seat"}
+            isinstance(f, dict) and set(f) == {"round", "seat", "outcome"}
             and isinstance(f["round"], str) and ROUND_ID.match(f["round"])
-            and isinstance(f["seat"], str) and SEAT_NAME.match(f["seat"]) for f in standing) \
-            or len({(f["round"], f["seat"]) for f in standing}) != len(standing):
+            and isinstance(f["seat"], str) and SEAT_NAME.match(f["seat"])
+            and isinstance(f["outcome"], str) and DIGEST.match(f["outcome"]) for f in standing) \
+            or len({(f["round"], f["seat"], f["outcome"]) for f in standing}) != len(standing):
         return "bad standing list"
     inv = rec.get("invocation")
     if not isinstance(inv, dict) or set(inv) != {"shape", "route", "notes", "corrections",
@@ -315,7 +318,19 @@ def load_records(comments, repo, pr):
             continue
         why = err or trust_reason(comment) or validate(rec, repo, pr)
         if why:
-            ignored.append({"comment": comment.get("id"), "reason": why})
+            entry = {"comment": comment.get("id"), "reason": why}
+            # A trusted comment that is not a usable record may still carry
+            # findings; they stay evidence, because evidence can only block.
+            # Untrusted comments never become evidence, so outsiders cannot
+            # block a PR.
+            if comment.get("author_association") in TRUSTED_ASSOCIATIONS:
+                found = harvest_findings(rec, repo, pr)
+                if found is None:
+                    entry["unreadable"] = True
+                elif found:
+                    entry["evidence"] = [dict(f, comment=comment.get("id"),
+                                              created_at=comment["created_at"]) for f in found]
+            ignored.append(entry)
             continue
         usable.append({"comment": comment.get("id"),
                        "created_at": comment["created_at"], "record": rec})
@@ -323,8 +338,38 @@ def load_records(comments, repo, pr):
     return usable, ignored
 
 
-def assemble(usable):
-    """Group records into rounds; return (rounds in opening order, ignored)."""
+def harvest_findings(rec, repo, pr):
+    """Received findings in a record that is otherwise unusable.
+
+    Returns a list of {round, seat, outcome}; [] when the record holds none or
+    belongs to another PR; None when it cannot be read well enough to know.
+    """
+    if not isinstance(rec, dict) or rec.get("schema") != SCHEMA:
+        return None
+    if (rec.get("repo"), rec.get("pr")) != (repo, pr):
+        return []
+    if rec.get("version") != VERSION or not isinstance(rec.get("round_id"), str) \
+            or not ROUND_ID.match(rec["round_id"]) or not isinstance(rec.get("seats"), list):
+        return None
+    found = []
+    for seat in rec["seats"]:
+        if not isinstance(seat, dict) or not isinstance(seat.get("seat"), str) \
+                or not SEAT_NAME.match(seat["seat"]):
+            return None
+        counts = seat.get("counts") if isinstance(seat.get("counts"), dict) else {}
+        blocking = sum(v for k, v in counts.items() if k in ("critical", "important") and _count(v))
+        if seat.get("status") == "received" and (seat.get("verdict") == "findings" or blocking):
+            found.append({"round": rec["round_id"], "seat": seat["seat"],
+                          "outcome": outcome_digest(seat)})
+    return found
+
+
+def assemble(usable, ignored_records=()):
+    """Group records into rounds; return (rounds in opening order, ignored).
+
+    `ignored_records` (from load_records) contribute only finding evidence
+    and unreadable markers; they never open, cover or examine anything.
+    """
     groups, ignored = {}, []
     for item in usable:
         rec = item["record"]
@@ -340,8 +385,31 @@ def assemble(usable):
             rounds.append(_orphan_round(rid, group))
             continue
         rounds.append(_build_round(rid, group))
+    by_id = {r["id"]: r for r in rounds}
+    for entry in ignored_records:
+        for f in entry.get("evidence", ()):
+            order = (f["created_at"], f["comment"] if isinstance(f["comment"], int) else -1)
+            rnd = by_id.get(f["round"])
+            if rnd is None:
+                rnd = by_id[f["round"]] = _evidence_round(f["round"], order)
+                rounds.append(rnd)
+            rnd["finding_posts"].setdefault((f["seat"], f["outcome"]), order)
+        if entry.get("unreadable"):
+            rounds.append(_evidence_round(f"unreadable-{entry['comment']}",
+                                          ("", -1), unreadable=entry["comment"]))
     rounds.sort(key=lambda r: r["order"])
     return rounds, ignored
+
+
+def _evidence_round(rid, order, unreadable=None):
+    """A frameless holder for evidence from records that are not usable."""
+    return {"id": rid, "orphan": True, "unreadable": unreadable,
+            "open": {"head": None, "base": None, "target_ref": None,
+                     "seats": [], "covered": [], "standing": [], "invocation": None},
+            "opened_at": order[0], "order": order,
+            "conflict": "evidence only", "seats": {}, "unresolved": None,
+            "outcome_at": None, "named": set(), "frames": {}, "seat_posted": {},
+            "finding_posts": {}}
 
 
 def _finding_posts(outcome_items):
@@ -352,8 +420,15 @@ def _finding_posts(outcome_items):
     for item in outcome_items:
         for seat in item["record"]["seats"]:
             if seat["status"] == "received" and seat["verdict"] == "findings":
-                posts.setdefault(seat["seat"], _order(item))
+                # Each distinct outcome is its own evidence; an identical retry
+                # is the same evidence and keeps its first posting.
+                posts.setdefault((seat["seat"], outcome_digest(seat)), _order(item))
     return posts
+
+
+def outcome_digest(seat):
+    """A short fingerprint of one exact received outcome (canonical form)."""
+    return hashlib.sha256(canonical(seat).encode()).hexdigest()[:12]
 
 
 def _orphan_round(rid, group):
@@ -389,6 +464,10 @@ def _build_round(rid, group):
     for item in group["outcomes"]:
         rec = item["record"]
         rnd["named"].update(s["seat"] for s in rec["seats"])
+        if _order(item) < rnd["order"]:
+            # An outcome cannot answer a dispatch that did not yet exist.
+            rnd["conflict"] = rnd["conflict"] or "outcome posted before its open record"
+            continue
         if frame(rec) != frame(opened):
             rnd["conflict"] = rnd["conflict"] or "outcome revisions differ from the open record"
             continue
@@ -491,8 +570,8 @@ def latest_round_at_head(rounds, head, base, target_ref):
 def unexamined_findings(rounds, head, base, target_ref, is_ancestor):
     """The one rule for findings: which findings still stand.
 
-    A finding is one seat's received findings outcome in one round, named
-    {round, seat}, collected from every round of the PR whatever its frame or
+    A finding is one exact received findings outcome of one seat in one round,
+    named {round, seat, outcome}, collected from every round of the PR whatever its frame or
     validity. It stands until a later round examines it: a round that is
     not void, at a head that is the current head or an ancestor of it, opened
     after the finding was posted, whose open record lists that finding in its
@@ -506,16 +585,23 @@ def unexamined_findings(rounds, head, base, target_ref, is_ancestor):
     # Evidence comes from every round of the PR: any frame, void or orphaned.
     # Only examination is restricted to valid rounds of the current frame.
     for rnd in rounds:
-        for name, posted in finding_evidence(rnd).items():
-            key = {"round": rnd["id"], "seat": name}
+        for (name, digest), posted in finding_evidence(rnd).items():
+            key = finding_key(rnd["id"], name, digest)
             if not any(examines(r, key, posted, head, base, target_ref, is_ancestor)
                        for r in rounds):
                 stand.append(key)
-    return sorted(stand, key=lambda k: (k["round"], k["seat"]))
+    return sorted(stand, key=lambda k: (k["round"], k["seat"], k["outcome"]))
+
+
+def finding_key(round_id, seat, digest):
+    """A finding's identity: the exact outcome, not just its round and seat, so
+    a corrected or changed outcome is new evidence no earlier snapshot lists."""
+    return {"round": round_id, "seat": seat, "outcome": digest}
 
 
 def finding_evidence(rnd):
-    """{seat: first posting} of every received findings outcome in a round."""
+    """{(seat, outcome digest): first posting} of every distinct received
+    findings outcome in a round."""
     return rnd["finding_posts"]
 
 
@@ -744,6 +830,10 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
     for name in names:
         if name not in seats:
             seats[name] = unlisted_status(rounds, name, head, base, target_ref, is_ancestor)
+    unreadable = [r["unreadable"] for r in rounds if r.get("unreadable")]
+    if unreadable:
+        reasons.append("trusted round-record comments that cannot be read (their findings are "
+                       f"unknown): {unreadable}; delete or repost them")
     for finding in unexamined_findings(rounds, head, base, target_ref, is_ancestor):
         seats[finding["seat"]] = "findings"  # one rule, whatever the seat's latest state
     findings = sorted(n for n, v in seats.items() if v == "findings")
@@ -948,9 +1038,10 @@ def fetch_comments(cwd, repo, pr):
 
 def rounds_for(cwd, repo, pr):
     usable, ignored = load_records(fetch_comments(cwd, repo, pr), repo, pr)
-    rounds, orphans = assemble(usable)
+    rounds, orphans = assemble(usable, ignored)
     return rounds, ignored + orphans + [
-        {"round": r["id"], "reason": r["conflict"]} for r in rounds if r["conflict"]]
+        {"round": r["id"], "reason": r["conflict"]} for r in rounds
+        if r["conflict"] and not r.get("orphan")]
 
 
 # Refused invocations wait here (per checkout, inside the git directory) until

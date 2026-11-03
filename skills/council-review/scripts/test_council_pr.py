@@ -114,7 +114,7 @@ class History:
 
     def rounds(self, repo=REPO, pr=PR):
         usable, ignored = cp.load_records(self.comments, repo, pr)
-        rounds, orphans = cp.assemble(usable)
+        rounds, orphans = cp.assemble(usable, ignored)
         return rounds, ignored + orphans
 
     def plan(self, res, host="anthropic"):
@@ -127,6 +127,11 @@ class History:
 
     def clearance(self, res, expect=None):
         return cp.clearance(res, self.rounds()[0], is_ancestor, expect or res["head"])
+
+
+def pairs(standing):
+    """The {round, seat} part of standing findings (the digest is opaque)."""
+    return [{"round": f["round"], "seat": f["seat"]} for f in standing]
 
 
 def rounds_open(h, index):
@@ -602,8 +607,8 @@ class RoundOneRegressions(unittest.TestCase):
         result = h.clearance(resolved(head=H1))
         self.assertFalse(result["clean"])
         self.assertEqual(result["seats"]["mistral"], "findings")
-        self.assertEqual(cp.plan(resolved(head=H1), h.rounds()[0], "anthropic", is_ancestor)
-                         ["standing_findings"], [{"round": rid("r1", H1), "seat": "mistral"}])
+        standing = cp.plan(resolved(head=H1), h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
+        self.assertEqual(pairs(standing), [{"round": rid("r1", H1), "seat": "mistral"}])
 
     def test_clean_seat_omitted_from_latest_round_is_a_limit_not_clean(self):
         h = History()
@@ -671,8 +676,8 @@ class RoundTwoRegressions(unittest.TestCase):
         first_round(h, {"anthropic": "findings", "openai": "clean", "google": "clean"})
         # Even an empty "fix" push keeps the finding standing: the plan lists it
         # so every prompt in the next round makes the present seats judge it.
-        self.assertEqual(cp.plan(resolved(head=H2), h.rounds()[0], "anthropic", is_ancestor)
-                         ["standing_findings"], [{"round": rid("r1", H1), "seat": "anthropic"}])
+        standing = cp.plan(resolved(head=H2), h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
+        self.assertEqual(pairs(standing), [{"round": rid("r1", H1), "seat": "anthropic"}])
         o2 = h.post(opened("b", H2, [seat(n, "delta", H1) for n in ("anthropic", "openai", "google")]))
         h.post(outcome(o2, [empty(seat("anthropic", "delta", H1), "timeout"),
                             received(seat("openai", "delta", H1)), received(seat("google", "delta", H1))]))
@@ -776,7 +781,7 @@ class RoundTwoRegressions(unittest.TestCase):
                             received(seat("openai", "delta", H1)), empty(full("google"), "timeout")]))
         h.post(outcome(o1, [received(full("anthropic"))]))  # old H1 clean arrives late
         standing = cp.plan(resolved(head=H2), h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
-        self.assertEqual(standing, [{"round": rid("r2", H2), "seat": "anthropic"}])
+        self.assertEqual(pairs(standing), [{"round": rid("r2", H2), "seat": "anthropic"}])
         o3 = h.post(opened("r3", H2, [seat("anthropic", "disposition", H2), full("google"),
                                       seat("openai", "disposition", H2)]))
         h.post(outcome(o3, [empty(seat("anthropic", "disposition", H2), "timeout"),
@@ -813,7 +818,7 @@ class RoundTwoRegressions(unittest.TestCase):
         first_round(h, {"anthropic": "findings", "openai": "clean", "google": "clean"})
         new = resolved(head=H2, base=B2)
         standing = cp.plan(new, h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
-        self.assertEqual(standing, [{"round": rid("r1", H1), "seat": "anthropic"}])
+        self.assertEqual(pairs(standing), [{"round": rid("r1", H1), "seat": "anthropic"}])
         def full2(n):
             return seat(n, "full", B2)
         trimmed = h.post(opened("t", H2, [full2(n) for n in ("anthropic", "openai", "google")],
@@ -835,11 +840,111 @@ class RoundTwoRegressions(unittest.TestCase):
         h.post(outcome(o1, [received(full("openai"), nit=1)]))  # mistaken second outcome: void
         self.assertTrue(h.rounds()[0][0]["conflict"])
         standing = cp.plan(resolved(head=H1), h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
-        self.assertEqual(standing, [{"round": rid("r1", H1), "seat": "anthropic"}])
+        self.assertEqual(pairs(standing), [{"round": rid("r1", H1), "seat": "anthropic"}])
         o2 = h.post(opened("r2", H1, [full(n) for n in ("anthropic", "openai", "google")]))
         h.post(outcome(o2, [empty(full("anthropic"), "usage-limit"), received(full("openai")),
                             received(full("google"))]))
         self.assertTrue(h.clearance(resolved(head=H1))["clean"])
+
+    def test_distinct_later_finding_in_the_same_round_is_not_pre_examined(self):
+        h = History()
+        o1 = h.post(opened("r1", H1, [full(n) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o1, [received(full("anthropic"), important=1), received(full("openai")),
+                            received(full("google"))]))
+        o2 = h.post(opened("r2", H1, [seat(n, "disposition", H1) if n == "anthropic" else full(n)
+                                      for n in ("anthropic", "openai", "google")]))  # lists r1/anthropic
+        h.post(outcome(o1, [received(full("anthropic"), critical=2)]))  # distinct, posted after r2 opened
+        h.post(outcome(o2, [empty(seat("anthropic", "disposition", H1), "timeout"),
+                            received(full("openai")), received(full("google"))]))
+        self.assertFalse(h.clearance(resolved(head=H1))["clean"])
+
+    def test_outcome_posted_before_its_open_record_examines_nothing(self):
+        h = History()
+        first_round(h, {"anthropic": "findings", "openai": "clean", "google": "clean"})
+        o2 = opened("r2", H1, [seat("anthropic", "disposition", H1), full("openai")])
+        o2["standing"] = cp.plan(resolved(head=H1), h.rounds()[0], "anthropic",
+                                 is_ancestor)["standing_findings"]
+        h.post(outcome(o2, [received(full("openai"))]))  # an orphan outcome...
+        h.post(o2, snapshot=False)                        # ...then an open record claiming it
+        rounds, _ = h.rounds()
+        self.assertIn("before its open record", rounds[-1]["conflict"])
+        self.assertFalse(h.clearance(resolved(head=H1))["clean"])
+
+    def test_corrected_finding_after_an_examining_round_stands(self):
+        # AUDIT-9: a nonidentical correction to r1 arrives after r2 examined r1.
+        h = History()
+        o1 = h.post(opened("r1", H1, [full(n) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o1, [received(full("anthropic"), important=1), received(full("openai")),
+                            empty(full("google"))]))
+        o2 = h.post(opened("r2", H2, [full(n) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o2, [received(full(n)) for n in ("anthropic", "openai", "google")]))
+        self.assertTrue(h.clearance(resolved(head=H2))["clean"])
+        h.post(outcome(o1, [received(full("anthropic"), important=2)]))
+        result = h.clearance(resolved(head=H2))
+        self.assertFalse(result["clean"])
+        self.assertEqual(result["seats"]["anthropic"], "findings")
+
+    def test_changed_evidence_between_plan_and_post_is_not_in_the_snapshot(self):
+        # AUDIT-9: the snapshot already names the old (round, seat) pair.
+        h = History()
+        o1 = first_round(h, {"anthropic": "findings", "openai": "clean", "google": "clean"})
+        snap = cp.plan(resolved(head=H2), h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
+        h.post(outcome(o1, [received(full("anthropic"), critical=1)]))  # changed, after plan
+        # The correction voids r1, so every seat reviews in full; only the
+        # examination question remains: the snapshot names the OLD outcome.
+        o2 = opened("r2", H2, [full(n) for n in ("anthropic", "openai", "google")])
+        o2["standing"] = snap
+        h.post(o2, snapshot=False)
+        h.post(outcome(o2, [empty(full("anthropic"), "timeout"),
+                            received(full("openai")), received(full("google"))]))
+        result = h.clearance(resolved(head=H2))
+        self.assertFalse(result["clean"])
+        self.assertEqual(result["seats"]["anthropic"], "findings")
+        self.assertEqual(result["seats"]["openai"], "clean")  # coverage is not the reason
+
+    def edited_finding_history(self, snapshot=True):
+        """Anthropic P10: round a's findings outcome comment is later edited."""
+        h = History()
+        o1 = h.post(opened("a", H2, [full(n) for n in ("anthropic", "openai", "google")]))
+        out = outcome(o1, [received(full("anthropic"), critical=2), received(full("openai")),
+                           empty(full("google"))])
+        h.post(out, edited=True)
+        o2 = h.post(opened("b", H2, [full(n) for n in ("anthropic", "openai", "google")]),
+                    snapshot=snapshot)
+        h.post(outcome(o2, [empty(full("anthropic"), "timeout"), received(full("openai")),
+                            empty(full("google"), "timeout")]))
+        return h
+
+    def test_edited_trusted_record_findings_stay_evidence(self):
+        # Without the listing (P10's snapshot was empty) the finding blocks...
+        h = self.edited_finding_history(snapshot=False)
+        result = h.clearance(resolved(head=H2))
+        self.assertFalse(result["clean"])
+        self.assertEqual(result["seats"]["anthropic"], "findings")
+        standing = cp.plan(resolved(head=H2), h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
+        self.assertEqual(pairs(standing), [{"round": rid("a", H2), "seat": "anthropic"}])
+        # ...and a round whose snapshot lists it, with a received review, examines it.
+        self.assertTrue(self.edited_finding_history(snapshot=True).clearance(resolved(head=H2))["clean"])
+
+    def test_untrusted_comment_findings_are_not_evidence(self):
+        h = History()
+        o1 = h.post(opened("a", H2, [full(n) for n in ("anthropic", "openai")]))
+        h.post(outcome(o1, [received(full("anthropic")), received(full("openai"))]))
+        h.post(outcome(o1, [received(full("anthropic"), critical=9)]), assoc="NONE")  # outsider
+        self.assertTrue(h.clearance(resolved(head=H2))["clean"])
+
+    def test_unreadable_trusted_record_blocks_as_unknown(self):
+        h = History()
+        first_round(h)
+        h.post(None, body=cp.MARK_OPEN + "\n{broken\n" + cp.MARK_CLOSE)
+        result = h.clearance(resolved(head=H1))
+        self.assertFalse(result["clean"])
+        self.assertTrue(any("cannot be read" in r for r in result["reasons"]))
+        h2 = History()
+        o = first_round(h2)
+        future = dict(outcome(o, [received(full("anthropic"))]), version=2)
+        h2.post(None, body=cp.encode_block(future))
+        self.assertFalse(h2.clearance(resolved(head=H1))["clean"])
 
     def test_parse_keeps_pr_named_files_advisory(self):
         for advisory in ("PR.md", "pr-notes.md", "pr/x.py", "prompts/review.txt"):
@@ -1274,6 +1379,10 @@ MUTATIONS = {
     "check_host": lambda host, new_provider: None,
     "unexamined_findings": lambda rounds, head, base, target_ref, is_ancestor: [],
     "finding_evidence": lambda rnd: {} if rnd["conflict"] else rnd["finding_posts"],
+    "harvest_findings": lambda rec, repo, pr: [],
+    # Pair-only identity: every outcome of one seat in one round is the same finding.
+    "finding_key": lambda round_id, seat, digest: {"round": round_id, "seat": seat,
+                                                   "outcome": "0" * 12},
     "examines": lambda rnd, key, posted, head, base, target_ref, is_ancestor: (
         not rnd["conflict"] and rnd["order"] > posted
         and any(o["status"] == "received" for o in rnd["seats"].values())),
