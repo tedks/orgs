@@ -20,6 +20,8 @@ revisions, or the PR moved during resolution).
 """
 
 import argparse
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -337,11 +339,12 @@ def _build_round(rid, group):
     opened = first["record"]
     rnd = {"id": rid, "open": opened, "opened_at": first["created_at"], "order": _order(first),
            "conflict": None, "seats": {}, "unresolved": None, "outcome_at": None,
-           "named": set(), "frames": set(), "findings_posted": []}
+           "named": set(), "frames": {}, "seat_posted": {}}
     # Re-posting an identical open record is a retry, not a second round.
     for item in group["opens"]:
         r = item["record"]
-        rnd["frames"].add((r["head"], r["base"], r["target_ref"]))
+        # Each frame keeps the posting order of the first open that named it.
+        rnd["frames"].setdefault((r["head"], r["base"], r["target_ref"]), _order(item))
         rnd["named"].update(s["seat"] for s in item["record"]["seats"])
         rnd["named"].update(c["seat"] for c in item["record"]["covered"])
         if canonical(item["record"]) != canonical(opened):
@@ -364,9 +367,13 @@ def _build_round(rid, group):
                 rnd["conflict"] = rnd["conflict"] or why
                 continue
             target = received if seat["status"] == "received" else empty
+            # Re-posting an identical outcome is a retry; only its first
+            # posting carries information (and a posting time).
+            if canonical(seat) in target.get(name, {}):
+                continue
             target.setdefault(name, {})[canonical(seat)] = seat
-            if seat.get("verdict") == "findings":
-                rnd["findings_posted"].append((_order(item), name))
+            if seat["status"] == "received":
+                rnd["seat_posted"].setdefault(name, _order(item))
         # A later record (a late reviewer's, say) can never lower the count.
         rnd["unresolved"] = max(rnd["unresolved"] or 0, rec["unresolved_findings"])
         rnd["outcome_at"] = item["created_at"]
@@ -441,19 +448,44 @@ def coverage_in_head(coverage, head, is_ancestor):
 
 def latest_round_at_head(rounds, head, base, target_ref):
     """The last round opened at this head and frame, void or not."""
-    at_head = [r for r in rounds if (head, base, target_ref) in r["frames"]]
-    return at_head[-1] if at_head else None
+    frame_key = (head, base, target_ref)
+    at_head = [r for r in rounds if frame_key in r["frames"]]
+    return max(at_head, key=lambda r: r["frames"][frame_key], default=None)
 
 
-def late_findings(rounds, latest, base, target_ref):
-    """Findings posted to an earlier round after `latest` was opened.
+def unexamined_findings(rounds, head, base, target_ref):
+    """The one rule for findings: which seats' findings still stand.
 
-    A late reviewer's findings are new information the latest round never
-    saw; they block until a subsequent round accounts for them.
+    A finding stands from the first posting of its received outcome until its
+    own seat later posts a received clean outcome, or another seat posts a
+    received review in a round at this head whose open record was posted
+    after the finding (that round's prompts carry the standing findings and
+    their dispositions). EMPTY outcomes, covered entries and silence examine
+    nothing. Late findings, a finder gone EMPTY, and covered-only rounds are
+    all cases of this rule.
     """
-    return [(r["id"], seat) for r in rounds
-            if r is not latest and not r["conflict"] and same_frame(r, base, target_ref)
-            for order, seat in r["findings_posted"] if order > latest["order"]]
+    frame_key = (head, base, target_ref)
+    latest = {}
+    for rnd in rounds:
+        if rnd["conflict"] or not same_frame(rnd, base, target_ref):
+            continue
+        for name, outcome in rnd["seats"].items():
+            if outcome["status"] != "received":
+                continue
+            posted = rnd["seat_posted"][name]
+            if name not in latest or posted > latest[name][0]:
+                latest[name] = (posted, outcome["verdict"])
+    stand = set()
+    for name, (posted, verdict) in latest.items():
+        if verdict != "findings":
+            continue
+        examined = any(
+            not r["conflict"] and frame_key in r["frames"] and r["frames"][frame_key] > posted
+            and any(n != name and o["status"] == "received" for n, o in r["seats"].items())
+            for r in rounds)
+        if not examined:
+            stand.add(name)
+    return stand
 
 
 def plan(resolved, rounds, host, is_ancestor):
@@ -477,14 +509,27 @@ def plan(resolved, rounds, host, is_ancestor):
         else:
             entry.update(scope="delta", **{"from": coverage}, continuity="warm")
         seats.append(entry)
+    # Standing findings need a received examination: covered seats review
+    # the dispositions instead of being carried as covered, and every prompt
+    # in the round carries the standing findings (see unexamined_findings).
+    standing = sorted(unexamined_findings(rounds, head, base, target_ref))
+    if standing:
+        for c in covered:
+            seats.append({"seat": c["seat"], "mechanism": "native" if c["seat"] == host else "ask-agent",
+                          "cli": SEATS.get(c["seat"], {}).get("cli"),
+                          "model": SEATS.get(c["seat"], {}).get("model", "lead-default"),
+                          "scope": "disposition", "from": head, "continuity": "warm",
+                          "fallback": {"scope": "full", "from": base, "continuity": "fresh"}})
+        covered = []
     # With nothing to dispatch, a round is still needed when the latest round
     # at this head is void, has no outcome, or reports undispositioned findings:
     # the new round's outcome restates the disposition count.
     latest = latest_round_at_head(rounds, head, base, target_ref)
     outstanding = latest is not None and bool(
         latest["conflict"] or latest["outcome_at"] is None or latest["unresolved"]
-        or late_findings(rounds, latest, base, target_ref))
-    return {"seats": seats, "covered": covered, "open_round": bool(seats) or outstanding}
+        or standing)
+    return {"seats": seats, "covered": covered, "standing_findings": standing,
+            "open_round": bool(seats) or outstanding}
 
 
 def invocation_notes(route, local_ahead):
@@ -644,7 +689,7 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
             if name in silent or got is None:
                 continue
             if got["status"] == "empty":
-                seats[name] = empty_status(rounds, name, head, base, target_ref, is_ancestor)
+                seats[name] = "empty"  # standing findings override this below
             else:
                 coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
                 seats[name] = verdict if coverage == head else "unchained"
@@ -652,9 +697,6 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
             name = entry["seat"]
             coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
             seats[name] = "clean" if (coverage == head and verdict == "clean") else "unchained"
-        for rid_, seat_ in late_findings(rounds, latest, base, target_ref):
-            reasons.append(f"seat {seat_} posted findings to round {rid_} after round "
-                           f"{latest['id']} opened; run the council again")
         if latest["outcome_at"] is None:
             reasons.append(f"round {latest['id']} has no outcome record")
         elif latest["unresolved"]:
@@ -662,9 +704,12 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
     for name in names:
         if name not in seats:
             seats[name] = unlisted_status(rounds, name, head, base, target_ref, is_ancestor)
-    findings = [n for n, v in seats.items() if v == "findings"]
+    for name in unexamined_findings(rounds, head, base, target_ref):
+        seats[name] = "findings"  # one rule, whatever the seat's state in the latest round
+    findings = sorted(n for n, v in seats.items() if v == "findings")
     if findings:
-        reasons.append("open Critical/Important findings at head from: " + ", ".join(findings))
+        reasons.append("standing Critical/Important findings no seat has examined since, from: "
+                       + ", ".join(findings) + " (run the council again)")
     unchained = [n for n, v in seats.items() if v == "unchained"]
     if unchained:
         reasons.append("seats whose reviews do not chain to full coverage of this head: "
@@ -677,22 +722,12 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
                        if v in ("empty", "missing", "stale", "unlisted")]}
 
 
-def empty_status(rounds, name, head, base, target_ref, is_ancestor):
-    """An EMPTY seat whose own findings stand at this head still blocks.
-
-    Its findings were never re-examined: nothing was pushed for a present seat
-    to review, and the finder did not return. A fix push lets present seats
-    examine the fix in their delta; otherwise the finder must return.
-    """
-    coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
-    return "findings" if coverage == head and verdict == "findings" else "empty"
-
-
 def unlisted_status(rounds, name, head, base, target_ref, is_ancestor):
-    """A seat the latest round did not name: never clean; findings still block."""
+    """A seat the latest round did not name: never clean (standing findings
+    override this in clearance)."""
     coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
     if coverage == head:
-        return "findings" if verdict == "findings" else "unlisted"
+        return "unlisted"
     return "stale" if coverage is not None else "missing"
 
 
@@ -854,8 +889,10 @@ def resolve(cwd, pr=None):
 
 
 def target_tip(tips, ref, reported):
-    """The live remote tip of the target branch; `reported` (gh's baseRefOid,
-    which lags a target that moved after the PR's last push) is ignored."""
+    """The live remote tip of the target branch. `reported` (gh's baseRefOid,
+    which lags a target that moved after the PR's last push) is deliberately
+    ignored; it stays in the signature so the mutation check can restore the
+    stale source and prove a fixture fails."""
     return tips.get(ref)
 
 
@@ -931,17 +968,34 @@ def write_pending(cwd, state):
     os.replace(tmp, path)
 
 
+@contextlib.contextmanager
+def pending_lock(cwd):
+    """Serialize read-modify-write of the pending file across sessions."""
+    with open(pending_path(cwd) + ".lock", "a", encoding="utf-8") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def remember_refusal(cwd, raw, code, cohort):
     if code in CALLER_REFUSALS:
-        state = read_pending(cwd)
-        state["items"].append({"id": secrets.token_hex(4), "shape": arg_shape(raw),
-                               "reason": code, "cohort": cohort})
-        write_pending(cwd, state)
+        with pending_lock(cwd):
+            _remember(cwd, raw, code, cohort)
+
+
+def _remember(cwd, raw, code, cohort):
+    state = read_pending(cwd)
+    state["items"].append({"id": secrets.token_hex(4), "shape": arg_shape(raw),
+                           "reason": code, "cohort": cohort})
+    write_pending(cwd, state)
 
 
 def carried(cwd, cohort):
     """(corrections, unknown) the next `cohort` round records."""
-    state = read_pending(cwd)
+    with pending_lock(cwd):
+        state = read_pending(cwd)
     corrections = [{k: i[k] for k in ("id", "shape", "reason")}
                    for i in state["items"] if i["cohort"] == cohort]
     # Only a production round reports lost capture, so evaluation never hides it.
@@ -950,11 +1004,12 @@ def carried(cwd, cohort):
 
 def consume_pending(cwd, invocation):
     """Remove exactly the entries a posted open record carried, by id."""
-    state = read_pending(cwd)
-    ids = {c["id"] for c in invocation["corrections"]}
-    state["items"] = [i for i in state["items"] if i["id"] not in ids]
-    state["unknown"] = [u for u in state["unknown"] if u not in invocation["unknown"]]
-    write_pending(cwd, state)
+    with pending_lock(cwd):
+        state = read_pending(cwd)
+        ids = {c["id"] for c in invocation["corrections"]}
+        state["items"] = [i for i in state["items"] if i["id"] not in ids]
+        state["unknown"] = [u for u in state["unknown"] if u not in invocation["unknown"]]
+        write_pending(cwd, state)
 
 
 # --------------------------------------------------------------------------
@@ -992,7 +1047,11 @@ def cmd_plan(args):
         if route["route"] == "legacy-formal":
             check_legacy(resolved, route["sha"], route["base"], git_expand(args.repo_dir))
     except Refusal as exc:
-        remember_refusal(args.repo_dir, args.raw, exc.code, cohort)
+        try:
+            remember_refusal(args.repo_dir, args.raw, exc.code, cohort)
+        except (EnvError, OSError) as err:
+            print(f"measurement: this refusal could not be recorded ({err}); "
+                  "it is unknown to the tally", file=sys.stderr)
         raise
     rounds, ignored = rounds_for(args.repo_dir, resolved["repo"], resolved["pr"])
     seat_plan = plan(resolved, rounds, args.host, git_is_ancestor(args.repo_dir))

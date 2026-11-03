@@ -13,6 +13,7 @@ measurement window.
 """
 
 import contextlib
+import fcntl
 import io
 import json
 import os
@@ -121,6 +122,10 @@ class History:
         return cp.clearance(res, self.rounds()[0], is_ancestor, expect or res["head"])
 
 
+def rounds_open(h, index):
+    return h.rounds()[0][index]["open"]
+
+
 def full(name):
     return seat(name, "full", B)
 
@@ -205,8 +210,10 @@ class Planning(unittest.TestCase):
         h = History()
         first_round(h, {"anthropic": "clean", "openai": "findings", "google": "empty"})
         seats, covered = h.plan(resolved(head=H1))
-        self.assertEqual(covered, [{"seat": "anthropic", "through": H1}])
-        self.assertNotIn("anthropic", seats)
+        # openai's finding stands, so the clean seat examines its disposition
+        # instead of being carried as covered.
+        self.assertEqual(covered, [])
+        self.assertEqual(seats["anthropic"]["scope"], "disposition")
         self.assertEqual((seats["openai"]["scope"], seats["openai"]["from"]), ("disposition", H1))
         self.assertEqual(seats["openai"]["fallback"]["scope"], "full")
         self.assertEqual(seats["google"]["scope"], "full")
@@ -386,7 +393,7 @@ class RetriesDuplicatesAndLateReviewers(unittest.TestCase):
         h.post(dict(o, seats=[dict(full("openai"), status="dispatched")]))  # conflicting open
         rounds, _ = h.rounds()
         rnd = rounds[-1]
-        rnd["frames"].add((H2, B, "master"))  # as if one open had named another head
+        rnd["frames"][(H2, B, "master")] = rnd["order"]  # as if one open had named another head
         self.assertIs(cp.latest_round_at_head(rounds, H2, B, "master"), rnd)
 
     def test_conflicting_outcomes_for_a_seat_void_the_round(self):
@@ -571,12 +578,15 @@ class RoundOneRegressions(unittest.TestCase):
         h = History()
         o1 = h.post(opened("r1", H1, [full("anthropic"), full("mistral")]))
         h.post(outcome(o1, [received(full("anthropic")), received(full("mistral"), important=1)]))
-        # An Anthropic host reruns: mistral is neither dispatched nor covered.
+        # An Anthropic host reruns: mistral is neither dispatched nor covered,
+        # and the seat that was dispatched never answered.
         o2 = h.post(opened("r2", H1, [full("openai")], covered=("anthropic",)))
-        h.post(outcome(o2, [received(full("openai"))]))
+        h.post(outcome(o2, [empty(full("openai"), "timeout")]))
         result = h.clearance(resolved(head=H1))
         self.assertFalse(result["clean"])
         self.assertEqual(result["seats"]["mistral"], "findings")
+        self.assertEqual(cp.plan(resolved(head=H1), h.rounds()[0], "anthropic", is_ancestor)
+                         ["standing_findings"], ["mistral"])
 
     def test_clean_seat_omitted_from_latest_round_is_a_limit_not_clean(self):
         h = History()
@@ -626,7 +636,7 @@ class RoundTwoRegressions(unittest.TestCase):
         h.post(outcome(o1, [received(full("google"), important=1)]))  # google, late, with findings
         result = h.clearance(resolved(head=H2))
         self.assertFalse(result["clean"])
-        self.assertTrue(any("after round" in r for r in result["reasons"]), result["reasons"])
+        self.assertTrue(any("standing" in r for r in result["reasons"]), result["reasons"])
         self.assertTrue(h.open_round(resolved(head=H2)))
 
     def test_finder_gone_empty_at_the_same_head_still_blocks(self):
@@ -642,12 +652,101 @@ class RoundTwoRegressions(unittest.TestCase):
     def test_finder_gone_empty_after_a_fix_push_is_a_limit(self):
         h = History()
         first_round(h, {"anthropic": "findings", "openai": "clean", "google": "clean"})
+        # Even an empty "fix" push keeps the finding standing: the plan lists it
+        # so every prompt in the next round makes the present seats judge it.
+        self.assertEqual(cp.plan(resolved(head=H2), h.rounds()[0], "anthropic", is_ancestor)
+                         ["standing_findings"], ["anthropic"])
         o2 = h.post(opened("b", H2, [seat(n, "delta", H1) for n in ("anthropic", "openai", "google")]))
         h.post(outcome(o2, [empty(seat("anthropic", "delta", H1), "timeout"),
                             received(seat("openai", "delta", H1)), received(seat("google", "delta", H1))]))
         result = h.clearance(resolved(head=H2))  # present seats examined the fix in their delta
         self.assertTrue(result["clean"], result["reasons"])
         self.assertIn("anthropic: empty", result["limits"])
+
+    def test_present_seat_disposition_review_clears_an_empty_finder_without_a_push(self):
+        h = History()
+        o1 = h.post(opened("a", H2, [full("anthropic"), full("openai")]))
+        h.post(outcome(o1, [received(full("anthropic"), important=1), received(full("openai"))], 0))
+        # The lead rejects the finding with evidence; the finder is now out of quota.
+        seats, covered = h.plan(resolved(head=H2))
+        self.assertEqual(seats["openai"]["scope"], "disposition")  # dispatched, not carried
+        self.assertEqual(covered, [])
+        o2 = h.post(opened("b", H2, [seat("anthropic", "disposition", H2),
+                                      seat("openai", "disposition", H2)]))
+        h.post(outcome(o2, [empty(seat("anthropic", "disposition", H2), "usage-limit"),
+                            received(seat("openai", "disposition", H2))], 0))
+        result = h.clearance(resolved(head=H2))
+        self.assertTrue(result["clean"], result["reasons"])
+        self.assertEqual(result["seats"]["anthropic"], "empty")
+        self.assertIn("anthropic: empty", result["limits"])
+
+    def test_late_finding_stays_blocking_until_someone_examines_it(self):
+        h = History()
+        o1 = first_round(h, {"anthropic": "clean", "openai": "clean", "google": "empty"})
+        o2 = h.post(opened("r2", H2, [seat("anthropic", "delta", H1), seat("openai", "delta", H1),
+                                      full("google")]))
+        h.post(outcome(o2, [received(seat("anthropic", "delta", H1)),
+                            received(seat("openai", "delta", H1)), empty(full("google"))]))
+        h.post(outcome(o1, [received(full("google"), important=1)]))  # late, at H1
+        # A new round that only records the finder EMPTY and carries the rest examines nothing.
+        o3 = h.post(opened("r3", H2, [seat("google", "delta", H1)], covered=("anthropic", "openai")))
+        h.post(outcome(o3, [empty(seat("google", "delta", H1), "usage-limit")], 0))
+        self.assertFalse(h.clearance(resolved(head=H2))["clean"])
+        seats, covered = h.plan(resolved(head=H2))
+        self.assertEqual({seats["anthropic"]["scope"], seats["openai"]["scope"]}, {"disposition"})
+        o4 = h.post(opened("r4", H2, [seat("google", "delta", H1), seat("anthropic", "disposition", H2),
+                                      seat("openai", "disposition", H2)]))
+        h.post(outcome(o4, [empty(seat("google", "delta", H1), "usage-limit"),
+                            received(seat("anthropic", "disposition", H2)),
+                            received(seat("openai", "disposition", H2))], 0))
+        self.assertTrue(h.clearance(resolved(head=H2))["clean"])
+
+    def test_void_frame_is_ordered_by_its_own_open(self):
+        h = History()
+        h.post(opened("v", H1, [seat("anthropic", "full", B2)], base=B2))  # void round, first frame
+        first_round(h)  # a clean round at (H1, B)
+        v2 = opened("v", H1, [full("anthropic")])  # the void round later names (H1, B) too
+        h.post(v2)
+        rounds, _ = h.rounds()
+        latest = cp.latest_round_at_head(rounds, H1, B, "master")
+        self.assertEqual(latest["id"], rid("v", H1))
+        self.assertFalse(h.clearance(resolved(head=H1))["clean"])
+
+    def test_pending_updates_hold_the_lock(self):
+        tmp = Path(tempfile.mkdtemp(prefix="council-lock."))
+        self.addCleanup(shutil.rmtree, tmp)
+        git(tmp, "init", "--quiet")
+        observed = []
+        original = cp.write_pending
+
+        def probe(cwd, state):
+            with open(cp.pending_path(cwd) + ".lock", "a") as other:
+                try:
+                    fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    observed.append("unlocked")
+                    fcntl.flock(other, fcntl.LOCK_UN)
+                except BlockingIOError:
+                    observed.append("locked")
+            original(cwd, state)
+        cp.write_pending = probe
+        try:
+            cp.remember_refusal(str(tmp), "PR seven", "unrecognized-argument", "production")
+            inv = {"corrections": cp.carried(str(tmp), "production")[0], "unknown": []}
+            cp.consume_pending(str(tmp), inv)
+        finally:
+            cp.write_pending = original
+        self.assertEqual(observed, ["locked", "locked"])
+
+    def test_identical_findings_retry_is_not_late_information(self):
+        h = History()
+        first_round(h, {"anthropic": "findings", "openai": "clean", "google": "clean"})
+        o2 = h.post(opened("r2", H2, [seat(n, "delta", H1) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o2, [received(seat(n, "delta", H1)) for n in ("anthropic", "openai", "google")]))
+        self.assertTrue(h.clearance(resolved(head=H2))["clean"])
+        # Someone re-posts round 1's identical outcome record by hand.
+        h.post(outcome(rounds_open(h, 0), [received(full(n), important=1 if n == "anthropic" else 0)
+                                           for n in ("anthropic", "openai", "google")], 0))
+        self.assertTrue(h.clearance(resolved(head=H2))["clean"])
 
     def test_parse_keeps_pr_named_files_advisory(self):
         for advisory in ("PR.md", "pr-notes.md", "pr/x.py", "prompts/review.txt"):
@@ -1076,12 +1175,12 @@ MUTATIONS = {
     "unknown_keys": lambda obj, allowed: None,
     "unlisted_status": lambda rounds, name, head, base, target_ref, is_ancestor: "missing",
     "consume_pending": lambda cwd, invocation: None,
-    "late_findings": lambda rounds, latest, base, target_ref: [],
     "target_tip": lambda tips, ref, reported: reported,
     "carried": lambda cwd, cohort: (
         [{k: i[k] for k in ("id", "shape", "reason")} for i in cp.read_pending(cwd)["items"]], []),
     "check_host": lambda host, new_provider: None,
-    "empty_status": lambda rounds, name, head, base, target_ref, is_ancestor: "empty",
+    "unexamined_findings": lambda rounds, head, base, target_ref: set(),
+    "pending_lock": lambda cwd: contextlib.nullcontext(),
 }
 
 
@@ -1104,7 +1203,10 @@ def consume_by_shape(cwd, invocation):
 
 def mutation_check():
     survived = []
-    mutants = list(MUTATIONS.items()) + [("consume_pending", consume_by_shape)]
+    first_open_order = ("latest_round_at_head", lambda rounds, head, base, target_ref: max(
+        (r for r in rounds if (head, base, target_ref) in r["frames"]),
+        key=lambda r: r["order"], default=None))
+    mutants = list(MUTATIONS.items()) + [("consume_pending", consume_by_shape), first_open_order]
     for name, mutant in mutants:
         original = getattr(cp, name)
         setattr(cp, name, mutant)
@@ -1114,7 +1216,8 @@ def mutation_check():
         finally:
             setattr(cp, name, original)
         killed = not result.wasSuccessful()
-        label = name if mutant is not consume_by_shape else "consume_pending (by shape)"
+        label = {consume_by_shape: "consume_pending (by shape)",
+                 first_open_order[1]: "latest_round_at_head (first-open order)"}.get(mutant, name)
         print(f"mutant {label}: {'killed' if killed else 'SURVIVED'}")
         if not killed:
             survived.append(name)
