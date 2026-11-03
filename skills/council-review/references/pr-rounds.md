@@ -19,9 +19,10 @@ authoritative block:
 The summary's first line contains `council-review-round v1`, which makes
 records findable with search. The JSON has `schema: "council-review-round"`,
 `version: 1`, `phase` (`open` or `outcome`), `repo` (`owner/name`), `pr`,
-`round_id` (`<head-prefix>-<UTC time>-<random hex>`), and the round's frame:
+`round_id` (`<first 12 hex of head>-<UTC time>-<random hex>`, bound to the
+record's own head), and the round's frame:
 `head` (the frozen pushed head), `base` (the merge-base of head and the
-target tip), `target_ref` and `target_oid` (the target tip at invocation).
+target tip), `target_ref` and `target_oid` (the target branch's live remote tip at invocation).
 All SHAs are full 40-character hashes. Every object has a closed key set: a
 record with any field not listed here is invalid.
 
@@ -39,7 +40,8 @@ An `open` record is posted before dispatch. Its seats have status
 `dispatched`; its `covered` list names seats whose clean review of this head
 is reused rather than re-dispatched; it must name at least one seat either
 way. Its `invocation` block holds `shape`, `route`, `notes`, `corrections`
-and `cohort` (below). An `outcome` record repeats the frame and carries, per
+(each `{id, shape, reason}` with a random 8-hex event id), `unknown` (event
+ids of lost refusal capture) and `cohort` (below). An `outcome` record repeats the frame and carries, per
 seat, `status: received` (with `verdict` `clean` or `findings` and `counts`
 of `critical`, `important`, `nit`; the verdict must agree with the counts) or
 `status: empty` with a `reason` code: `unavailable`, `usage-limit`,
@@ -77,10 +79,14 @@ differs from its open record, an outcome for a seat it did not dispatch, an
 outcome claiming a scope other than its dispatch (except a full review), or
 two different received outcomes for one seat. A void round grants nothing,
 and it erases the coverage of every seat it names: those seats review the
-full change again. A received outcome supersedes an EMPTY one for the same
+full change again. Every frame named by any of a void round's open records
+counts, so a conflicting record cannot hide the void from a head. A received outcome supersedes an EMPTY one for the same
 seat in the same round: that is a late reviewer, attributed to that round's
 frozen head. A round's `unresolved_findings` is the largest value any of its
-outcome records reports, so a later record cannot lower it.
+outcome records reports, so a later record cannot lower it. Findings posted
+to an earlier round after the latest round at the head was opened are **late
+findings**: that latest round never saw them, so they block clearance and
+make the next invocation open a round.
 
 ## Planning
 
@@ -121,9 +127,13 @@ equals the expected head; that the latest round is not void (an earlier round
 never stands in for it); that every seat it dispatched has a received or
 EMPTY outcome (a silent seat blocks; record EMPTY if it is not coming); that
 every `covered` seat still chains to a clean review of the head; that no
-seat, listed or not, has open Critical/Important findings at the head; that
+seat, listed, EMPTY or not, has open Critical/Important findings at the
+head (a finder that went EMPTY without a fix push left its findings
+unexamined; after a fix push, present seats examine the fix in their delta,
+and the EMPTY finder is a limit); that
 at least one seat is clean; and that the round's count of undispositioned
-findings is zero. EMPTY, missing, stale and unlisted seats are reported as
+findings is zero; and that no late findings were posted to an earlier round
+after the latest round opened. EMPTY, missing, stale and unlisted seats are reported as
 limits and never counted as clean.
 
 ## Resolution
@@ -134,9 +144,15 @@ limits and never counted as clean.
 alias but is malformed is refused as `unrecognized-argument`; everything else
 is an advisory target. It reads the PR with `gh pr view`, fetches
 `refs/pull/N/head` and the target branch from the remote that points at the
-PR's repository, and confirms with `git ls-remote` that both remote refs
-still equal what `gh` reported; otherwise it refuses with `pr-moved` and the
-runner retries. Locally cached objects therefore cannot hide a moved PR.
+PR's repository, and confirms with `git ls-remote` that `refs/pull/N/head`
+still equals `gh`'s `headRefOid`; otherwise it refuses with `pr-moved` and
+the runner retries. Locally cached objects therefore cannot hide a moved PR.
+The target tip is the remote's own `refs/heads/<target>` at that moment, not
+`gh`'s `baseRefOid`, which GitHub records at the PR's last push and leaves
+behind when the target branch moves. Only a PR-reference prefix (`PR`,
+`PR #`, `PR7`, `#`) makes a malformed argument a refusal; names such as
+`PR.md` or `pr-notes.md` are advisory file targets. `check` accepts the same
+PR reference forms.
 
 ## Invocation measurement
 
@@ -153,16 +169,23 @@ The question is how often callers still get the argument or mode wrong.
 - **Window:** the first ten such rounds across every repository, in
   open-record order. It never resets per PR.
 - **Mistakes:** a round's `corrections`. When the helper refuses an
-  invocation for a caller reason, it stores the argument's shape and the code
-  in a small file inside the checkout's git directory; the next open record
-  posted from that checkout carries those entries and posting it clears them,
-  so each refusal is counted exactly once. `corrections: []` therefore means
-  the helper saw no caller refusal in that checkout since the last round,
-  not that nobody reported. A `pr-moved` retry is not a caller mistake.
-  Valid alias use and branch routing are adoption, reported as `notes` and
-  `alias_uses`.
+  invocation for a caller reason, it appends `{id, shape, reason, cohort}`
+  to a small file inside the checkout's git directory (each worktree has its
+  own). The next open record of the same cohort posted from that checkout
+  carries those entries, and posting it removes exactly those ids, so a
+  retried post can never remove a newer refusal and each refusal is counted
+  once; the tally also counts each event id once, so two rounds planned
+  concurrently cannot double-count. There is no cap. A pending file that
+  cannot be read is moved aside (`.unreadable-<id>`, kept for inspection),
+  and the next production record lists that id under `unknown`: the tally
+  reports such rounds as `rounds_with_unknown_corrections`, whose mistake
+  count is a floor, never a zero. `corrections: []` with `unknown: []` means
+  the helper saw no caller refusal in that checkout since its last round. A
+  `pr-moved` retry is not a caller mistake. Valid alias use and branch
+  routing are adoption, reported as `notes` and `alias_uses`.
 - **Exclusions:** fixture tests never contact GitHub. Acceptance replays and
-  dogfooding pass `plan --evaluation`.
+  dogfooding pass `plan --evaluation`; their refusals are kept apart and
+  never carried into, or consumed by, a production round.
 - **Known limits:** a refusal in a checkout that never posts another round,
   and a mistyped argument the helper reads as an advisory target, are not
   observed.
@@ -170,7 +193,8 @@ The question is how often callers still get the argument or mode wrong.
 To tally, find the PRs whose comments carry records, for example
 `gh search prs --owner <owner> --match comments "council-review-round v1" --json repository,number`
 (the records live in comments, not PR bodies), and run
-`council_pr.py tally --since <deploy time> OWNER/REPO#N ...`. It prints the
+`council_pr.py tally --since <deploy time> OWNER/REPO#N ...` (`--since` in
+GitHub's form, `YYYY-MM-DDTHH:MM:SSZ`). It prints the
 window's rows, the rounds with mistakes, the mistake total and the alias
 uses. A PR missing from the list shifts the window, so cite the search used.
 

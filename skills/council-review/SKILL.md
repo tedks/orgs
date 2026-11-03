@@ -359,7 +359,7 @@ the repository's owner, members or collaborators, and only unedited.
    the advisory workflow. Exit 4 is a refusal: tell the caller why and post
    nothing; a refusal caused by the argument is remembered (as shape and code
    only) and carried by the next round's record, so the caller just retypes.
-   `pr-moved` means the PR changed while resolving: run step 1 again. Exit 2
+   `pr-moved` means the PR head changed while resolving: run step 1 again. Exit 2
    is an error: report it; never fall back to an advisory review and call it
    a gate. The JSON names the frozen `head`, `base` (merge-base) and
    `target_ref`, one entry per seat with `scope` (`full`, `delta` or
@@ -418,8 +418,9 @@ the repository's owner, members or collaborators, and only unedited.
    head cannot move between check and merge. Exit 0 means the latest round
    at the live head is not void and disposed of every seat explicitly, at
    least one seat holds a received clean review chained to full coverage of
-   that head, no seat anywhere has open Critical/Important findings at that
-   head, and the round records no undispositioned findings. The output lists
+   that head, no seat anywhere (including one now EMPTY) has open
+   Critical/Important findings at that head, the round records no undispositioned findings, and no late reviewer
+   has since posted findings to an earlier round. The output lists
    EMPTY, missing, stale and unlisted seats as limits; they are never CLEAN.
    Anything else, including a moved head, is not clearance.
 
