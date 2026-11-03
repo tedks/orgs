@@ -1,0 +1,27 @@
+id: tmux-message-dim-suggestion-is-not-input
+title: 'tmux-message: a dim (ANSI faint) prompt suggestion in a Claude composer is
+  not human input; treat it as an empty composer'
+desc: "Ruling (dotfiles CTO, 2026-11-02, on the modal lead's restated question): Claude
+  Code renders its \"suggested next prompt\" in the composer with ANSI faint (\\x1b[2m),
+  e.g. the 2026-10-30 capture of %321 showed \"\u276F Option 2, promote those two
+  keys\" entirely dim between the composer rules. Human-typed text is never faint.
+  Rule: composer text that is wholly faint, byte-stable across the two looks, and
+  unchanged by the Space/BSpace probe is a suggestion, not input: classify the composer
+  as empty and paste; a paste replaces a suggestion exactly as typing does. Mixed
+  faint and normal text stays existing-input. Add the saved capture as a fixture plus
+  a mutation test that fails if the faint check is dropped. The sender now lives in
+  orgs skills/spawn-agent; implement there. Related: tmux-message-claude-placeholder,
+  control-delivery-dim-home-placeholder (dotfiles tracker)."
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T00:24:47-00:00
+references: []
+log_events:
+- time: 2026-11-03T00:24:47-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
