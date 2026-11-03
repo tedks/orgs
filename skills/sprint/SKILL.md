@@ -20,8 +20,8 @@ deviation. Assumed everywhere below.
 
 ```
 [spec] ─▶ [decompose] ─▶ ( [implement]×N ∥ [standup] ∥ [crystal] )
-       ─▶ [council] ─▶ [review] ─▶ [integrate] ─▶ [retro]
-                             ▲
+       ─▶ [council-review] ─▶ [review] ─▶ [integrate] ─▶ [retro]
+                                    ▲
      [huddle] — the escalation floor, always available via doctrine
    · every step appends to [ledger]   · every role prompt is built by [pack]
 ```
@@ -44,7 +44,8 @@ deviation. Assumed everywhere below.
    own worktree/branch, inside firewalled scope, and **self-review** against
    the acceptance criteria before handing off. → produces commits + status.
 5. **[standup]** and **[crystal]** run *alongside* the fan-out (see Wiring).
-6. **[council]** — cross-provider review to fixpoint on each frozen PR head.
+6. **[council-review]** — formal cross-provider review to fixpoint on each
+   frozen, pushed PR head.
 7. **[review]** — the accountable lead's one-rung-up review to fixpoint,
    fresh context. Council CLEAN + lead-review CLEAN → **ACCEPTED**.
 8. **[integrate]** — the integration owner merges each package *as it is
@@ -59,7 +60,7 @@ deviation. Assumed everywhere below.
 The leaf skills never say "if X is present." The composer says how they
 connect, and **the only channel for wiring to reach a role is the pack's wiring
 slot** (`orgs-pack`): this root hands each role's wiring to whoever calls
-`pack` for it (`decompose` for implementers, the council/review dispatcher for
+`pack` for it (`decompose` for implementers, the `council-review`/`orgs-review` dispatcher for
 reviewers). Nothing is injected outside the pack, so the manifest stays the
 complete record. In the **full** composition:
 

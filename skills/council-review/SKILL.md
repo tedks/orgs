@@ -1,17 +1,22 @@
 ---
 name: council-review
-description: Multi-agent code review council - one seat per provider (Claude, Codex, Antigravity/agy), reviewed simultaneously; the host fills its own provider's seat with its native subagent and the foreign seats via ask-agent
-argument-hint: '[target] — e.g. PR #42, staged, branch, or a file path'
+description: Provider-aware council for exploratory code review or a formal immutable-revision merge/spec gate. The host's own provider seat is native, foreign seats use ask-agent; formal gates use fresh judgment packs and fix-delta convergence.
 ---
 
 # council-review
 
-Launch a code review "council" — get one review per AI provider (Claude, Codex, agy) simultaneously, then synthesize the results.
+Launch one review per model provider (Claude, Codex, agy), normally in
+parallel, then synthesize the results. Use the exploratory workflow for
+advice on a worktree, staged diff, branch, PR or file. Use the formal workflow
+below when a PR merge or org spec/package acceptance depends on the verdict.
+An exploratory review is never a formal clearance merely because its target
+was a PR.
 
 ## Usage
 
 ```
 /council-review [target]
+/council-review formal <pushed-sha> [base-sha]
 ```
 
 ## Arguments
@@ -22,6 +27,12 @@ Launch a code review "council" — get one review per AI provider (Claude, Codex
   - `PR #<number>` or `#<number>` — review a pull request
   - `<file-path>` — review a specific file
   - *(no argument)* — review all uncommitted changes (`git diff HEAD`)
+- `formal <pushed-sha> [base-sha]`: declare a merge or spec gate at that
+  immutable revision. `base-sha` is the original comparison base for a full
+  review, never a fix round's last-reviewed SHA; supply it when it is not the
+  default branch's merge base. Identify the PR or branch from the current
+  worktree or governing brief so its remote head can be checked. The governing
+  workflow may declare the same gate while providing these SHAs in its brief.
 
 ## Provider-aware seating
 
@@ -94,9 +105,11 @@ Rules — these are not style preferences, they are what makes the council a cou
    a seat only when the CEO asks for it on that review, and the record says so
    (CEO ruling, 2026-10-13).
 
-## Instructions
+## Exploratory review
 
-When this skill is invoked, follow these steps:
+These steps gather live targets for advisory review. They do not satisfy an
+immutable-revision gate. For a formal merge or spec gate, use the formal
+workflow below while retaining the same provider seating and transport rules.
 
 ### Step 1: Determine what to review
 
@@ -310,9 +323,101 @@ level up, deleting other sessions' directories instead of just their files.
 Leave the orphaned directory; it is one `mktemp -d`'d directory, not a leak
 worth another session's files.
 
+## Formal merge and org spec/package gates
+
+A formal gate is declared by the governing workflow or the caller, not inferred
+from a `PR #N` argument alone. Freeze a **committed, pushed SHA** after the
+author has stopped editing. Name that SHA in every seat's dispatch, prompt,
+verdict and gate record. Verify the PR or branch still points to it before
+using the verdict; if a seat cannot be pinned to the named bytes, its answer
+is advisory and the round must be rerun. Do not use the live-target collection
+in Step 1 or `gh pr diff` as the review bytes for this gate. Capture the exact
+`base..reviewed-sha` diff, plus the PR title/description where relevant. A
+spec gate reviews the spec and its contracts at the frozen SHA before
+decomposition, including the boundary diagram; boundary tests do not yet
+exist and are not required. A spec is always substantive and must receive a
+council round.
+
+An org sprint's full review ladder includes this cross-provider gate; it is
+not optional decoration. The change's owner may run its council with fresh
+review seats and hand each round's record to the accountable lead. The lead
+records the ledger events from that evidence and audits them before acceptance.
+
+For an **org sprint**, call `orgs-pack` for each seat's fresh *judgment pack*:
+the frozen diff, whole spec, published contracts, acceptance criteria and
+available boundary tests for a code package; or the spec, contracts and
+boundary diagram for a spec gate. Include the doctrine block, review hat,
+selected lessons and sprint wiring in the pack's manifest as `orgs-pack`
+requires. Exclude the implementer's transcript and rationalizations. Give
+foreign seats the complete material inline; the native seat may also inspect
+post-change files at the pinned revision. An ordinary repository need not
+create org manifests, contracts, boundary tests or ledger artifacts: give its
+seats the frozen diff, purpose and acceptance criteria that exist. The same
+material and SHA go to all seats, with only the foreign no-command opener
+differing. Check prompt size and nonempty diff/content before launching.
+
+Seat by provider as above and launch in parallel by default. Pin every seat to
+the Lead tier (Opus, gpt-6-sol, agy's Lead default), absent an explicit CEO
+request for Frontier. Record actual provider/model, native or foreign
+mechanism, and each received verdict. An unavailable seat stays **EMPTY**,
+with its reason; a timeout, silence, permission denial or partial prompt is
+not a verdict. Never backfill it with a same-provider agent. The present
+seats may continue to convergence under the standing rule. If a *governing
+policy explicitly declares* a seat required for this particular gate,
+identify that policy and its authority, record the missing seat, and escalate
+the resulting landing decision to that authority. File the backfill review
+that policy requires. A scoped exception records issuer, revision, missing
+seat, scope and expiry; it never turns EMPTY into CLEAN. Do not invent a
+blanket approval gate. A declared review policy may order seats when quota is
+scarce; record that scheduling change without changing the verdict standard.
+
+Keep each reviewer fresh of the *author's* context. Across fix rounds, keep a
+responding seat warm with its **own** prior-round context: use `ask-agent
+--session-id-file` on its first foreign round and `--resume` on subsequent
+rounds, verifying the yielded identity and exit status (especially an agy
+cold-resume or partial-prompt error). Continue a native seat through the
+host's supported mechanism, or repack a fresh native seat with its prior
+findings if continuation is unavailable. Never use an author-session fork as
+a reviewer. A seat whose warm identity fails must be restarted with the full
+reviewed context before its answer counts.
+
+After the initial full review, record every finding by severity and
+disposition. Fix every Critical/Important. Fix a nit, performance suggestion
+or scope-creep finding, or file a follow-up with rationale; do not silently
+drop it. A genuine operator scope or product ruling goes to the named
+authority rather than being decided by a reviewer or implementer. In an org
+sprint, the accountable lead records the review-round transitions from
+`protocol/STATES.md` through `orgs-ledger`: OPENED at the frozen SHA and
+scope, one `review-seat-outcome` per seat (received findings, received
+no-finding, or EMPTY with reason), per-finding disposition, then `review-clean`
+citing the outcome events when the present seats converge. Append
+`review-finding` events for findings; `review-findings.md` is only their
+projection. Record each round's SHA, seats, findings, dispositions and
+exceptions in the change's review record or PR as a readable summary.
+The org `orgs-review` skill remains the accountable lead's separate
+one-rung-up review after council; `orgs-ledger` is event logging, not another
+review.
+
+Commit and push fixes to a new frozen SHA. Each warm seat re-councils **only**
+its exact `last-reviewed-sha..new-sha` delta, with its prior findings in its
+own context; do not re-litigate settled material. A seat with no received
+full round must first review the full `base..new-sha` change before its
+verdict counts.
+If a finding's original seat goes EMPTY before re-verifying its fix, record
+that limit and have a present seat examine the fix; never attribute the new
+verdict to the missing finder. Repeat until every **present**
+seat returns a received round with zero new Critical/Important findings and
+every earlier finding is dispositioned. That is CLEAN for the present seats;
+list missing seats separately, never as CLEAN. If no fix was needed, the
+first round can be the clean round. A changed head after the round requires
+delta review and affected local gates again. Post the council outcome and
+exact local gate commands/results with their tested SHA on the PR. Trivial
+mechanical changes may get one light round or a recorded skip under the
+governing merge policy; this proportionality does not waive the org spec gate.
+
 ## Notes
 
-- All seats run in parallel for speed
-- Your native subagent's review has full project context; foreign reviewers only see the diff (or PR)
+- Seats launch in parallel by default; record any quota-driven scheduling change.
+- Your native subagent can inspect project context; foreign reviewers see the complete material inline in their prompt.
 - If a foreign reviewer fails (not installed, usage limit, timeout, etc.), note it and continue with whatever reviews succeed — **do not** fill its seat with another reviewer from your own provider. If your *own* subagent fails, review inline and record it — **do not** fill your seat through `/ask-agent`
-- For the PR merge gate (fixpoint, triage, proportionality, PR record), see "Council review to fixpoint" in the global agent instructions (`~/.claude/CLAUDE.md`, which Codex reads as `~/.codex/AGENTS.md`); this skill is one round of that loop
+- The governing repository and global instructions may add acceptance or merge requirements. The formal workflow here supplies the council rounds and records; it does not merge the PR.

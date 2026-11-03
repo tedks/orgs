@@ -10,8 +10,8 @@ fit together.
 
 ```
 [spec] ─▶ [decompose] ─▶ ( [implement]×N ∥ [standup] ∥ [crystal] )
-       ─▶ [council] ─▶ [review] ─▶ [integrate] ─▶ [retro]
-                             ▲
+       ─▶ [council-review] ─▶ [review] ─▶ [integrate] ─▶ [retro]
+                                    ▲
      [huddle] — the escalation floor, always available via doctrine
    · every step appends to [ledger]   · every role prompt is built by [pack]
 ```
@@ -31,7 +31,7 @@ references, not leaks.
 | `decompose` | lead → tracer bullet, work packages, necessity challenge | templates, `pack` |
 | `implement` | one worker builds one package in firewalled scope | — |
 | `review` | the accountable lead's one-rung-up review to fixpoint (+ council CLEAN = ACCEPTED) | `pack` |
-| `council` | cross-provider review to fixpoint (the robustness keystone) | `council-review`, `ask-agent` |
+| `council-review` | provider-aware exploratory reviews and formal cross-provider gates to fixpoint | `ask-agent`; `pack` and `ledger` in org sprints |
 | `standup` | forced re-observation — redirect/halt a drifting agent | `tools/standup/` |
 | `crystal` | speculative merge-check; report conflicts to the lead | `tools/crystal/` |
 | `integrate` | merge ACCEPTED packages, keep the trunk green | — |
@@ -42,7 +42,7 @@ references, not leaks.
 
 ## Packaging
 
-Each `SKILL.md` carries Claude Code skill frontmatter (`name: orgs-<skill>`).
+Protocol `SKILL.md` files carry `name: orgs-<skill>`; the shared council entry point is `name: council-review`.
 They are the portable protocol artifacts; a harness binding
 (`bindings/claude-code.md`) installs or symlinks them into that harness's
 skill location. `tools/crystal/` and `tools/standup/` are the executables two

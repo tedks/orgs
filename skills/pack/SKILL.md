@@ -1,6 +1,6 @@
 ---
 name: orgs-pack
-description: Assemble a role's context pack — the firewall. Give a role the doctrine block, its hat, and ONLY its owned scope plus the published contracts it may depend on. Used by decompose (to pack workers), review/council (to pack fresh reviewers), and implement (to read its pack). This is the only place lean-vs-full packing lives.
+description: Assemble a role's context pack — the firewall. Give a role the doctrine block, its hat, and ONLY its owned scope plus the published contracts it may depend on. Used by decompose (to pack workers), `orgs-review`/`council-review` (to pack fresh reviewers), and implement (to read its pack). This is the only place lean-vs-full packing lives.
 ---
 
 # orgs-pack — the firewall
@@ -28,7 +28,7 @@ Template: `protocol/templates/context-manifest.md`.
    `tools/standup/guard.sh <id> --`"). This is the **only** path by which the
    root's wiring reaches a role: the root hands its wiring for the role to
    whoever calls `pack` for that role (`decompose` for implementers, the
-   council/review dispatcher for reviewers), and `pack` places it in this slot.
+   `council-review`/`orgs-review` dispatcher for reviewers), and `pack` places it in this slot.
    Nothing is injected into a prompt outside the pack — so the manifest stays
    the complete record of what the role was told.
 
