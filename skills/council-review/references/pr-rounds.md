@@ -17,7 +17,10 @@ authoritative block:
 ```
 
 The summary's first line contains `council-review-round v1`, which makes
-records findable with search. The JSON has `schema: "council-review-round"`,
+records findable with search. Only this exact block form is a record: a line
+that is exactly the marker, the JSON object starting on the next line, and a
+line beginning with `-->`. A comment that merely mentions or quotes the
+marker is ordinary discussion. The JSON has `schema: "council-review-round"`,
 `version: 1`, `phase` (`open` or `outcome`), `repo` (`owner/name`), `pr`,
 `round_id` (`<first 12 hex of head>-<UTC time>-<random hex>`, bound to the
 record's own head), and the round's frame:
@@ -96,12 +99,15 @@ is a new finding that no earlier snapshot can list. Findings are collected
 from every round of the PR, whatever its frame (a merge-base change or
 retarget does not drop them) and even when the round is void or its outcome
 has no open record: such records grant nothing, but their findings remain
-evidence. The same holds for a comment from the owner, a member or a
-collaborator that is not a usable record (edited, or failing validation): its
-received findings, read leniently, are still evidence. If such a trusted
-comment cannot be read well enough to know whether it holds findings
-(corrupt JSON, a newer schema version), clearance is refused until it is
-deleted or reposted. Comments from anyone else are never evidence, so an
+evidence. The same holds for an unedited comment from the owner, a member or
+a collaborator that fails validation: what it says is what was posted, so
+its received findings, read leniently, are still evidence. An edited trusted
+comment is unknown evidence, because its original contents may have held
+findings the edit removed; so is a trusted comment that cannot be read well
+enough to know (corrupt JSON, a newer schema version). Either refuses
+clearance until the comment is deleted or reposted. Deleting a comment is
+not visible in the records; the trusted collaborators who can delete are
+assumed honest about the record, as everywhere else in this protocol. Comments from anyone else are never evidence, so an
 outsider cannot block a PR. After a merge-base change or retarget, every
 finding in the PR's history stands again for the new frame, so the next
 round's snapshot and prompts carry them all; that list is bounded by the
@@ -231,6 +237,16 @@ To tally, find the PRs whose comments carry records, for example
 GitHub's form, `YYYY-MM-DDTHH:MM:SSZ`). It prints the
 window's rows, the rounds with mistakes, the mistake total and the alias
 uses. A PR missing from the list shifts the window, so cite the search used.
+
+## Schema versions and mixed hosts
+
+A record of a newer schema version reads as unknown on a host whose helper
+knows only an older one, and unknown evidence blocks clearance. That fails
+safe, but it means a schema change must deploy to every host together (the
+same coordinated rollout as this interface), or rounds posted by an upgraded
+host will block checks on hosts not yet upgraded. Hosts on the pre-PR-round
+skill post no records at all; their councils are invisible to `check`, so a
+PR cleared under the old global wording is not cleared under the new one.
 
 ## Compatibility alias
 

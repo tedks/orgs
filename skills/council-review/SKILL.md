@@ -365,7 +365,10 @@ the repository's owner, members or collaborators, and only unedited.
    `target_ref`, one entry per seat with `scope` (`full`, `delta` or
    `disposition`), `from`, `continuity` and a full-review `fallback`, the
    `covered` seats that need no dispatch, any ignored or void records with
-   reasons, and the `open_record` when a round is needed. With no
+   reasons, `blocking_records` (trusted record comments whose findings are
+   unknown: clear them by deleting or reposting before spending seats, since
+   no round can clear past them), and the `open_record` when a round is
+   needed. With no
    `open_record` nothing is outstanding at this head: go to step 7.
 
 2. **Record the round before dispatch.** Save `open_record` to
