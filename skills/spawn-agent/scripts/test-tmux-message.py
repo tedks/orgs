@@ -2175,8 +2175,8 @@ def typed_mutations():
         ('literal', 'self.pane, "-l", "--", text', 'self.pane, "--", text'),
         ('typed_evidence', 'return inp.kind == "text" and inp.text == self.payload',
          'return paste_evidence(inp, self.payload)'),
-        ('claude_dim_suggestion', 'elif (harness == "claude" and',
-         'elif (False and harness == "claude" and'),
+        ('claude_dim_suggestion_guard', '(end == idx + 1 and styles.dim_span(raw[idx], first))',
+         '(end == idx + 1)'),
     ]
     with tempfile.TemporaryDirectory(prefix='tmux-message-mutations-') as tmp:
         target = Path(tmp)
@@ -2191,8 +2191,8 @@ def typed_mutations():
             compile(code, name, 'exec')
             (target / 'tmux-message.py').write_text(code)
             command = [sys.executable, str(target / 'test-tmux-message.py')]
-            if name == 'claude_dim_suggestion':
-                command += ['-k', 'claude_cto_live_scrubbed_layouts']
+            if name == 'claude_dim_suggestion_guard':
+                command += ['-k', 'claude_dim_suggestion_requires_start_single_row_and_full_style']
             result = subprocess.run(command,
                                     capture_output=True, text=True, timeout=30)
             assert result.returncode != 0 and 'FAIL:' in result.stderr and 'ERROR:' not in result.stderr, (name, result.stderr)
