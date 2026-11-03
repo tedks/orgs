@@ -49,7 +49,7 @@ Write `skills/council-review/scripts/council_pr.py` with subcommands `resolve` (
 From the worktree root:
 
     PYTHONDONTWRITEBYTECODE=1 python3 skills/council-review/scripts/test_council_pr.py
-    python3 /home/tedks/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/council-review
+    python3 <skill-creator-dir>/scripts/quick_validate.py skills/council-review
     nix flake check
     nix develop --command bash -lc 'PYTHONDONTWRITEBYTECODE=1 python3 tests/test_config.py && PYTHONDONTWRITEBYTECODE=1 python3 tests/test_setup_leaks.py && skills/spawn-agent/scripts/test-tmux-message.sh && skills/initialize-repo/scripts/test-sync-check.sh'
     git diff --check origin/master...HEAD

@@ -330,7 +330,7 @@ class HostileAndBrokenRecords(unittest.TestCase):
 
     def test_empty_reason_must_be_a_code(self):
         o = opened("r1", H1, [full("anthropic")])
-        bad = outcome(o, [empty(full("anthropic"), "quota at 97% on host tower0")])
+        bad = outcome(o, [empty(full("anthropic"), "quota at 97% on host build-box")])
         self.assertIn("reason code", cp.validate(bad, REPO, PR))
 
     def test_unrelated_comments_are_skipped_silently(self):
@@ -530,8 +530,8 @@ class LegacyAliasAndMeasurement(unittest.TestCase):
     def test_argument_shapes(self):
         cases = {"PR #7": "pr-ref", "#7": "pr-ref", "": "none", "branch": "branch",
                  f"formal {H1}": "formal-sha", f"formal {H1[:9]} {B}": "formal-sha-base",
-                 "formal /home/someone/private.md": "formal-other",
-                 "/home/someone/notes.md": "other"}
+                 "formal /home/u/private.md": "formal-other",
+                 "/home/u/notes.md": "other"}
         for text, shape in cases.items():
             self.assertEqual(cp.arg_shape(text), shape, text)
 
@@ -687,7 +687,7 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(code, 4)
 
     def test_private_text_never_reaches_public_output(self):
-        secret = "/home/someone/private/notes-token-SECRETVALUE.md"
+        secret = "/home/u/private/notes-token-SECRETVALUE.md"
         code, out = self.cli("plan", "--pr", "7", "--host", "anthropic", "--route", "pr",
                              "--raw", f"PR #7 {secret}", "--correction", secret,
                              "unrecognized-argument")
