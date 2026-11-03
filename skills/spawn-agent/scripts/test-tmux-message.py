@@ -2180,17 +2180,20 @@ def typed_mutations():
     ]
     with tempfile.TemporaryDirectory(prefix='tmux-message-mutations-') as tmp:
         target = Path(tmp)
+        scripts = target / 'skills' / 'spawn-agent' / 'scripts'
+        scripts.mkdir(parents=True)
         for name in ('test-tmux-message.py', 'claude-send-screen.py'):
-            shutil.copy2(root / name, target / name)
-        shutil.copy2(root.parents[1] / '_shared' / 'agent_skills_config.py',
-                     target / 'agent_skills_config.py')
-        shutil.copytree(root / 'fixtures', target / 'fixtures')
+            shutil.copy2(root / name, scripts / name)
+        shared = target / 'skills' / '_shared'
+        shared.mkdir()
+        shutil.copy2(root.parents[1] / '_shared' / 'agent_skills_config.py', shared)
+        shutil.copytree(root / 'fixtures', scripts / 'fixtures')
         for name, before, after in cases:
             assert original.count(before) == 1, name
             code = original.replace(before, after)
             compile(code, name, 'exec')
-            (target / 'tmux-message.py').write_text(code)
-            command = [sys.executable, str(target / 'test-tmux-message.py')]
+            (scripts / 'tmux-message.py').write_text(code)
+            command = [sys.executable, str(scripts / 'test-tmux-message.py')]
             if name == 'claude_dim_suggestion_guard':
                 command += ['-k', 'claude_dim_suggestion_requires_start_single_row_and_full_style']
             result = subprocess.run(command,
