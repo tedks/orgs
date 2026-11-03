@@ -35,7 +35,8 @@ SCHEMA = "council-review-round"
 VERSION = 1
 MARK_OPEN = "<!-- council-review-round"
 MARK_CLOSE = "-->"
-RECORD_HEADER = "**council-review-round v"
+# The first line render() writes, at column zero: `**council-review-round v1: round `...
+RECORD_HEADER = re.compile(r"\*\*council-review-round v[0-9]+: round `")
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 HEX_ABBREV = re.compile(r"^[0-9a-fA-F]{7,40}$")
@@ -121,10 +122,11 @@ def normalize(body):
 
 
 def is_candidate(body):
-    """A comment is a round record only if it starts with the header `render`
-    writes. Anything else is discussion, whatever markers or fenced examples
-    it quotes. `body` is normalized."""
-    return body.lstrip(" \n").startswith(RECORD_HEADER)
+    """A comment is a round record only if its first non-blank line starts,
+    at column zero, with the header `render` writes. Anything else is
+    discussion, whatever markers or fenced or indented examples it quotes.
+    `body` is normalized."""
+    return bool(RECORD_HEADER.match(body.lstrip("\n")))
 
 
 def extract(body):
@@ -340,17 +342,16 @@ def load_records(comments, repo, pr):
     usable, ignored = [], []
     for comment in comments:
         body = normalize(comment.get("body") or "")
-        if not is_candidate(body):
-            continue
-        if edited_trusted(comment):
+        if edited_trusted(comment) and (is_candidate(body) or bare_marker_line(body)):
             # Its original contents are unknowable: the edit may have removed
-            # findings, changed the fields or broken the block.
+            # findings, changed the fields, broken the block or put text
+            # above the header.
             ignored.append({"comment": comment.get("id"), "unreadable": True,
                             "reason": "edited after posting (contents unknown)"})
             continue
-        rec, err = extract(body)
-        if rec is None and err is None:
+        if not is_candidate(body):
             continue
+        rec, err = extract(body)
         why = err or trust_reason(comment) or validate(rec, repo, pr)
         if why:
             entry = {"comment": comment.get("id"), "reason": why}
@@ -371,6 +372,20 @@ def load_records(comments, repo, pr):
                        "created_at": comment["created_at"], "record": rec})
     usable.sort(key=_order)
     return usable, ignored
+
+
+def bare_marker_line(body):
+    """True when a line outside fenced code is exactly the marker: the shape
+    of a helper record, even if an edit moved or removed its header. Quotes
+    in fences, block quotes, indented code or inline text are discussion.
+    `body` is normalized."""
+    fenced = False
+    for line in body.split("\n"):
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+        elif not fenced and line == MARK_OPEN:
+            return True
+    return False
 
 
 def edited_trusted(comment):
@@ -884,7 +899,8 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
     unreadable = [r["unreadable"] for r in rounds if r.get("unreadable")]
     if unreadable:
         reasons.append("trusted round-record comments whose findings are unknown (edited, or "
-                       f"unreadable): {unreadable}; delete or repost them")
+                       f"unreadable): {unreadable}; repost any real record from your own outcome "
+                       "data, then delete these comments (reposting alone clears nothing)")
     for finding in unexamined_findings(rounds, head, base, target_ref, is_ancestor):
         seats[finding["seat"]] = "findings"  # one rule, whatever the seat's latest state
     findings = sorted(n for n, v in seats.items() if v == "findings")

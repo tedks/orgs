@@ -17,6 +17,7 @@ import fcntl
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -978,11 +979,26 @@ class RoundTwoRegressions(unittest.TestCase):
         o = opened("a", H2, [full("anthropic")])
         body = cp.render(outcome(o, [received(full("anthropic"), important=1)]))
         for edit in (body.replace("\n", "\r\n"),
+                     "Update: fixed a typo below.\n\n" + body,  # Anthropic round 8 I12 (P13)
                      body.replace(cp.MARK_OPEN + "\n", cp.MARK_OPEN + " \n"),
                      body.replace("Do not edit", "Do not ever edit")):
             result = self.edited_history(edit).clearance(resolved(head=H2))
             self.assertFalse(result["clean"])
             self.assertTrue(any("unknown" in r for r in result["reasons"]))
+
+    def test_repost_clears_only_once_the_edited_comment_is_gone(self):
+        # CTO audit 14 I12: the remedy is repost, then delete the damaged comment.
+        h = History()
+        o1 = h.post(opened("a", H2, [full(n) for n in ("anthropic", "openai")]))
+        rec = outcome(o1, [received(full("anthropic")), received(full("openai"))])
+        h.post(dict(rec), edited=True)  # an honest typo fix in the web editor
+        h.post(dict(rec))  # the runner reposts the round's record from its own data
+        result = h.clearance(resolved(head=H2))
+        self.assertFalse(result["clean"])
+        self.assertTrue(any("reposting alone clears nothing" in r for r in result["reasons"]))
+        damaged = h.comments[1]["id"]
+        h.comments = [c for c in h.comments if c["id"] != damaged]  # deleted on GitHub
+        self.assertTrue(h.clearance(resolved(head=H2))["clean"])
 
     def test_unedited_crlf_record_is_read(self):
         h = History()
@@ -1003,6 +1019,9 @@ class RoundTwoRegressions(unittest.TestCase):
         h.post(None, body="Per the reference:\n\n" + reference)
         quoted = cp.render(outcome(o, [received(full("anthropic"), critical=1)]))
         h.post(None, body="This record looked wrong to me:\n```\n" + quoted + "\n```")
+        indented = "\n".join("    " + line for line in quoted.split("\n"))
+        h.post(None, body=indented)  # an indented Markdown code block (OpenAI round 8)
+        h.post(None, body="**council-review-round v1 notes**: the header alone is not a record")
         # An honest typo fix to a discussion comment keeps it discussion.
         h.post(None, edited=True, body="Fixed typo. Example:\n```\n" + quoted + "\n```")
         self.assertTrue(h.clearance(resolved(head=H1))["clean"])
@@ -1478,6 +1497,8 @@ MUTATIONS = {
     "edited_trusted": lambda comment: False,
     "is_candidate": lambda body: cp.MARK_OPEN in body,
     "normalize": lambda body: body,
+    "bare_marker_line": lambda body: False,
+    "RECORD_HEADER": re.compile(r"\s*\*\*council-review-round v"),
     # Pair-only identity: every outcome of one seat in one round is the same finding.
     "finding_key": lambda round_id, seat, digest: {"round": round_id, "seat": seat,
                                                    "outcome": "0" * 12},
@@ -1532,6 +1553,11 @@ def extract_anywhere(body):
         return None, f"invalid JSON ({exc})"
 
 
+def bare_marker_line_unfenced(body):
+    """Anthropic's round-8 proposal: any exact marker line, fences ignored."""
+    return cp.MARK_OPEN in body.split("\n")
+
+
 def mutation_check():
     survived = []
     first_open_order = ("latest_round_at_head", lambda rounds, head, base, target_ref: max(
@@ -1539,7 +1565,8 @@ def mutation_check():
         key=lambda r: r["order"], default=None))
     mutants = list(MUTATIONS.items()) + [("consume_pending", consume_by_shape), first_open_order,
                                          ("unexamined_findings", unexamined_current_frame_only),
-                                         ("extract", extract_anywhere)]
+                                         ("extract", extract_anywhere),
+                                         ("bare_marker_line", bare_marker_line_unfenced)]
     for name, mutant in mutants:
         original = getattr(cp, name)
         setattr(cp, name, mutant)
