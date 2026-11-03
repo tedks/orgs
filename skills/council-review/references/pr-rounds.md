@@ -87,7 +87,11 @@ frozen head. A round's `unresolved_findings` is the largest value any of its
 outcome records reports, so a later record cannot lower it.
 
 **Standing findings, the one rule.** A finding is one seat's received
-findings outcome in one round, named `{round, seat}`. It stands until a later
+findings outcome in one round, named `{round, seat}`. Findings are collected
+from every round of the PR, whatever its frame (a merge-base change or
+retarget does not drop them) and even when the round is void or its outcome
+has no open record: such records grant nothing, but their findings remain
+evidence. A finding stands until a later
 round examines it: a round that is not void, at the current head or an
 ancestor of it, opened after the finding was posted, whose open record lists
 that finding in its `standing` snapshot, and in which at least one dispatched

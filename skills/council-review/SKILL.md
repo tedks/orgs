@@ -393,6 +393,9 @@ the repository's owner, members or collaborators, and only unedited.
    review subagent. A restarted, repacked or identity-failed seat is fresh:
    give it the plan's `fallback` (the full `base..head` change) and record it
    that way. A new seat, or one that was EMPTY before, gets the full change.
+   A cold seat asked to examine standing findings therefore does a full
+   review with the findings in its prompt; that is costlier than a warm
+   disposition review but examines them just as well.
 
 5. **Record outcomes.** Write `$WORK/outcomes.json`: one entry per seat with
    `status` `received` (with `verdict` and Critical/Important/Nit `counts`)
