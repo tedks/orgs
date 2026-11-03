@@ -1,0 +1,29 @@
+id: tmux-message-codex-image-placeholder
+title: Verify Codex image placeholders fail closed in tmux-message
+desc: 'Follow-up from orgs PR #36 council: the re-landed guard covers Claude `[Image
+  #N]` placeholders, including wrapped rows. The reviewer noted that equivalent Codex
+  image placeholders are outside that change.
+
+
+  Inspect the Codex composer representation and sender boundary. If an attached image
+  can appear as a placeholder that would be co-submitted as ordinary text, add a fail-closed
+  guard with a captured or synthetic fixture and a mutation test that proves the guard
+  is necessary. If the harness does not expose an equivalent placeholder, document
+  the evidence and close as not applicable.
+
+
+  Rationale: an opaque attachment must not be silently converted into text or sent
+  with a follow-up payload. Keep this separate from PR #36''s Claude-specific behavior.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T00:48:54-00:00
+references: []
+log_events:
+- time: 2026-11-03T00:48:54-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
