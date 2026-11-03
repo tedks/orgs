@@ -1,0 +1,31 @@
+id: retire-agent-claude-exit-model-flag
+title: Recognize Claude native exit notices that include an explicit model flag
+desc: 'Observed during a completed source lane handoff: private shard publication
+  succeeded, the pinned original Claude process ended, and the retained pane displayed
+  a fresh native notice consisting of ''Resume this session with:'' followed by ''claude
+  --model opus --resume <same-session-UUID>''. The published retire.py exit_notice_count
+  recognizes only ''claude --resume <UUID>'', so the retirement receipt remains pending
+  exit verification despite the retained evidence.
+
+
+  Owner: Orgs CTO; bounded Lead-tier repair. Extend only the measured native resume-command
+  grammar to support the optional explicit model flag; preserve exact UUID binding,
+  fresh notice count, original-process end and all no-replay gates. Add fixtures for
+  this valid notice plus wrong UUID, stale notice and malformed argument arrangements.
+  Do not loosen the gate to arbitrary command text. The source lane is already exited:
+  never replay its exit or resume product work to repair its historical receipt. Its
+  private event and retained pane are in the CTO''s private current-state record.
+  No private session identifiers belong in this issue.'
+type: bugfix
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T08:54:09-00:00
+references: []
+log_events:
+- time: 2026-11-03T08:54:09-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
