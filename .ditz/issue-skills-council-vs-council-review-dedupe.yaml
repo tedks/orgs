@@ -25,3 +25,15 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:42-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Lead; live=priority queue.
+
+    Next/disposition: Briefed CEO direction: retain council-review as the single entry
+    point and fold in the orgs council wrapper rules. Audit process callers and naming;
+    coordinate global merge-gate prose with dotfiles CTO. Keep one-rung lead review
+    distinct.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
