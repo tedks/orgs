@@ -379,10 +379,10 @@ the repository's owner, members or collaborators, and only unedited.
    seat: `git log --oneline <from>..<head>` and `git diff <from> <head>`,
    size-checked as in Step 3 of the advisory workflow, plus the PR title and
    body from `gh pr view N --json title,body` under a heading that marks them
-   as data. Name the round id, head and range in the prompt. When the plan
-   lists `standing_findings`, every seat's prompt carries those findings and
-   their dispositions, and asks the seat to judge whether each fix or
-   rejection holds. A `disposition` seat reviews no new bytes: it judges the
+   as data. Name the round id, head and range in the prompt. When the open
+   record lists `standing` findings (the plan's snapshot), every seat's
+   prompt carries exactly those findings and their dispositions, and asks the
+   seat to judge whether each fix or rejection holds. A `disposition` seat reviews no new bytes: it judges the
    standing findings (its own, or another seat's) and their dispositions. Foreign seats get the no-command opener; the native seat may read
    files at the pinned head (`git show <head>:<path>`), not the working tree.
 
@@ -412,10 +412,11 @@ the repository's owner, members or collaborators, and only unedited.
    seats without a clean review of that head (EMPTY or new seats in full,
    seats with open findings as `disposition`); the others are listed as
    `covered`, unless findings stand, in which case they are dispatched as
-   `disposition` too. A finding stands until its own seat returns clean, or
-   another seat returns a received review in a later round at the head; an
-   EMPTY finder never erases it, and a present seat's review resolves it
-   without a push.
+   `disposition` too. A finding stands until a later round lists it in its
+   `standing` snapshot and any of that round's seats, the finder included,
+   returns a received review; an EMPTY finder never erases it, a late or
+   older-head result never does, and a present seat's received disposition
+   review resolves it without a push.
 
 7. **Recheck before relying on clearance.** Before reporting READY,
    accepting, or merging, run `check N --expect-head <the full SHA you will

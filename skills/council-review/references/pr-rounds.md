@@ -39,7 +39,8 @@ short model name), `scope`, `from`, `continuity` and `status`. Scopes:
 An `open` record is posted before dispatch. Its seats have status
 `dispatched`; its `covered` list names seats whose clean review of this head
 is reused rather than re-dispatched; it must name at least one seat either
-way. Its `invocation` block holds `shape`, `route`, `notes`, `corrections`
+way. Its `standing` list is the snapshot of standing findings,
+`{round, seat}`, that the round's prompts carry. Its `invocation` block holds `shape`, `route`, `notes`, `corrections`
 (each `{id, shape, reason}` with a random 8-hex event id), `unknown` (event
 ids of lost refusal capture) and `cohort` (below). An `outcome` record repeats the frame and carries, per
 seat, `status: received` (with `verdict` `clean` or `findings` and `counts`
@@ -85,19 +86,22 @@ seat in the same round: that is a late reviewer, attributed to that round's
 frozen head. A round's `unresolved_findings` is the largest value any of its
 outcome records reports, so a later record cannot lower it.
 
-**Standing findings, the one rule.** A seat's findings stand from the first
-posting of its received findings outcome until that seat later posts a
-received clean outcome, or another seat posts a received review in a round at
-the current head whose open record was posted after the findings. That later
-round's prompts carry the standing findings and their dispositions, so its
-received reviews examine them: a delta after a fix push examines the fix, and
-a `disposition` review at an unchanged head examines a rejection or deferral.
-EMPTY outcomes, `covered` entries and silence examine nothing. Every case
-follows from this: a late reviewer's findings posted after the latest round
-opened stand; a finder that goes EMPTY does not erase its findings, and a
-present seat's received disposition review resolves them without a push; a
-round that only carries seats as covered resolves nothing. An identical
-outcome re-posted later is a retry and keeps its first posting time.
+**Standing findings, the one rule.** A finding is one seat's received
+findings outcome in one round, named `{round, seat}`. It stands until a later
+round examines it: a round that is not void, at the current head or an
+ancestor of it, opened after the finding was posted, whose open record lists
+that finding in its `standing` snapshot, and in which at least one dispatched
+seat returned a received review. The snapshot is what the plan saw when the
+round was opened and what that round's prompts carry, so a finding posted
+after it is not examined by that round. No seat is exempt, the finder
+included. A late arrival, work on an older head, EMPTY outcomes, `covered`
+entries, silence and a round that does not list the finding examine nothing.
+So: a fix delta that lists a finding examines the fix; a `disposition`
+review at an unchanged head examines a rejection or deferral without a push;
+an EMPTY finder does not erase its findings; a late clean on an older head
+does not erase newer findings; late findings stand until a later round lists
+them. An identical outcome re-posted later is a retry and keeps its first
+posting time.
 
 ## Planning
 
@@ -114,8 +118,8 @@ The plan per seat is then: no coverage gives `full` from `base`; coverage at
 an older ancestor gives a warm `delta` from it; coverage at the head with a
 clean latest verdict is `covered`; coverage at the head with open findings
 gives a warm `disposition`. While any finding stands, covered seats are
-dispatched as `disposition` instead, and the plan lists `standing_findings`
-for every prompt. Every non-full plan carries a `fallback` full
+dispatched as `disposition` instead, and the plan's `standing_findings`
+become the open record's `standing` snapshot. Every non-full plan carries a `fallback` full
 review for a seat whose warm identity is unavailable. Consequences:
 
 - A fix push gives each warm seat its own last-reviewed..head delta, and an
