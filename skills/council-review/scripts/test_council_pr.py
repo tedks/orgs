@@ -46,19 +46,24 @@ def resolved(head=H2, base=B, target_ref="master"):
             "target_ref": target_ref, "target_oid": T, "local_head": head}
 
 
+def rid(name):
+    """A valid round id derived from a short fixture name."""
+    return f"{'0' * 12}-20261103T100000Z-{name.encode().hex()[:6].ljust(6, '0')}"
+
+
 def seat(name, scope, start, continuity=None, **extra):
     continuity = continuity or ("fresh" if scope == "full" else "warm")
     return {"seat": name, "mechanism": "native" if name == "anthropic" else "ask-agent",
-            "model": cp.SEATS[name]["model"], "scope": scope, "from": start,
+            "model": cp.SEATS.get(name, {}).get("model", "lead-default"), "scope": scope, "from": start,
             "continuity": continuity, **extra}
 
 
-def opened(rid, head, seats, base=B, target_ref="master", shape="pr-ref", route="pr",
-           notes=(), corrections=(), pr=PR, covered=()):
+def opened(name, head, seats, base=B, target_ref="master", shape="pr-ref", route="pr",
+           notes=(), corrections=(), pr=PR, covered=(), cohort="production"):
     return {"schema": cp.SCHEMA, "version": 1, "phase": "open", "repo": REPO, "pr": pr,
-            "round_id": rid, "head": head, "base": base, "target_ref": target_ref,
+            "round_id": rid(name), "head": head, "base": base, "target_ref": target_ref,
             "target_oid": T, "invocation": {"shape": shape, "route": route, "notes": list(notes),
-                                            "corrections": list(corrections)},
+                                            "corrections": list(corrections), "cohort": cohort},
             "covered": [{"seat": c, "through": head} for c in covered],
             "seats": [dict(s, status="dispatched") for s in seats]}
 
@@ -101,11 +106,14 @@ class History:
 
     def plan(self, res, host="anthropic"):
         rounds, _ = self.rounds()
-        return {s["seat"]: s for s in cp.plan(res, rounds, host, is_ancestor)["seats"]}, \
-            cp.plan(res, rounds, host, is_ancestor)["covered"]
+        got = cp.plan(res, rounds, host, is_ancestor)
+        return {s["seat"]: s for s in got["seats"]}, got["covered"]
+
+    def open_round(self, res, host="anthropic"):
+        return cp.plan(res, self.rounds()[0], host, is_ancestor)["open_round"]
 
     def clearance(self, res, expect=None):
-        return cp.clearance(res, self.rounds()[0], is_ancestor, expect)
+        return cp.clearance(res, self.rounds()[0], is_ancestor, expect or res["head"])
 
 
 def full(name):
@@ -351,7 +359,7 @@ class RetriesDuplicatesAndLateReviewers(unittest.TestCase):
         rounds, ignored = h.rounds()
         self.assertEqual(len(rounds), 1)
         self.assertIsNone(rounds[0]["conflict"])
-        self.assertEqual(cp.tally([(REPO, r) for r in rounds])["rounds"], 1)
+        self.assertEqual(cp.tally([(REPO, r) for r in rounds], since="")["rounds"], 1)
 
     def test_conflicting_open_records_make_the_round_count_for_nothing(self):
         h = History()
@@ -448,8 +456,8 @@ class Clearance(unittest.TestCase):
         o2 = h.post(opened("r2", H1, [seat("openai", "disposition", H1)]))  # omits the others
         h.post(outcome(o2, [received(seat("openai", "disposition", H1))]))
         result = h.clearance(resolved(head=H1))
-        self.assertEqual(result["seats"]["anthropic"], "stale")
-        self.assertIn("anthropic: stale", result["limits"])
+        self.assertEqual(result["seats"]["anthropic"], "unlisted")
+        self.assertIn("anthropic: unlisted", result["limits"])
 
     def test_moved_head_refuses_clearance(self):
         result = self.converged().clearance(resolved(head=H3), expect=H2)
@@ -480,29 +488,160 @@ class Clearance(unittest.TestCase):
         self.assertFalse(result["clean"])
 
 
+class RoundOneRegressions(unittest.TestCase):
+    """Scenarios from the first formal council and acceptance audit."""
+
+    def test_conflicted_latest_round_does_not_resurrect_older_clearance(self):
+        h = History()
+        first_round(h)  # r1 at H1: all three clean
+        o2 = h.post(opened("r2", H1, [full(n) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o2, [received(full(n)) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o2, [received(full("anthropic"), important=1)]))  # differing retry
+        result = h.clearance(resolved(head=H1))
+        self.assertFalse(result["clean"])
+        self.assertTrue(any("void" in r for r in result["reasons"]), result["reasons"])
+        # Planning does not quietly cover the seats the void round named.
+        seats, covered = h.plan(resolved(head=H1))
+        self.assertEqual(covered, [])
+        self.assertEqual({s["scope"] for s in seats.values()}, {"full"})
+
+    def test_void_round_resets_only_the_seats_it_named(self):
+        h = History()
+        first_round(h)
+        o2 = h.post(opened("r2", H1, [seat("openai", "disposition", H1)]))
+        h.post(outcome(o2, [received(seat("openai", "disposition", H1))]))
+        h.post(outcome(o2, [received(seat("openai", "disposition", H1), critical=1)]))
+        seats, covered = h.plan(resolved(head=H1))
+        self.assertEqual(seats["openai"]["scope"], "full")
+        self.assertEqual({c["seat"] for c in covered}, {"anthropic", "google"})
+        self.assertTrue(h.open_round(resolved(head=H1)))
+
+    def test_delta_across_a_force_push_is_not_coverage(self):
+        h = History()
+        first_round(h)
+        o2 = h.post(opened("r2", HX, [seat(n, "delta", H1) for n in ("anthropic", "openai")]))
+        h.post(outcome(o2, [received(seat(n, "delta", H1)) for n in ("anthropic", "openai")]))
+        result = h.clearance(resolved(head=HX))
+        self.assertFalse(result["clean"])
+        self.assertEqual(result["seats"]["anthropic"], "unchained")
+
+    def test_late_record_cannot_lower_the_unresolved_count(self):
+        h = History()
+        first_round(h)
+        o2 = h.post(opened("r2", H2, [seat("anthropic", "delta", H1), full("google")]))
+        h.post(outcome(o2, [received(seat("anthropic", "delta", H1)), empty(full("google"))], 3))
+        h.post(outcome(o2, [received(full("google"))], 0))  # google answers late
+        result = h.clearance(resolved(head=H2))
+        self.assertFalse(result["clean"])
+        self.assertTrue(any("not yet dispositioned" in r for r in result["reasons"]))
+
+    def test_outstanding_count_opens_a_disposition_only_round(self):
+        h = History()
+        first_round(h)
+        o2 = h.post(opened("r2", H2, [seat(n, "delta", H1) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o2, [received(seat(n, "delta", H1)) for n in ("anthropic", "openai", "google")], 2))
+        self.assertTrue(h.open_round(resolved(head=H2)))
+        o3 = h.post(opened("r3", H2, [], covered=("anthropic", "openai", "google")))
+        h.post(outcome(o3, [], 0))
+        result = h.clearance(resolved(head=H2))
+        self.assertTrue(result["clean"], result["reasons"])
+        self.assertFalse(h.open_round(resolved(head=H2)))  # nothing left: no new round
+
+    def test_findings_from_a_seat_the_latest_round_omitted_still_block(self):
+        h = History()
+        o1 = h.post(opened("r1", H1, [full("anthropic"), full("mistral")]))
+        h.post(outcome(o1, [received(full("anthropic")), received(full("mistral"), important=1)]))
+        # An Anthropic host reruns: mistral is neither dispatched nor covered.
+        o2 = h.post(opened("r2", H1, [full("openai")], covered=("anthropic",)))
+        h.post(outcome(o2, [received(full("openai"))]))
+        result = h.clearance(resolved(head=H1))
+        self.assertFalse(result["clean"])
+        self.assertEqual(result["seats"]["mistral"], "findings")
+
+    def test_clean_seat_omitted_from_latest_round_is_a_limit_not_clean(self):
+        h = History()
+        first_round(h)
+        o2 = h.post(opened("r2", H1, [full("openai")], covered=("anthropic",)))
+        h.post(outcome(o2, [received(full("openai"))]))
+        result = h.clearance(resolved(head=H1))
+        self.assertEqual(result["seats"]["google"], "unlisted")
+        self.assertIn("google: unlisted", result["limits"])
+
+    def test_unknown_fields_never_reach_a_valid_record(self):
+        rec = opened("r1", H1, [full("anthropic")])
+        self.assertIsNone(cp.validate(rec, REPO, PR))
+        for mutate in (lambda r: r.update(raw="pasted text"),
+                       lambda r: r["seats"][0].update(note="private"),
+                       lambda r: r["seats"][0].update(model="/home/u/secret notes"),
+                       lambda r: r["seats"][0].update(mechanism="by hand"),
+                       lambda r: r.update(round_id="r1 free text")):
+            bad = json.loads(json.dumps(rec))
+            mutate(bad)
+            self.assertIsNotNone(cp.validate(bad, REPO, PR))
+
+    def test_host_must_be_a_provider_not_a_cli(self):
+        for host in ("claude", "codex", "agy"):
+            with self.assertRaises(cp.EnvError):
+                cp.check_host(host, False)
+        with self.assertRaises(cp.EnvError):
+            cp.check_host("mistral", False)
+        cp.check_host("mistral", True)
+        cp.check_host("anthropic", False)
+
+    def test_open_record_must_name_some_seat(self):
+        self.assertIn("at least one seat", cp.validate(opened("r1", H1, []), REPO, PR))
+
+
 class LegacyAliasAndMeasurement(unittest.TestCase):
+    full_sha = staticmethod(lambda sha: {H2[:12]: H2, H1[:9]: H1}.get(sha, sha))
+
     def test_alias_with_the_pushed_head_is_accepted_and_noted(self):
-        cp.check_legacy(resolved(head=H2), H2, B)
-        self.assertEqual(cp.invocation_notes("legacy-formal", H2, H2), ["legacy-formal-alias"])
+        cp.check_legacy(resolved(head=H2), H2, B, self.full_sha)
+        self.assertEqual(cp.invocation_notes("legacy-formal", False), ["legacy-formal-alias"])
+
+    def test_alias_with_an_abbreviated_head_is_accepted(self):
+        cp.check_legacy(resolved(head=H2), H2[:12], None, self.full_sha)
 
     def test_alias_with_a_stale_sha_is_refused(self):
         with self.assertRaises(cp.Refusal) as ctx:
-            cp.check_legacy(resolved(head=H2), H1, None)
+            cp.check_legacy(resolved(head=H2), H1[:9], None, self.full_sha)
         self.assertEqual(ctx.exception.code, "supplied-sha-mismatch")
 
     def test_alias_with_a_last_reviewed_sha_as_base_is_refused(self):
         with self.assertRaises(cp.Refusal) as ctx:
-            cp.check_legacy(resolved(head=H2), H2, H1)
+            cp.check_legacy(resolved(head=H2), H2, H1, self.full_sha)
         self.assertEqual(ctx.exception.code, "supplied-base-mismatch")
 
+    def test_alias_without_a_sha_is_refused(self):
+        for raw in ("formal",):
+            with self.assertRaises(cp.Refusal) as ctx:
+                cp.parse_invocation(raw)
+            self.assertEqual(ctx.exception.code, "formal-sha-missing")
+        with self.assertRaises(cp.Refusal):
+            cp.check_legacy(resolved(head=H2), None, None, self.full_sha)
+
     def test_plain_pr_invocation_has_no_notes(self):
-        self.assertEqual(cp.invocation_notes("pr", H1, H2), [])
+        self.assertEqual(cp.invocation_notes("pr", True), [])
 
-    def test_branch_route_notes_unpushed_commits(self):
-        self.assertEqual(cp.invocation_notes("branch-pr", H3, H2),
+    def test_branch_route_notes_only_commits_ahead(self):
+        self.assertEqual(cp.invocation_notes("branch-pr", True),
                          ["branch-routed-to-pr", "unpushed-local-commits"])
+        self.assertEqual(cp.invocation_notes("branch-pr", False), ["branch-routed-to-pr"])
 
-    def test_tally_spans_prs_in_time_order_and_stops_at_ten(self):
+    def test_invocation_routing(self):
+        self.assertEqual(cp.parse_invocation("PR #7")["pr"], 7)
+        self.assertEqual(cp.parse_invocation("#7")["route"], "pr")
+        self.assertEqual(cp.parse_invocation("branch")["route"], "branch-pr")
+        got = cp.parse_invocation(f"formal {H2[:12]} {B}")
+        self.assertEqual((got["route"], got["sha"], got["base"]), ("legacy-formal", H2[:12], B))
+        for advisory in ("", "staged", "skills/council-review/SKILL.md"):
+            self.assertIsNone(cp.parse_invocation(advisory))
+        for bad in ("PR #7 extra", "PR seven", "#7x", "formal not-a-sha"):
+            with self.assertRaises(cp.Refusal) as ctx:
+                cp.parse_invocation(bad)
+            self.assertEqual(ctx.exception.code, "unrecognized-argument", bad)
+
+    def tally_rows(self):
         rows = []
         for i in range(12):
             pr = 7 if i % 2 else 8
@@ -511,11 +650,21 @@ class LegacyAliasAndMeasurement(unittest.TestCase):
             rec = opened(f"r{i}", H1, [full("anthropic")], notes=notes, corrections=corrections, pr=pr)
             rows.append(("o/r", {"id": f"r{i}", "open": rec, "outcome_at": "x",
                                  "opened_at": f"2026-11-1{i // 10}T00:{i % 10:02d}Z"}))
+        return rows
+
+    def test_tally_spans_prs_in_time_order_and_stops_at_ten(self):
+        rows = self.tally_rows()
         rows.append(("o/r", rows[0][1]))  # the same round seen twice
-        abandoned = opened("crashed", H1, [full("anthropic")], pr=8)
-        rows.append(("o/r", {"id": "crashed", "open": abandoned, "outcome_at": None,
-                             "opened_at": "2026-11-09T00:00Z"}))  # earliest, but never ran
-        result = cp.tally(list(reversed(rows)))
+        crashed = opened("crashed", H1, [full("anthropic")], pr=8)
+        rows.append(("o/r", {"id": "crashed", "open": crashed, "outcome_at": None,
+                             "opened_at": "2026-11-09T00:00Z"}))  # never ran
+        evaluation = opened("eval", H1, [full("anthropic")], pr=8, cohort="evaluation")
+        rows.append(("o/r", {"id": "eval", "open": evaluation, "outcome_at": "x",
+                             "opened_at": "2026-11-09T00:01Z"}))  # acceptance replay
+        early = opened("early", H1, [full("anthropic")], pr=8)
+        rows.append(("o/r", {"id": "early", "open": early, "outcome_at": "x",
+                             "opened_at": "2026-11-01T00:00Z"}))  # before the rollout
+        result = cp.tally(list(reversed(rows)), since="2026-11-02T00:00Z")
         self.assertEqual(result["rounds"], 10)
         self.assertEqual([r["round_id"] for r in result["rows"]], [f"r{i}" for i in range(10)])
         self.assertEqual({r["pr"] for r in result["rows"]}, {7, 8})  # no per-PR reset
@@ -524,8 +673,10 @@ class LegacyAliasAndMeasurement(unittest.TestCase):
         self.assertEqual(result["mistakes"], 1)
         self.assertEqual(result["alias_uses"], 1)
 
-    def test_round_ids_are_unique_per_invocation(self):
-        self.assertNotEqual(cp.new_round_id(H1), cp.new_round_id(H1))
+    def test_round_ids_are_unique_and_valid(self):
+        a, b = cp.new_round_id(H1), cp.new_round_id(H1)
+        self.assertNotEqual(a, b)
+        self.assertTrue(cp.ROUND_ID.match(a))
 
     def test_argument_shapes(self):
         cases = {"PR #7": "pr-ref", "#7": "pr-ref", "": "none", "branch": "branch",
@@ -534,12 +685,6 @@ class LegacyAliasAndMeasurement(unittest.TestCase):
                  "/home/u/notes.md": "other"}
         for text, shape in cases.items():
             self.assertEqual(cp.arg_shape(text), shape, text)
-
-    def test_pr_argument_forms(self):
-        for text in ("PR #7", "#7", "7", "pr #7", "PR#7"):
-            self.assertEqual(cp.parse_pr(text), 7)
-        with self.assertRaises(cp.Refusal):
-            cp.parse_pr("abc1234")
 
 
 # --------------------------------------------------------------------------
@@ -598,11 +743,19 @@ class EndToEnd(unittest.TestCase):
         (bin_dir / "gh").write_text(FAKE_GH)
         (bin_dir / "gh").chmod(0o755)
         self.state = self.tmp / "gh.json"
+        saved = {k: os.environ.get(k) for k in ("FAKE_GH_STATE", "PATH")}
+        self.addCleanup(self.restore_env, saved)
         os.environ["FAKE_GH_STATE"] = str(self.state)
-        old_path = os.environ["PATH"]
-        os.environ["PATH"] = f"{bin_dir}{os.pathsep}{old_path}"
-        self.addCleanup(os.environ.__setitem__, "PATH", old_path)
+        os.environ["PATH"] = f"{bin_dir}{os.pathsep}{saved['PATH']}"
         self.publish(self.h1)
+
+    @staticmethod
+    def restore_env(saved):
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
     def commit(self, name):
         (self.work / f"{name}.txt").write_text(name)
@@ -610,15 +763,15 @@ class EndToEnd(unittest.TestCase):
         git(self.work, "commit", "--quiet", "-m", name)
         return git(self.work, "rev-parse", "HEAD")
 
-    def publish(self, head, force=False, branch_pr=True):
+    def publish(self, head, force=False, branch_pr=True, reported_head=None):
         git(self.work, "push", "--quiet", "--force" if force else "--no-force",
             "origin", f"{head}:refs/pull/7/head")
         comments = json.loads(self.state.read_text())["comments"] if self.state.exists() else []
         self.state.write_text(json.dumps({
             "branch_pr": True if branch_pr else None, "comments": comments,
             "pr": {"number": 7, "url": "https://github.com/o/r/pull/7", "state": "OPEN",
-                   "headRefOid": head, "headRefName": "feature", "baseRefName": "master",
-                   "baseRefOid": self.base}}))
+                   "headRefOid": reported_head or head, "headRefName": "feature",
+                   "baseRefName": "master", "baseRefOid": self.base}}))
 
     def cli(self, *args):
         out = io.StringIO()
@@ -626,31 +779,42 @@ class EndToEnd(unittest.TestCase):
             code = cp.main(["--repo-dir", str(self.work), *args])
         return code, out.getvalue()
 
-    def run_round(self, verdicts):
-        code, out = self.cli("plan", "--pr", "7", "--host", "anthropic", "--route", "pr",
-                             "--raw", "PR #7")
-        self.assertEqual(code, 0)
-        plan = json.loads(out)
+    def plan(self, raw="PR #7", *extra):
+        return self.cli("plan", "--raw", raw, "--host", "anthropic", *extra)
+
+    def post_open(self, plan):
         rec_path, body = self.tmp / "open.json", self.tmp / "body.md"
         rec_path.write_text(json.dumps(plan["open_record"]))
         body.write_text(self.cli("render", "--open-record", str(rec_path))[1])
         self.assertEqual(self.cli("post", "--body-file", str(body)), (0, "posted\n"))
         self.assertIn("already posted", self.cli("post", "--body-file", str(body))[1])
-        outcomes = self.tmp / "outcomes.json"
-        outcomes.write_text(json.dumps([
+        return rec_path
+
+    def post_outcomes(self, rec_path, entries, unresolved=0):
+        outcomes, body = self.tmp / "outcomes.json", self.tmp / "body.md"
+        outcomes.write_text(json.dumps(entries))
+        code, text = self.cli("render", "--open-record", str(rec_path), "--outcomes",
+                              str(outcomes), "--unresolved", str(unresolved))
+        self.assertEqual(code, 0)
+        body.write_text(text)
+        self.assertEqual(self.cli("post", "--body-file", str(body))[0], 0)
+
+    def run_round(self, verdicts, raw="PR #7"):
+        code, out = self.plan(raw)
+        self.assertEqual(code, 0, out)
+        plan = json.loads(out)
+        rec_path = self.post_open(plan)
+        self.post_outcomes(rec_path, [
             {"seat": s["seat"], "status": "received", "verdict": verdicts.get(s["seat"], "clean"),
              "counts": {"critical": 0, "important": int(verdicts.get(s["seat"]) == "findings"),
-                        "nit": 0}} for s in plan["open_record"]["seats"]]))
-        body.write_text(self.cli("render", "--open-record", str(rec_path), "--outcomes",
-                                 str(outcomes))[1])
-        self.assertEqual(self.cli("post", "--body-file", str(body))[0], 0)
+                        "nit": 0}} for s in plan["open_record"]["seats"]])
         return plan
 
     def test_pr_lifecycle_from_first_round_to_clearance(self):
         plan = self.run_round({"anthropic": "findings"})
         self.assertEqual(plan["resolved"]["base"], self.base)
         self.assertTrue(all(s["scope"] == "full" for s in plan["plan"]["seats"]))
-        self.assertEqual(self.cli("check", "7")[0], 1)  # findings open at head
+        self.assertEqual(self.cli("check", "7", "--expect-head", self.h1)[0], 1)  # findings
 
         h2 = self.commit("fix")
         self.publish(h2)
@@ -666,77 +830,113 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("not the expected", out)
 
+    def test_render_requires_an_explicit_unresolved_count(self):
+        code, out = self.plan()
+        rec_path = self.post_open(json.loads(out))
+        (self.tmp / "o.json").write_text("[]")
+        code, _ = self.cli("render", "--open-record", str(rec_path), "--outcomes",
+                           str(self.tmp / "o.json"))
+        self.assertEqual(code, 2)
+
     def test_force_push_resets_to_full(self):
         self.run_round({})
         git(self.work, "checkout", "--quiet", "master")
         git(self.work, "checkout", "--quiet", "-b", "rewrite")
         rewritten = self.commit("rewritten")
         self.publish(rewritten, force=True)
-        code, out = self.cli("plan", "--pr", "7", "--host", "anthropic", "--route", "pr",
-                             "--raw", "PR #7")
+        code, out = self.plan()
         self.assertEqual(code, 0)
         self.assertTrue(all(s["scope"] == "full" for s in json.loads(out)["plan"]["seats"]))
 
+    def test_pr_that_moved_during_resolution_is_refused(self):
+        h2 = self.commit("pushed meanwhile")
+        self.publish(h2, reported_head=self.h1)  # gh reports h1; the remote already has h2
+        self.assertEqual(self.plan()[0], 4)
+        self.assertFalse(os.path.exists(cp.pending_path(str(self.work))))  # not a caller mistake
+
     def test_branch_without_pr_is_advisory(self):
         self.publish(self.h1, branch_pr=False)
-        self.assertEqual(self.cli("resolve")[0], 3)
+        self.assertEqual(self.plan("branch")[0], 3)
 
-    def test_legacy_alias_with_stale_sha_is_refused(self):
-        code, _ = self.cli("plan", "--host", "anthropic", "--route", "legacy-formal",
-                           "--raw", f"formal {self.base}", "--legacy-sha", self.base)
-        self.assertEqual(code, 4)
+    def test_branch_with_pr_is_formal(self):
+        code, out = self.plan("branch")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["open_record"]["invocation"]["route"], "branch-pr")
+
+    def test_advisory_targets_never_open_a_round(self):
+        for raw in ("", "staged", "skills/x.md"):
+            self.assertEqual(self.plan(raw)[0], 3, raw)
+
+    def test_legacy_alias_with_stale_sha_is_refused_and_counted_once(self):
+        self.assertEqual(self.plan(f"formal {self.base[:10]}")[0], 4)
+        plan = self.run_round({}, raw=f"formal {self.h1[:10]}")  # corrected: abbreviated head
+        inv = plan["open_record"]["invocation"]
+        self.assertEqual(inv["notes"], ["legacy-formal-alias"])
+        self.assertEqual(inv["corrections"], [{"shape": "formal-sha", "reason": "supplied-sha-mismatch"}])
+        h2 = self.commit("fix")
+        self.publish(h2)
+        plan = self.run_round({})
+        self.assertEqual(plan["open_record"]["invocation"]["corrections"], [])  # not again
+
+    def test_alias_without_a_pr_is_refused(self):
+        self.publish(self.h1, branch_pr=False)
+        self.assertEqual(self.plan(f"formal {self.h1}")[0], 4)
 
     def test_private_text_never_reaches_public_output(self):
         secret = "/home/u/private/notes-token-SECRETVALUE.md"
-        code, out = self.cli("plan", "--pr", "7", "--host", "anthropic", "--route", "pr",
-                             "--raw", f"PR #7 {secret}", "--correction", secret,
-                             "unrecognized-argument")
-        self.assertEqual(code, 0, out)
+        self.assertEqual(self.plan(f"PR #7 {secret}")[0], 4)  # refused, remembered as a shape
+        self.assertNotIn("SECRETVALUE", Path(cp.pending_path(str(self.work))).read_text())
+        code, out = self.plan()
         plan = json.loads(out)
-        inv = plan["open_record"]["invocation"]
-        self.assertEqual(inv["shape"], "other")
-        self.assertEqual(inv["corrections"], [{"shape": "other", "reason": "unrecognized-argument"}])
-        rec_path = self.tmp / "open.json"
-        rec_path.write_text(json.dumps(plan["open_record"]))
-        body = self.cli("render", "--open-record", str(rec_path))[1]
-        self.assertNotIn("SECRETVALUE", body)
-        (self.tmp / "body.md").write_text(body)
-        self.cli("post", "--body-file", str(self.tmp / "body.md"))
-        code, tallied = self.cli("tally", "o/r#7")
+        self.assertEqual(plan["open_record"]["invocation"]["corrections"],
+                         [{"shape": "other", "reason": "unrecognized-argument"}])
+        rec_path = self.post_open(plan)
+        code, tallied = self.cli("tally", "o/r#7", "--since", "2026-01-01T00:00:00Z")
         self.assertEqual(json.loads(tallied)["rounds"], 0)  # no outcome yet: not a council
-        outcomes = self.tmp / "outcomes.json"
-        outcomes.write_text(json.dumps([{"seat": s["seat"], "status": "empty",
-                                         "reason": "timeout"} for s in plan["open_record"]["seats"]]))
-        body = self.cli("render", "--open-record", str(rec_path), "--outcomes", str(outcomes))[1]
-        (self.tmp / "body.md").write_text(body)
-        self.assertEqual(self.cli("post", "--body-file", str(self.tmp / "body.md"))[0], 0)
-        code, tallied = self.cli("tally", "o/r#7")
+        self.post_outcomes(rec_path, [{"seat": s["seat"], "status": "empty", "reason": "timeout"}
+                                      for s in plan["open_record"]["seats"]])
+        code, tallied = self.cli("tally", "o/r#7", "--since", "2026-01-01T00:00:00Z")
         self.assertEqual(code, 0)
         self.assertNotIn("SECRETVALUE", tallied)
         self.assertEqual(json.loads(tallied)["mistakes"], 1)
         self.assertNotIn("SECRETVALUE", self.state.read_text())
 
-    def test_unknown_refusal_code_is_rejected(self):
-        code, _ = self.cli("plan", "--pr", "7", "--host", "anthropic", "--route", "pr",
-                           "--raw", "PR #7", "--correction", "x", "my own words")
-        self.assertEqual(code, 2)
+    def test_evaluation_rounds_are_recorded_but_not_measured(self):
+        code, out = self.plan("PR #7", "--evaluation")
+        plan = json.loads(out)
+        self.assertEqual(plan["open_record"]["invocation"]["cohort"], "evaluation")
+        rec_path = self.post_open(plan)
+        self.post_outcomes(rec_path, [{"seat": s["seat"], "status": "empty", "reason": "timeout"}
+                                      for s in plan["open_record"]["seats"]])
+        code, tallied = self.cli("tally", "o/r#7", "--since", "2026-01-01T00:00:00Z")
+        self.assertEqual(json.loads(tallied)["rounds"], 0)
+
+    def test_host_cli_name_is_an_error(self):
+        self.assertEqual(self.cli("plan", "--raw", "PR #7", "--host", "claude")[0], 2)
 
     def test_unknown_remote_is_an_error_not_a_review(self):
         git(self.work, "config", "remote.origin.url", "https://github.com/x/y.git")
-        self.assertEqual(self.cli("resolve", "7")[0], 2)
+        self.assertEqual(self.plan()[0], 2)
 
 
 # --------------------------------------------------------------------------
 
 MUTATIONS = {
     "trust_reason": lambda comment: None,
-    "chain_step": lambda coverage, outcome, round_head: round_head,
+    "chain_step": lambda coverage, outcome, round_head, is_ancestor: round_head,
     "same_frame": lambda rnd, base, target_ref: True,
     "coverage_in_head": lambda coverage, head, is_ancestor: coverage,
     "outcome_scope_reason": lambda dispatched, outcome: None,
-    "check_legacy": lambda resolved, sha, base: None,
+    "check_legacy": lambda resolved, sha, base, expand: None,
     "undisposed_seats": lambda rnd: [],
     "arg_shape": lambda text: text,
+    "void_resets": lambda rnd, seat: False,
+    "latest_round_at_head": lambda rounds, head, base, target_ref: next(
+        (r for r in reversed(rounds) if not r["conflict"] and r["open"]["head"] == head), None),
+    "unknown_keys": lambda obj, allowed: None,
+    "unlisted_status": lambda rounds, name, head, base, target_ref, is_ancestor: "missing",
+    "consume_pending": lambda cwd, corrections: None,
+    "check_host": lambda host, new_provider: None,
 }
 
 

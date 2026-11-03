@@ -7,18 +7,21 @@ immutable revisions, reads those records back and derives what each seat must
 review next, renders new records, posts them idempotently, and rechecks
 clearance against the live PR before anyone relies on it.
 
-It never dispatches reviewers and keeps no state outside the PR comments.
-Every rule that can fail is a small pure function so that the fixture suite
-(test_council_pr.py) can exercise it. The record schema and the planning rules
-are documented in ../references/pr-rounds.md.
+It never dispatches reviewers. Its only state outside PR comments is a small
+per-checkout list of refused invocations (inside the git directory), which the
+next round's record carries as measurement evidence. Every rule that can fail
+is a small function the fixture suite (test_council_pr.py) exercises. The
+record schema and the planning rules are in ../references/pr-rounds.md.
 
 Exit codes: 0 ok (check: CLEAN), 1 check: not clean, 2 usage or environment
-error, 3 the current branch has no open PR (advisory review applies),
-4 refused (the invocation does not name the PR's current revisions).
+error, 3 advisory target (no formal round: not a PR reference, or the branch
+has no open PR), 4 refused (the invocation does not name the PR's current
+revisions, or the PR moved during resolution).
 """
 
 import argparse
 import json
+import os
 import re
 import secrets
 import subprocess
@@ -31,17 +34,25 @@ MARK_OPEN = "<!-- council-review-round"
 MARK_CLOSE = "-->"
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+HEX_ABBREV = re.compile(r"^[0-9a-fA-F]{7,40}$")
+SEAT_NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
+MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$")
+REF_NAME = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
+ROUND_ID = re.compile(r"^[0-9a-f]{12}-\d{8}T\d{6}Z-[0-9a-f]{6}$")
 # Provider seats, in council order, with the ask-agent CLI and Lead-tier model.
 SEATS = {
     "anthropic": {"cli": "claude", "model": "opus"},
     "openai": {"cli": "codex", "model": "gpt-6-sol"},
     "google": {"cli": "agy", "model": "agy-lead-default"},
 }
+# CLI names are never provider names: `--host claude` would seat Anthropic
+# through ask-agent from an Anthropic host.
+CLI_NAMES = {"claude", "codex", "agy", "gemini"}
+MECHANISMS = {"native", "inline", "ask-agent"}
 SCOPES = {"full", "delta", "disposition"}
 ROUTES = {"pr", "branch-pr", "legacy-formal"}
 # Invocation notes record how a valid invocation was routed (alias adoption,
-# branch routing). They are context, not mistakes: the ten-council measurement
-# counts only refused-then-corrected invocations, carried as `corrections`.
+# branch routing). They are context, not mistakes.
 INFO_NOTES = {"legacy-formal-alias", "branch-routed-to-pr", "unpushed-local-commits"}
 # Public records carry only closed vocabularies: an argument's normalized
 # shape, never its text (a malformed argument may be a private path or pasted
@@ -50,10 +61,24 @@ ARG_SHAPES = {"pr-ref", "branch", "formal-sha", "formal-sha-base", "formal-other
               "none", "other"}
 EMPTY_REASONS = {"unavailable", "usage-limit", "timeout", "permission-denied",
                  "partial-prompt", "not-installed", "tool-error", "abandoned"}
-REFUSAL_CODES = {
-    "pr-not-open", "head-not-fetchable", "supplied-sha-mismatch",
-    "supplied-base-mismatch", "unrecognized-argument", "wrong-pr",
-}
+# Refusals caused by the caller's argument. These are the measured mistakes.
+CALLER_REFUSALS = {"unrecognized-argument", "pr-not-found", "pr-not-open",
+                   "formal-sha-missing", "formal-without-pr", "supplied-sha-mismatch",
+                   "supplied-base-mismatch"}
+# Refusals that are not the caller's mistake: the PR moved mid-resolution.
+OTHER_REFUSALS = {"pr-moved", "head-not-fetchable"}
+# Production rounds are measured; evaluation rounds (acceptance replays,
+# dogfooding a branch's helper) are recorded but never counted.
+COHORTS = {"production", "evaluation"}
+
+COMMON_KEYS = {"schema", "version", "phase", "repo", "pr", "round_id", "head", "base",
+               "target_ref", "target_oid", "seats"}
+RECORD_KEYS = {"open": COMMON_KEYS | {"invocation", "covered"},
+               "outcome": COMMON_KEYS | {"unresolved_findings"}}
+SEAT_KEYS = {"seat", "mechanism", "model", "scope", "from", "continuity", "status"}
+STATUS_KEYS = {"dispatched": SEAT_KEYS, "received": SEAT_KEYS | {"verdict", "counts"},
+               "empty": SEAT_KEYS | {"reason"}}
+PENDING_FILE = "council-review-pending-refusals.json"
 
 
 class Refusal(Exception):
@@ -121,6 +146,12 @@ def _count(value):
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
+def unknown_keys(obj, allowed):
+    """Closed key sets keep free text out of public records."""
+    extra = set(obj) - allowed
+    return f"unexpected fields {sorted(extra)}" if extra else None
+
+
 def validate(rec, repo, pr):
     """Return None for a well-formed v1 record of this PR, else a reason."""
     if not isinstance(rec, dict):
@@ -137,19 +168,21 @@ def validate(rec, repo, pr):
     if rec.get("repo") != repo or rec.get("pr") != pr:
         return "record names another repository or PR"
     phase = rec.get("phase")
-    if phase not in ("open", "outcome"):
+    if phase not in RECORD_KEYS:
         return "unknown phase"
-    rid = rec.get("round_id")
-    if not isinstance(rid, str) or not 0 < len(rid) <= 80:
+    why = unknown_keys(rec, RECORD_KEYS[phase])
+    if why:
+        return why
+    if not isinstance(rec.get("round_id"), str) or not ROUND_ID.match(rec["round_id"]):
         return "bad round_id"
     for key in ("head", "base", "target_oid"):
         if not _sha(rec.get(key)):
             return f"bad {key}"
-    if not isinstance(rec.get("target_ref"), str) or not rec["target_ref"]:
+    if not isinstance(rec.get("target_ref"), str) or not REF_NAME.match(rec["target_ref"]):
         return "bad target_ref"
     seats = rec.get("seats")
-    if not isinstance(seats, list) or not seats:
-        return "no seats"
+    if not isinstance(seats, list):
+        return "bad seats"
     names = set()
     for seat in seats:
         why = _seat_reason(seat, rec, phase)
@@ -158,34 +191,37 @@ def validate(rec, repo, pr):
         if seat["seat"] in names:
             return f"seat {seat['seat']} listed twice"
         names.add(seat["seat"])
-    if phase == "open":
-        covered = rec.get("covered")
-        if not isinstance(covered, list):
-            return "bad covered list"
-        for entry in covered:
-            if not isinstance(entry, dict) or entry.get("through") != rec["head"] \
-                    or not isinstance(entry.get("seat"), str):
-                return "covered entries must name a seat covered through the head"
-            if entry["seat"] in names:
-                return f"seat {entry['seat']} listed twice"
-            names.add(entry["seat"])
-        inv = rec.get("invocation")
-        if not isinstance(inv, dict) or set(inv) != {"shape", "route", "notes", "corrections"} \
-                or inv.get("shape") not in ARG_SHAPES:
-            return "bad invocation"
-        if inv.get("route") not in ROUTES:
-            return "bad invocation route"
-        notes = inv.get("notes")
-        if not isinstance(notes, list) or not set(notes) <= INFO_NOTES:
-            return "bad invocation notes"
-        corrections = inv.get("corrections")
-        if not isinstance(corrections, list) or not all(
-            isinstance(c, dict) and set(c) == {"shape", "reason"}
-            and c["shape"] in ARG_SHAPES and c["reason"] in REFUSAL_CODES for c in corrections
-        ):
-            return "bad invocation corrections"
-    elif not _count(rec.get("unresolved_findings")):
-        return "bad unresolved_findings"
+    if phase == "outcome":
+        return None if _count(rec.get("unresolved_findings")) else "bad unresolved_findings"
+    covered = rec.get("covered")
+    if not isinstance(covered, list):
+        return "bad covered list"
+    for entry in covered:
+        if not isinstance(entry, dict) or set(entry) != {"seat", "through"} \
+                or not isinstance(entry["seat"], str) or not SEAT_NAME.match(entry["seat"]) \
+                or entry["through"] != rec["head"]:
+            return "covered entries must name a seat covered through the head"
+        if entry["seat"] in names:
+            return f"seat {entry['seat']} listed twice"
+        names.add(entry["seat"])
+    if not names:
+        return "an open record must dispatch or cover at least one seat"
+    inv = rec.get("invocation")
+    if not isinstance(inv, dict) or set(inv) != {"shape", "route", "notes", "corrections",
+                                                 "cohort"} \
+            or inv.get("shape") not in ARG_SHAPES or inv.get("cohort") not in COHORTS:
+        return "bad invocation"
+    if inv.get("route") not in ROUTES:
+        return "bad invocation route"
+    notes = inv.get("notes")
+    if not isinstance(notes, list) or not set(notes) <= INFO_NOTES:
+        return "bad invocation notes"
+    corrections = inv.get("corrections")
+    if not isinstance(corrections, list) or not all(
+        isinstance(c, dict) and set(c) == {"shape", "reason"}
+        and c["shape"] in ARG_SHAPES and c["reason"] in CALLER_REFUSALS for c in corrections
+    ):
+        return "bad invocation corrections"
     return None
 
 
@@ -193,8 +229,19 @@ def _seat_reason(seat, rec, phase):
     if not isinstance(seat, dict) or not isinstance(seat.get("seat"), str):
         return "bad seat entry"
     name = seat["seat"]
-    if not re.match(r"^[a-z][a-z0-9-]{0,30}$", name):
+    if not SEAT_NAME.match(name):
         return "bad seat name"
+    status = seat.get("status")
+    allowed = STATUS_KEYS.get(status)
+    if allowed is None or (phase == "open") != (status == "dispatched"):
+        return f"seat {name}: bad status for an {phase} record"
+    why = unknown_keys(seat, allowed)
+    if why:
+        return f"seat {name}: {why}"
+    if seat.get("mechanism") not in MECHANISMS:
+        return f"seat {name}: bad mechanism"
+    if not isinstance(seat.get("model"), str) or not MODEL_NAME.match(seat["model"]):
+        return f"seat {name}: bad model"
     scope, start = seat.get("scope"), seat.get("from")
     if scope not in SCOPES or not _sha(start):
         return f"seat {name}: bad scope or from"
@@ -206,25 +253,17 @@ def _seat_reason(seat, rec, phase):
         return f"seat {name}: only a disposition review starts at the head"
     if scope != "full" and seat["continuity"] != "warm":
         return f"seat {name}: a {scope} review requires a warm seat"
-    status = seat.get("status")
-    if phase == "open":
-        if status != "dispatched":
-            return f"seat {name}: open records only dispatch"
-        return None
     if status == "empty":
         if seat.get("reason") not in EMPTY_REASONS:
             return f"seat {name}: empty seat needs a reason code"
-        return None
-    if status != "received":
-        return f"seat {name}: bad status"
-    counts = seat.get("counts")
-    if not isinstance(counts, dict) or not all(
-        _count(counts.get(k)) for k in ("critical", "important", "nit")
-    ):
-        return f"seat {name}: bad counts"
-    blocking = counts["critical"] + counts["important"]
-    if seat.get("verdict") != ("findings" if blocking else "clean"):
-        return f"seat {name}: verdict disagrees with counts"
+    elif status == "received":
+        counts = seat.get("counts")
+        if not isinstance(counts, dict) or set(counts) != {"critical", "important", "nit"} \
+                or not all(_count(v) for v in counts.values()):
+            return f"seat {name}: bad counts"
+        blocking = counts["critical"] + counts["important"]
+        if seat.get("verdict") != ("findings" if blocking else "clean"):
+            return f"seat {name}: verdict disagrees with counts"
     return None
 
 
@@ -245,6 +284,11 @@ def outcome_scope_reason(dispatched, outcome):
 # Reading records into rounds
 
 
+def _order(item):
+    cid = item["comment"]
+    return (item["created_at"], cid if isinstance(cid, int) else -1)
+
+
 def load_records(comments, repo, pr):
     usable, ignored = [], []
     for comment in comments:
@@ -257,12 +301,12 @@ def load_records(comments, repo, pr):
             continue
         usable.append({"comment": comment.get("id"),
                        "created_at": comment["created_at"], "record": rec})
-    usable.sort(key=lambda u: (u["created_at"], str(u["comment"])))
+    usable.sort(key=_order)
     return usable, ignored
 
 
 def assemble(usable):
-    """Group records into rounds; return (ordered rounds, ignored)."""
+    """Group records into rounds; return (rounds in opening order, ignored)."""
     groups, ignored = {}, []
     for item in usable:
         rec = item["record"]
@@ -275,22 +319,27 @@ def assemble(usable):
                            for i in group["outcomes"])
             continue
         rounds.append(_build_round(rid, group))
-    rounds.sort(key=lambda r: (r["opened_at"], r["id"]))
+    rounds.sort(key=lambda r: r["order"])
     return rounds, ignored
 
 
 def _build_round(rid, group):
     first = group["opens"][0]
     opened = first["record"]
-    rnd = {"id": rid, "open": opened, "opened_at": first["created_at"],
-           "conflict": None, "seats": {}, "unresolved": None, "outcome_at": None}
+    rnd = {"id": rid, "open": opened, "opened_at": first["created_at"], "order": _order(first),
+           "conflict": None, "seats": {}, "unresolved": None, "outcome_at": None,
+           "named": set()}
     # Re-posting an identical open record is a retry, not a second round.
-    if any(canonical(o["record"]) != canonical(opened) for o in group["opens"][1:]):
-        rnd["conflict"] = "conflicting open records"
+    for item in group["opens"]:
+        rnd["named"].update(s["seat"] for s in item["record"]["seats"])
+        rnd["named"].update(c["seat"] for c in item["record"]["covered"])
+        if canonical(item["record"]) != canonical(opened):
+            rnd["conflict"] = "conflicting open records"
     dispatched = {s["seat"]: s for s in opened["seats"]}
     received, empty = {}, {}
     for item in group["outcomes"]:
         rec = item["record"]
+        rnd["named"].update(s["seat"] for s in rec["seats"])
         if frame(rec) != frame(opened):
             rnd["conflict"] = rnd["conflict"] or "outcome revisions differ from the open record"
             continue
@@ -305,7 +354,8 @@ def _build_round(rid, group):
                 continue
             target = received if seat["status"] == "received" else empty
             target.setdefault(name, {})[canonical(seat)] = seat
-        rnd["unresolved"] = rec["unresolved_findings"]
+        # A later record (a late reviewer's, say) can never lower the count.
+        rnd["unresolved"] = max(rnd["unresolved"] or 0, rec["unresolved_findings"])
         rnd["outcome_at"] = item["created_at"]
     for name in dispatched:
         if len(received.get(name, {})) > 1:
@@ -322,14 +372,16 @@ def _build_round(rid, group):
 # Coverage and planning
 
 
-def chain_step(coverage, outcome, round_head):
+def chain_step(coverage, outcome, round_head, is_ancestor):
     """Coverage after one received outcome; None when the chain breaks."""
     if outcome["scope"] == "full":
         return round_head
-    if outcome["continuity"] == "warm" and coverage is not None and outcome["from"] == coverage:
+    if (outcome["continuity"] == "warm" and coverage is not None
+            and outcome["from"] == coverage and is_ancestor(coverage, round_head)):
         return round_head
-    # A delta given to a restarted reviewer, or one that does not start where
-    # this seat's coverage ended, proves nothing about the rest of the change.
+    # A delta given to a restarted reviewer, one that does not start where this
+    # seat's coverage ended, or one across a force-push proves nothing about
+    # the rest of the change.
     return None
 
 
@@ -337,16 +389,26 @@ def same_frame(rnd, base, target_ref):
     return rnd["open"]["base"] == base and rnd["open"]["target_ref"] == target_ref
 
 
+def void_resets(rnd, seat):
+    """A void (conflicted) round erases the coverage of every seat it names."""
+    return bool(rnd["conflict"]) and seat in rnd["named"]
+
+
 def seat_state(rounds, seat, head, base, target_ref, is_ancestor):
     """Return (coverage sha or None, latest verdict at head or None)."""
     coverage, verdict_at = None, {}
     for rnd in rounds:
-        if rnd["conflict"] or not same_frame(rnd, base, target_ref):
+        if not same_frame(rnd, base, target_ref):
+            continue
+        if void_resets(rnd, seat):
+            coverage, verdict_at = None, {}
+            continue
+        if rnd["conflict"]:
             continue
         outcome = rnd["seats"].get(seat)
         if not outcome or outcome["status"] != "received":
             continue
-        coverage = chain_step(coverage, outcome, rnd["open"]["head"])
+        coverage = chain_step(coverage, outcome, rnd["open"]["head"], is_ancestor)
         if coverage is not None:
             verdict_at[coverage] = outcome["verdict"]
     coverage = coverage_in_head(coverage, head, is_ancestor)
@@ -359,6 +421,12 @@ def coverage_in_head(coverage, head, is_ancestor):
     return coverage
 
 
+def latest_round_at_head(rounds, head, base, target_ref):
+    """The last round opened at this head and frame, void or not."""
+    at_head = [r for r in rounds if same_frame(r, base, target_ref) and r["open"]["head"] == head]
+    return at_head[-1] if at_head else None
+
+
 def plan(resolved, rounds, host, is_ancestor):
     head, base, target_ref = resolved["head"], resolved["base"], resolved["target_ref"]
     order = list(SEATS) + ([host] if host not in SEATS else [])
@@ -367,7 +435,7 @@ def plan(resolved, rounds, host, is_ancestor):
         coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
         entry = {"seat": name, "mechanism": "native" if name == host else "ask-agent",
                  "cli": SEATS.get(name, {}).get("cli"),
-                 "model": SEATS.get(name, {}).get("model"),
+                 "model": SEATS.get(name, {}).get("model", "lead-default"),
                  "fallback": {"scope": "full", "from": base, "continuity": "fresh"}}
         if coverage is None:
             entry.update(scope="full", **{"from": base}, continuity="fresh")
@@ -380,16 +448,23 @@ def plan(resolved, rounds, host, is_ancestor):
         else:
             entry.update(scope="delta", **{"from": coverage}, continuity="warm")
         seats.append(entry)
-    return {"seats": seats, "covered": covered}
+    # With nothing to dispatch, a round is still needed when the latest round
+    # at this head is void, has no outcome, or reports undispositioned findings:
+    # the new round's outcome restates the disposition count.
+    latest = latest_round_at_head(rounds, head, base, target_ref)
+    outstanding = latest is not None and bool(
+        latest["conflict"] or latest["outcome_at"] is None or latest["unresolved"])
+    return {"seats": seats, "covered": covered, "open_round": bool(seats) or outstanding}
 
 
-def invocation_notes(route, local_head, head):
+def invocation_notes(route, local_ahead):
+    """local_ahead: the checkout has commits the frozen head does not."""
     notes = []
     if route == "legacy-formal":
         notes.append("legacy-formal-alias")
     if route == "branch-pr":
         notes.append("branch-routed-to-pr")
-    if route != "pr" and local_head and local_head != head:
+    if route != "pr" and local_ahead:
         notes.append("unpushed-local-commits")
     return notes
 
@@ -397,28 +472,52 @@ def invocation_notes(route, local_head, head):
 def arg_shape(text):
     """Normalize an invocation argument to a public shape; the text is dropped."""
     words = (text or "").split()
-    hexsha = re.compile(r"^[0-9a-fA-F]{7,40}$")
     if not words:
         return "none"
     if re.fullmatch(r"(?:PR\s*)?#?\d+", " ".join(words), re.I):
         return "pr-ref"
     if words == ["branch"]:
         return "branch"
-    if words[0] == "formal":
+    if words[0].lower() == "formal":
         rest = words[1:]
-        if len(rest) == 1 and hexsha.match(rest[0]):
+        if len(rest) == 1 and HEX_ABBREV.match(rest[0]):
             return "formal-sha"
-        if len(rest) == 2 and all(hexsha.match(w) for w in rest):
+        if len(rest) == 2 and all(HEX_ABBREV.match(w) for w in rest):
             return "formal-sha-base"
         return "formal-other"
     return "other"
 
 
-def check_legacy(resolved, sha, base):
-    if sha and sha != resolved["head"]:
+def parse_invocation(raw):
+    """Route a typed argument. None means an advisory target (exit 3)."""
+    text = (raw or "").strip()
+    words = text.split()
+    match = re.fullmatch(r"(?:PR\s*)?#?(\d+)", text, re.I)
+    if match:
+        return {"route": "pr", "pr": int(match.group(1)), "sha": None, "base": None}
+    if words == ["branch"]:
+        return {"route": "branch-pr", "pr": None, "sha": None, "base": None}
+    if words and words[0].lower() == "formal":
+        rest = words[1:]
+        if not rest:
+            raise Refusal("formal-sha-missing", "the formal alias needs the pushed head SHA")
+        if len(rest) <= 2 and all(HEX_ABBREV.match(w) for w in rest):
+            return {"route": "legacy-formal", "pr": None, "sha": rest[0],
+                    "base": rest[1] if len(rest) == 2 else None}
+        raise Refusal("unrecognized-argument", "formal takes <pushed-sha> [base-sha]")
+    if re.match(r"^(?:PR\b|#)", text, re.I):
+        raise Refusal("unrecognized-argument", "expected PR #<number>")
+    return None  # worktree, staged, branch without PR, or a file: advisory
+
+
+def check_legacy(resolved, sha, base, expand):
+    """The alias names the PR's revisions or is refused; abbreviations expand."""
+    if not sha:
+        raise Refusal("formal-sha-missing", "the formal alias needs the pushed head SHA")
+    if expand(sha) != resolved["head"]:
         raise Refusal("supplied-sha-mismatch",
                       f"supplied SHA {sha} is not the PR's pushed head {resolved['head']}")
-    if base and base != resolved["base"]:
+    if base and expand(base) != resolved["base"]:
         raise Refusal("supplied-base-mismatch",
                       f"supplied base {base} is not the merge-base {resolved['base']}")
 
@@ -450,7 +549,7 @@ def outcome_record(opened, outcomes, unresolved):
         if base_seat is None:
             raise EnvError(f"outcome for undispatched seat {out.get('seat')!r}")
         seat = {k: base_seat[k] for k in ("seat", "mechanism", "model", "scope", "from", "continuity")}
-        for key in ("scope", "from", "continuity", "model"):
+        for key in ("scope", "from", "continuity", "model", "mechanism"):
             if key in out:
                 seat[key] = out[key]
         seat["status"] = out.get("status")
@@ -473,27 +572,33 @@ def outcome_record(opened, outcomes, unresolved):
     return rec
 
 
-def clearance(resolved, rounds, is_ancestor, expect_head=None):
+def undisposed_seats(rnd):
+    """Dispatched seats with neither a received nor an EMPTY outcome."""
+    return [s["seat"] for s in rnd["open"]["seats"] if s["seat"] not in rnd["seats"]]
+
+
+def clearance(resolved, rounds, is_ancestor, expect_head):
     """CLEAN only when the latest round at this head disposed of every seat.
 
     Each seat in that round must be explicit: a received outcome, an EMPTY
     outcome, or a `covered` entry whose earlier coverage still holds. A
-    dispatched seat with no outcome is silence, and silence blocks.
+    dispatched seat with no outcome is silence, and silence blocks. A void
+    latest round blocks: an earlier round never stands in for it.
     """
     head, base, target_ref = resolved["head"], resolved["base"], resolved["target_ref"]
     reasons = []
-    if expect_head and expect_head != head:
+    if expect_head != head:
         reasons.append(f"PR head is {head}, not the expected {expect_head}")
-    at_head = [r for r in rounds if not r["conflict"] and same_frame(r, base, target_ref)
-               and r["open"]["head"] == head]
-    latest = at_head[-1] if at_head else None  # rounds are in opening order
+    latest = latest_round_at_head(rounds, head, base, target_ref)
     names = list(SEATS)
     for rnd in rounds:
-        names.extend(n for n in list(rnd["seats"]) + [s["seat"] for s in rnd["open"]["seats"]]
-                     if n not in names)
+        names.extend(n for n in sorted(rnd["named"]) if n not in names)
     seats = {}
     if latest is None:
         reasons.append("no round was opened at this head")
+    elif latest["conflict"]:
+        reasons.append(f"the latest round at this head ({latest['id']}) is void: "
+                       f"{latest['conflict']}; run the council again")
     else:
         silent = undisposed_seats(latest)
         for name in silent:
@@ -514,14 +619,13 @@ def clearance(resolved, rounds, is_ancestor, expect_head=None):
             name = entry["seat"]
             coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
             seats[name] = "clean" if (coverage == head and verdict == "clean") else "unchained"
-        if latest["outcome_at"] is None and latest["open"]["seats"]:
+        if latest["outcome_at"] is None:
             reasons.append(f"round {latest['id']} has no outcome record")
         elif latest["unresolved"]:
             reasons.append(f"{latest['unresolved']} earlier findings not yet dispositioned")
     for name in names:
         if name not in seats:
-            coverage, _ = seat_state(rounds, name, head, base, target_ref, is_ancestor)
-            seats[name] = "stale" if coverage is not None else "missing"
+            seats[name] = unlisted_status(rounds, name, head, base, target_ref, is_ancestor)
     findings = [n for n, v in seats.items() if v == "findings"]
     if findings:
         reasons.append("open Critical/Important findings at head from: " + ", ".join(findings))
@@ -533,20 +637,27 @@ def clearance(resolved, rounds, is_ancestor, expect_head=None):
         reasons.append("no seat has a received clean review covering this head")
     return {"head": head, "base": base, "target_ref": target_ref, "clean": not reasons,
             "round": latest["id"] if latest else None, "seats": seats, "reasons": reasons,
-            "limits": [f"{n}: {v}" for n, v in seats.items() if v in ("empty", "missing", "stale")]}
+            "limits": [f"{n}: {v}" for n, v in seats.items()
+                       if v in ("empty", "missing", "stale", "unlisted")]}
 
 
-def undisposed_seats(rnd):
-    """Dispatched seats with neither a received nor an EMPTY outcome."""
-    return [s["seat"] for s in rnd["open"]["seats"] if s["seat"] not in rnd["seats"]]
+def unlisted_status(rounds, name, head, base, target_ref, is_ancestor):
+    """A seat the latest round did not name: never clean; findings still block."""
+    coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
+    if coverage == head:
+        return "findings" if verdict == "findings" else "unlisted"
+    return "stale" if coverage is not None else "missing"
 
 
-def tally(open_rounds, limit=10):
-    """open_rounds: [(repo, rnd)]. Count the first `limit` rounds across PRs."""
+def tally(open_rounds, since, limit=10):
+    """open_rounds: [(repo, rnd)]. Count the first `limit` production rounds
+    across PRs opened at or after `since` (the rollout's deploy time)."""
     seen, rows = set(), []
     for repo, rnd in sorted(open_rounds, key=lambda x: (x[1]["opened_at"], x[0], x[1]["id"])):
-        if (repo, rnd["id"]) in seen or not rnd.get("outcome_at"):
-            continue  # a retry seen twice, or an abandoned open-only round
+        if (repo, rnd["id"]) in seen or not rnd.get("outcome_at") or rnd["opened_at"] < since:
+            continue  # a retry seen twice, an abandoned open-only round, or pre-rollout
+        if rnd["open"]["invocation"]["cohort"] != "production":
+            continue
         seen.add((repo, rnd["id"]))
         inv = rnd["open"]["invocation"]
         rows.append({"opened_at": rnd["opened_at"], "repo": repo, "pr": rnd["open"]["pr"],
@@ -562,7 +673,7 @@ def tally(open_rounds, limit=10):
             "rows": rows}
 
 
-def render(rec, rounds_note=""):
+def render(rec):
     lines = []
     if rec["phase"] == "open":
         lines.append(f"**council-review-round v{VERSION}: round `{rec['round_id']}` opened**")
@@ -574,15 +685,19 @@ def render(rec, rounds_note=""):
         lines.append("|---|---|---|---|")
         for s in rec["seats"]:
             span = f"`{s['from'][:12]}..{rec['head'][:12]}`"
-            lines.append(f"| {s['seat']} | {s['mechanism']} | {s['model']} | {s['scope']} {span} ({s['continuity']}) |")
+            lines.append(f"| {s['seat']} | {s['mechanism']} | {s['model']} | "
+                         f"{s['scope']} {span} ({s['continuity']}) |")
+        for c in rec["covered"]:
+            lines.append(f"| {c['seat']} | — | — | covered through head (clean earlier) |")
     else:
         lines.append(f"**council-review-round v{VERSION}: round `{rec['round_id']}` outcomes**")
         lines.append("")
         lines.append(f"Head `{rec['head']}`; base `{rec['base']}`. "
                      f"Undispositioned earlier findings: {rec['unresolved_findings']}.")
-        lines.append("")
-        lines.append("| Seat | Result | Critical | Important | Nit | Reviewed |")
-        lines.append("|---|---|---|---|---|---|")
+        if rec["seats"]:
+            lines.append("")
+            lines.append("| Seat | Result | Critical | Important | Nit | Reviewed |")
+            lines.append("|---|---|---|---|---|---|")
         for s in rec["seats"]:
             span = f"{s['scope']} `{s['from'][:12]}..{rec['head'][:12]}`"
             if s["status"] == "received":
@@ -591,10 +706,9 @@ def render(rec, rounds_note=""):
                              f"{c['important']} | {c['nit']} | {span} |")
             else:
                 lines.append(f"| {s['seat']} | EMPTY: {s['reason']} | | | | {span} |")
-    if rounds_note:
-        lines += ["", rounds_note]
     lines += ["", "The block below is the authoritative round record. Do not edit it: "
-              "an edited record is ignored.", "", encode_block(rec), ""]
+              "an edited record is ignored. Post findings in a separate comment.", "",
+              encode_block(rec), ""]
     return "\n".join(lines)
 
 
@@ -618,6 +732,14 @@ def git_is_ancestor(cwd):
     return is_ancestor
 
 
+def git_expand(cwd):
+    def expand(sha):
+        proc = run(["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"], cwd,
+                   check=False)
+        return proc.stdout.strip() if proc.returncode == 0 else None
+    return expand
+
+
 def find_remote(cwd, repo):
     out = run(["git", "config", "--get-regexp", r"^remote\..*\.url$"], cwd, check=False).stdout
     pattern = re.compile(r"github\.com[:/]" + re.escape(repo) + r"(\.git)?/?$", re.I)
@@ -638,6 +760,8 @@ def resolve(cwd, pr=None):
         msg = (proc.stderr or proc.stdout).strip()
         if pr is None and "no pull requests found" in msg.lower():
             return None
+        if pr is not None and re.search(r"could not resolve|not found", msg, re.I):
+            raise Refusal("pr-not-found", f"PR #{pr} does not exist here")
         raise EnvError(f"gh pr view failed: {msg}")
     info = json.loads(proc.stdout)
     if info.get("state") != "OPEN":
@@ -648,17 +772,25 @@ def resolve(cwd, pr=None):
     if not match:
         raise EnvError(f"cannot read the repository from PR url {info.get('url')!r}")
     repo, number = match.group(1), int(match.group(2))
-    head, target_oid = info["headRefOid"], info["baseRefOid"]
+    head, target_oid, target_ref = info["headRefOid"], info["baseRefOid"], info["baseRefName"]
     remote = find_remote(cwd, repo)
-    run(["git", "fetch", "--no-tags", "--quiet", remote,
-         f"refs/pull/{number}/head", f"refs/heads/{info['baseRefName']}"], cwd)
+    refs = (f"refs/pull/{number}/head", f"refs/heads/{target_ref}")
+    run(["git", "fetch", "--no-tags", "--quiet", remote, *refs], cwd)
+    # The snapshot is consistent only if the remote's refs still equal what gh
+    # reported; locally cached objects would otherwise hide a moved PR.
+    tips = {}
+    for line in run(["git", "ls-remote", remote, *refs], cwd).stdout.splitlines():
+        sha, _, ref = line.partition("\t")
+        tips[ref.strip()] = sha.strip()
+    if tips.get(refs[0]) != head or tips.get(refs[1]) != target_oid:
+        raise Refusal("pr-moved", "the PR head or target moved while resolving; run again")
     for sha in (head, target_oid):
         if run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd, check=False).returncode:
-            raise Refusal("head-not-fetchable", f"{sha} is not fetchable; the PR moved, retry")
+            raise Refusal("head-not-fetchable", f"{sha} is not fetchable; run again")
     base = run(["git", "merge-base", head, target_oid], cwd).stdout.strip()
     local = run(["git", "rev-parse", "HEAD"], cwd, check=False)
     return {"repo": repo, "pr": number, "url": info["url"], "head": head,
-            "head_ref": info["headRefName"], "target_ref": info["baseRefName"],
+            "head_ref": info["headRefName"], "target_ref": target_ref,
             "target_oid": target_oid, "base": base,
             "local_head": local.stdout.strip() if local.returncode == 0 else None}
 
@@ -676,6 +808,49 @@ def rounds_for(cwd, repo, pr):
         {"round": r["id"], "reason": r["conflict"]} for r in rounds if r["conflict"]]
 
 
+# Refused invocations wait here (per checkout, inside the git directory) until
+# a round record carries them. Only shapes and codes are stored.
+
+def pending_path(cwd):
+    path = run(["git", "rev-parse", "--git-path", PENDING_FILE], cwd).stdout.strip()
+    return path if os.path.isabs(path) else os.path.join(cwd, path)
+
+
+def load_pending(cwd):
+    try:
+        with open(pending_path(cwd), encoding="utf-8") as handle:
+            items = json.load(handle)
+    except (OSError, ValueError):
+        return []
+    if not isinstance(items, list):
+        return []
+    return [i for i in items if isinstance(i, dict) and set(i) == {"shape", "reason"}
+            and i["shape"] in ARG_SHAPES and i["reason"] in CALLER_REFUSALS][:20]
+
+
+def save_pending(cwd, items):
+    path = pending_path(cwd)
+    if not items:
+        if os.path.exists(path):
+            os.remove(path)
+        return
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(items, handle)
+
+
+def remember_refusal(cwd, raw, code):
+    if code in CALLER_REFUSALS:
+        save_pending(cwd, (load_pending(cwd) + [{"shape": arg_shape(raw), "reason": code}])[-20:])
+
+
+def consume_pending(cwd, corrections):
+    remaining = load_pending(cwd)
+    for corr in corrections:
+        if corr in remaining:
+            remaining.remove(corr)
+    save_pending(cwd, remaining)
+
+
 # --------------------------------------------------------------------------
 # Commands
 
@@ -684,41 +859,48 @@ def emit(obj):
     print(json.dumps(obj, indent=1, sort_keys=True))
 
 
-def parse_pr(text):
-    match = re.fullmatch(r"(?:PR\s*)?#?(\d+)", (text or "").strip(), re.I)
-    if not match:
-        raise Refusal("unrecognized-argument", f"not a PR reference: {text!r}")
-    return int(match.group(1))
-
-
-def cmd_resolve(args):
-    resolved = resolve(args.repo_dir, parse_pr(args.pr) if args.pr else None)
-    if resolved is None:
-        print("no open PR for the current branch: the review is advisory", file=sys.stderr)
-        return 3
-    emit(resolved)
-    return 0
+def check_host(host, new_provider):
+    if host in CLI_NAMES:
+        raise EnvError(f"--host takes a provider, not a CLI name: {host!r} "
+                       "(anthropic, openai or google)")
+    if host not in SEATS and not (new_provider and SEAT_NAME.match(host)):
+        raise EnvError(f"unknown provider {host!r}; pass --new-provider to add a fourth seat")
 
 
 def cmd_plan(args):
-    if args.route == "pr" and not args.pr:
-        raise EnvError("route pr needs --pr")
-    resolved = resolve(args.repo_dir, parse_pr(args.pr) if args.pr else None)
-    if resolved is None:
-        print("no open PR for the current branch: the review is advisory", file=sys.stderr)
-        return 3
-    check_legacy(resolved, args.legacy_sha, args.legacy_base)
+    check_host(args.host, args.new_provider)
+    try:
+        route = parse_invocation(args.raw)
+        if route is None:
+            print("advisory target: use the advisory workflow", file=sys.stderr)
+            return 3
+        resolved = resolve(args.repo_dir, route["pr"])
+        if resolved is None:
+            if route["route"] == "legacy-formal":
+                raise Refusal("formal-without-pr",
+                              "no open PR for this branch; a gate without a PR is declared by "
+                              "its governing workflow, not by this alias")
+            print("no open PR for the current branch: the review is advisory", file=sys.stderr)
+            return 3
+        if route["route"] == "legacy-formal":
+            check_legacy(resolved, route["sha"], route["base"], git_expand(args.repo_dir))
+    except Refusal as exc:
+        remember_refusal(args.repo_dir, args.raw, exc.code)
+        raise
     rounds, ignored = rounds_for(args.repo_dir, resolved["repo"], resolved["pr"])
     seat_plan = plan(resolved, rounds, args.host, git_is_ancestor(args.repo_dir))
+    is_ancestor = git_is_ancestor(args.repo_dir)
+    local = resolved["local_head"]
     invocation = {
-        "shape": arg_shape(args.raw), "route": args.route,
-        "notes": invocation_notes(args.route, resolved["local_head"], resolved["head"]),
-        "corrections": [{"shape": arg_shape(raw), "reason": reason}
-                        for raw, reason in args.correction or []],
+        "shape": arg_shape(args.raw), "route": route["route"],
+        "notes": invocation_notes(route["route"], bool(local) and not is_ancestor(local, resolved["head"])),
+        "corrections": load_pending(args.repo_dir),
+        "cohort": "evaluation" if args.evaluation else "production",
     }
     out = {"resolved": resolved, "plan": seat_plan, "ignored": ignored,
-           "previous_rounds": [{"id": r["id"], "head": r["open"]["head"]} for r in rounds]}
-    if seat_plan["seats"]:
+           "previous_rounds": [{"id": r["id"], "head": r["open"]["head"],
+                                "void": bool(r["conflict"])} for r in rounds]}
+    if seat_plan["open_round"]:
         rec = open_record(resolved, seat_plan, invocation, new_round_id(resolved["head"]))
         why = validate(rec, resolved["repo"], resolved["pr"])
         if why:
@@ -735,12 +917,14 @@ def _load_json(path):
 
 def cmd_render(args):
     opened = _load_json(args.open_record)
+    why = validate(opened, opened.get("repo"), opened.get("pr"))
+    if why or opened.get("phase") != "open":
+        raise EnvError(f"not a valid open record: {why or 'wrong phase'}")
     if args.outcomes:
+        if args.unresolved is None:
+            raise EnvError("--unresolved is required with --outcomes")
         rec = outcome_record(opened, _load_json(args.outcomes), args.unresolved)
     else:
-        why = validate(opened, opened.get("repo"), opened.get("pr"))
-        if why or opened.get("phase") != "open":
-            raise EnvError(f"not a valid open record: {why or 'wrong phase'}")
         rec = opened
     sys.stdout.write(render(rec))
     return 0
@@ -755,19 +939,24 @@ def cmd_post(args):
     why = validate(rec, rec.get("repo"), rec.get("pr"))
     if why:
         raise EnvError(f"refusing to post an invalid record: {why}")
+    posted = False
     for comment in fetch_comments(args.repo_dir, rec["repo"], rec["pr"]):
         existing, _ = extract(comment.get("body") or "")
         if existing is not None and not trust_reason(comment) and canonical(existing) == canonical(rec):
             print(f"already posted as comment {comment.get('id')}; not posting again")
-            return 0
-    run(["gh", "pr", "comment", str(rec["pr"]), "--repo", rec["repo"],
-         "--body-file", args.body_file], args.repo_dir)
-    print("posted")
+            posted = True
+            break
+    if not posted:
+        run(["gh", "pr", "comment", str(rec["pr"]), "--repo", rec["repo"],
+             "--body-file", args.body_file], args.repo_dir)
+        print("posted")
+    if rec["phase"] == "open":
+        consume_pending(args.repo_dir, rec["invocation"]["corrections"])
     return 0
 
 
 def cmd_check(args):
-    resolved = resolve(args.repo_dir, parse_pr(args.pr) if args.pr else None)
+    resolved = resolve(args.repo_dir, int(args.pr) if args.pr else None)
     if resolved is None:
         print("no open PR for the current branch", file=sys.stderr)
         return 3
@@ -787,7 +976,7 @@ def cmd_tally(args):
         repo, pr = match.group(1), int(match.group(2))
         rounds, _ = rounds_for(args.repo_dir, repo, pr)
         collected.extend((repo, r) for r in rounds)
-    emit(tally(collected, args.window))
+    emit(tally(collected, args.since, args.window))
     return 0
 
 
@@ -796,27 +985,20 @@ def main(argv=None):
     parser.add_argument("--repo-dir", default=".")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("resolve", help="PR (or current branch's PR) to frozen revisions")
-    p.add_argument("pr", nargs="?")
-    p.set_defaults(func=cmd_resolve)
-
-    p = sub.add_parser("plan", help="read round records and plan each seat's review")
-    p.add_argument("--pr")
-    p.add_argument("--host", required=True, help="the host's own provider, e.g. anthropic")
-    p.add_argument("--route", choices=sorted(ROUTES), required=True)
+    p = sub.add_parser("plan", help="route the argument, read round records, plan each seat")
     p.add_argument("--raw", required=True,
-                   help="the argument as typed; only its normalized shape is recorded")
-    p.add_argument("--legacy-sha")
-    p.add_argument("--legacy-base")
-    p.add_argument("--correction", nargs=2, action="append", metavar=("RAW", "REASON"),
-                   help="an earlier refused invocation in this session and its refusal code; "
-                        "only the shape and code are recorded")
+                   help="the council-review argument exactly as typed; only its shape is recorded")
+    p.add_argument("--host", required=True, help="the host's own provider: anthropic, openai, google")
+    p.add_argument("--new-provider", action="store_true",
+                   help="allow --host to name a fourth provider")
+    p.add_argument("--evaluation", action="store_true",
+                   help="acceptance replays and dogfooding only: excluded from measurement")
     p.set_defaults(func=cmd_plan)
 
     p = sub.add_parser("render", help="render an open or outcome record comment")
     p.add_argument("--open-record", required=True)
     p.add_argument("--outcomes")
-    p.add_argument("--unresolved", type=int, default=0)
+    p.add_argument("--unresolved", type=int, help="earlier findings not yet dispositioned")
     p.set_defaults(func=cmd_render)
 
     p = sub.add_parser("post", help="post a record comment unless already present")
@@ -825,11 +1007,13 @@ def main(argv=None):
 
     p = sub.add_parser("check", help="recheck the live PR and report clearance")
     p.add_argument("pr", nargs="?")
-    p.add_argument("--expect-head")
+    p.add_argument("--expect-head", required=True, help="the full SHA you intend to merge")
     p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("tally", help="the invocation-mistake measurement window")
     p.add_argument("prs", nargs="+", metavar="OWNER/REPO#N")
+    p.add_argument("--since", required=True,
+                   help="the rollout's deploy time, ISO 8601 UTC (e.g. 2026-11-04T00:00:00Z)")
     p.add_argument("--window", type=int, default=10)
     p.set_defaults(func=cmd_tally)
 
