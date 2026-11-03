@@ -1,0 +1,27 @@
+id: council-final-receipt-wording
+title: Clarify recognition limits and code-versus-documentation council milestones
+desc: 'Final independent audit of PR #40 at e1b2b112f720e1b58d8a83eebacc8d8e263bfa7e
+  was CLEAN with two optional wording nits: (1) explain that removing the header and
+  fencing the marker also leaves no unfenced marker, so it lies outside the recognition
+  contract just like deletion; (2) describe the code fixpoint at 70a4674 separately
+  from the later documentation reviews through e1b2b11. The final PR receipt already
+  reports the complete round chronology and recognition limits.
+
+
+  Disposition: deferred, non-blocking. Behavior and acceptance evidence are clear
+  when the reference and final receipt are read together; another source revision
+  is unnecessary for these wording refinements. Owner: Orgs CTO; fold into the next
+  council-review documentation change. No product decision is pending.'
+type: task
+component: council-review
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T08:45:53-00:00
+references: []
+log_events:
+- time: 2026-11-03T08:45:53-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
