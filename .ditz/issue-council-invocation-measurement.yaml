@@ -36,5 +36,17 @@ log_events:
   who: Ted Smith
   what: blocked by council-pr-invocation-records
   comment: ""
+- time: 2026-11-03T07:25:42-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Convention refined in PR #40 round-1 fixes: the window starts at the dotfiles
+    host-deploy time of this interface (dotfiles owner records the UTC timestamp here
+    at deploy); tally with: council_pr.py tally --since <that time> OWNER/REPO#N ...;
+    find PRs with gh search prs --owner <owner> --match comments ''council-review-round
+    v1'' --json repository,number and cite the search. Only cohort=production rounds
+    count; acceptance replays/dogfooding use plan --evaluation. Corrections are captured
+    automatically by the helper (shape + refusal code, per checkout) and carried exactly
+    once by the next posted round; pr-moved retries are not mistakes. A void round
+    still counts as an invocation.'
 blocked_by:
 - council-pr-invocation-records
