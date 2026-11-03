@@ -12,7 +12,7 @@ An agent should find one `council-review` skill for both an ordinary exploratory
 - [x] Consolidate the formal workflow into `skills/council-review/SKILL.md`, retaining its exploratory targets.
 - [x] Update active callers and remove the duplicate discovery link; current instruction references have been audited. Historical design and bench descriptions remain records of their original protocol varieties.
 - [ ] Validate the skill, links, focused references and required local gates at the final source head. Initial validator, links, reference audit, Nix flake and four required scripts passed on the first pushed head; rerun after review fixes.
-- [ ] Push a draft PR, run a fresh Lead-tier provider council on its frozen head, converge any fixes and record exact evidence. PR #39 is draft; first OpenAI and Claude seats returned Important findings, while Google was EMPTY due to quota. Fix delta awaits a new frozen head.
+- [ ] Push a draft PR, run a fresh Lead-tier provider council on its frozen head, converge any fixes and record exact evidence. PR #39 is draft; first-round findings led to a fix commit. Its delta review found one remaining active state-table contradiction, which needs a new frozen head.
 - [ ] Report the pushed, reviewed head to the CTO for audit; do not merge.
 
 ## Surprises & Discoveries
@@ -20,7 +20,7 @@ An agent should find one `council-review` skill for both an ordinary exploratory
 - The org wrapper says a missing required seat needs CEO exception, while the standing rule says an unavailable foreign seat stays empty and present seats can converge. The merged skill will only apply a stricter threshold when a governing policy explicitly declares one.
 - `skills/review` is already a separate one-rung accountable-lead procedure. `skills/ledger` means the sprint event log; no current caller requires renaming either.
 - The active `protocol/STATES.md` and event-log template still treated a required EMPTY seat as an automatic acceptance block. They must follow Ted's standing present-seat rule unless a governing policy explicitly declares a stricter condition.
-- The first council found that a newly available seat must review the full change, and that an org round needs `review-seat-outcome` and `review-clean` ledger events even when it has no findings.
+- The first council found that a newly available seat must review the full change, and that an org round needs `review-seat-outcome` and `review-clean` ledger events even when it has no findings. The first fix exposed a contradictory package transition row, now qualified.
 
 ## Decision Log
 
@@ -29,6 +29,7 @@ An agent should find one `council-review` skill for both an ordinary exploratory
 - Decision: Require org packing and ledger events when the review participates in an org sprint, while leaving ordinary repositories free of org artifacts. Rationale: one reusable skill must work in both contexts. Date/Author: 2026-11-02, Lead.
 - Decision: Give a formal gate an explicit `formal <pushed-sha> [base-sha]` invocation and state that a bare PR target is exploratory. Rationale: a caller needs a visible way to request the pinned workflow; dotfiles' older bare-PR merge wording requires coordinated update. Date/Author: 2026-11-02, Lead.
 - Decision: Update active state/template rules to present-seat convergence and record each seat outcome plus `review-clean`; record a stricter seat requirement only when a governing policy actually declares it. Rationale: Ted's standing rule resolves the old wrapper conflict, and the ledger must substantiate a zero-finding round. Date/Author: 2026-11-02, Lead.
+- Decision: Keep `base-sha` as the original full-review comparison base, distinct from each seat's last-reviewed SHA on a fix round. Rationale: a seat arriving late needs the original change, while warm seats review only their accumulated fix delta. Date/Author: 2026-11-02, Lead.
 
 ## Outcomes & Retrospective
 
@@ -67,3 +68,5 @@ Plan revision note: initial plan written before source edits to make the cross-s
 Plan revision note: after the first edit, marked the canonical skill and caller migration complete; validation, review and final evidence remain open.
 
 Plan revision note: after first-round council findings, added explicit formal invocation, late-seat handling, full org review-round ledger events and aligned active state/template policy. The first-round SHA remains recorded; only the fix delta will be reviewed by warm seats.
+
+Plan revision note: after the first fix-delta round, qualified the remaining package transition row for first-time seats and clarified the original base SHA and accountable lead's scribe role. Removed quota outcome details from this public plan; operational receipts remain in the external status record.

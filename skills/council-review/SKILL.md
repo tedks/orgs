@@ -28,9 +28,11 @@ was a PR.
   - `<file-path>` — review a specific file
   - *(no argument)* — review all uncommitted changes (`git diff HEAD`)
 - `formal <pushed-sha> [base-sha]`: declare a merge or spec gate at that
-  immutable revision. Supply the comparison base when it is not the default
-  branch's merge base. The governing workflow may declare the same gate while
-  providing these SHAs in its review brief.
+  immutable revision. `base-sha` is the original comparison base for a full
+  review, never a fix round's last-reviewed SHA; supply it when it is not the
+  default branch's merge base. Identify the PR or branch from the current
+  worktree or governing brief so its remote head can be checked. The governing
+  workflow may declare the same gate while providing these SHAs in its brief.
 
 ## Provider-aware seating
 
@@ -338,7 +340,8 @@ council round.
 
 An org sprint's full review ladder includes this cross-provider gate; it is
 not optional decoration. The change's owner may run its council with fresh
-review seats and hand the record to the coordinator for audit.
+review seats and hand each round's record to the accountable lead. The lead
+records the ledger events from that evidence and audits them before acceptance.
 
 For an **org sprint**, call `orgs-pack` for each seat's fresh *judgment pack*:
 the frozen diff, whole spec, published contracts, acceptance criteria and

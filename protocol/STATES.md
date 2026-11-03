@@ -24,7 +24,7 @@ tests exactly this).
 | BLOCKED | IN_PROGRESS | worker | blocker resolved, entry references resolution |
 | IN_PROGRESS | REVIEW | worker | PR open; self-review done; acceptance items mapped to source/head-specific evidence and untested cases |
 | REVIEW | REWORK | reviewing lead | findings ledger entries (severity + evidence) |
-| REWORK | REVIEW | worker | fix delta referenced; only the delta re-reviewed |
+| REWORK | REVIEW | worker | fix delta referenced; warm seats re-review only their exact delta, while a seat without a received full round reviews the full change first |
 | REVIEW | ACCEPTED | accountable lead | council CLEAN for present seats and approved/CLEAN one-rung-up `lead-review` (fresh context), both covering the exact accepted SHA via full review plus any fix deltas; missing seats recorded EMPTY, findings all dispositioned, applicable local gates at that SHA; an explicitly stricter governing seat policy applies only within its declared scope, with any authorized exception naming the SHA (never labeled CLEAN for the empty seat) |
 | ACCEPTED | INTEGRATED | integration owner | executive audit at final head when required by the authority envelope; merged normally; applicable local and contract gates recorded at tested union/merged head; scoped exceptions cited |
 | any | ABANDONED | accountable lead | reason logged; salvageable branch preserved |
