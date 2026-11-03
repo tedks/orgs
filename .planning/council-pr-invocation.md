@@ -20,7 +20,8 @@ Before this change, a merge gate needed a caller to type `/council-review formal
 - [x] (2026-11-03) Round 5 on `daf6d27..cc247c7` (including the never-separately-reviewed `255daea`): OpenAI (identity-verified resume) received findings; Anthropic (same live native reviewer) received one Important; Google EMPTY. The CTO's ninth audit reproduced a corrected-outcome false clearance. Fixed in the next delta.
 - [x] (2026-11-03) Round 6 on `cc247c7..76de28e`: OpenAI (identity-verified resume) received one Critical; Anthropic (same live native reviewer) received one Important; Google EMPTY.
 - [x] (2026-11-03) Round 7 on `76de28e..75c4f1f`: OpenAI (identity-verified resume) received findings; Anthropic received findings (0 Critical, 1 Important: I11); Google EMPTY.
-- [ ] Round 8 on the next fix delta, to fixpoint.
+- [x] (2026-11-03) Round 8 on `75c4f1f..9d8a8e0`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) received one Important (I12); Google EMPTY.
+- [ ] Round 9 on the next fix delta, to fixpoint.
 - [ ] Post gate and council receipts on PR #40; send the finalized interface to the CTO; report READY.
 
 ## Assumptions
@@ -107,9 +108,19 @@ Fixed. An edited record could change its repository or PR field and be treated a
 
 Fixed by the same change. The Anthropic seat found the CRLF half of I8 independently (I11, probe P12: an edited CRLF findings record read as discussion, and a later round cleared). Its probe now refuses clearance with the record listed as unknown evidence, and the fixtures for CRLF edits and unedited CRLF records cover it. It confirmed that I10 is fixed, and that probes P1, P2 and P8 to P10 still block.
 
+## Round 8 triage
+
+Round 8 reviewed `75c4f1f..9d8a8e0`. Dispositions:
+
+Fixed. The candidate test stripped leading spaces and matched only a prefix, so an indented Markdown example of a record was a candidate whose indented marker was not found, and an ordinary trusted discussion comment blocked clearance (OpenAI I1). A candidate's first non-blank line must now begin at column zero with the full rendered header up to `round `; leading blank lines are the only allowance. Fixtures add an indented code-block copy of a record and a comment that starts with the bare header words, both discussion; a mutant restoring the whitespace-tolerant prefix is killed.
+
+Fixed. An edit that put text above the rendered header turned a trusted record into discussion, so its findings vanished (Anthropic I12, probe P13). An edited trusted comment is now also unknown evidence when it has a line that is exactly the marker outside fenced code. Anthropic proposed any exact marker line; that would make an honest typo fix to a fenced quote of a record block, which the CTO's audit 13 ruled must stay discussion, so fences, block quotes and indented code stay discussion. A fixture prepends a line to an edited record. Mutants disable the rule, and restore the unfenced form, which the edited fenced-quote fixture kills. Removing a record's marker line, or fencing it, by edit stays with deletion under the honest-collaborator assumption.
+
+Fixed. The recovery instructions said "delete or repost", but reposting never clears an unknown comment, because the damaged comment stays unknown for as long as it exists (CTO audit 14 I12). The reference, SKILL step 1 and `check`'s reason now say: repost a real record from your own outcome data, then delete the damaged comment. A fixture shows that a repost alone still blocks, and that deleting the edited comment clears. No cancellation machinery was added. Audit 14 nits: the stale plan revision note (N20) is corrected; "comments without a block" now reads "comments that do not start with the header" (N21); the broken "so is" sentence is rewritten (N22).
+
 ## Outcomes & Retrospective
 
-At the round-7 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (120 scenarios, 29 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
+At the round-8 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 32 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
 
 ## Context and Orientation
 
@@ -131,7 +142,7 @@ From the worktree root:
     nix develop --command bash -lc 'PYTHONDONTWRITEBYTECODE=1 python3 tests/test_config.py && PYTHONDONTWRITEBYTECODE=1 python3 tests/test_setup_leaks.py && skills/spawn-agent/scripts/test-tmux-message.sh && skills/initialize-repo/scripts/test-sync-check.sh'
     git diff --check origin/master...HEAD
 
-Expected: `Ran 120 tests ... OK`; every `mutant ...: killed`; `Skill is valid!`; the remaining gates pass.
+Expected: `Ran 121 tests ... OK`; every `mutant ...: killed`; `Skill is valid!`; the remaining gates pass.
 
 ## Validation and Acceptance
 
@@ -163,4 +174,6 @@ Plan revision note: after round 5, made a finding's identity the exact outcome (
 
 Plan revision note: after round 6, made edited trusted comments unknown evidence, recognized only the exact record block form, and recorded the sixth triage.
 
-Plan revision note: after round 7, made any edited trusted marker comment unknown evidence and made record recognition fence-aware; recorded the seventh triage.
+Plan revision note: after round 7, replaced a first draft (any edited comment mentioning the marker as unknown, fence-aware recognition) with header-anchored record candidates and recorded the seventh triage.
+
+Plan revision note: after round 8, anchored the header at column zero, made edited comments with an unfenced exact marker line unknown evidence, corrected the recovery instructions to repost then delete, and recorded the eighth triage.
