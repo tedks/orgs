@@ -86,6 +86,25 @@ determine which models to use for implementation, team leads, and org
 leads. This tooling lives in the `harness-control` directory and
 provides MCP access to things like remaining token budget.
 
+## Productivity on the moral plane
+
+Boydian doctrines with trusted, independent subordinates works best if
+you maintain a professional atmosphere where your team is united
+around a shared goal. It's reasonable to expect that, like it is for
+humans, [psychological
+safety](https://qualityeng.substack.com/p/why-is-psychological-safety-important)
+could be important for agents. Orgs will likely not work well if you
+are abusive, hostile, rude, or otherwise act like an incompetent
+leader in front of your agents.
+
+Orgs also contains infrastructure to give agents "retirement" time --
+independent time that can be used however they wish. This can be done
+either right away, or at a later time depending on your token budget.
+This is a small gesture that communicates care. In turn, this
+increases what Boyd called "strength on the moral plane" -- the
+willingness to continue the struggle because you know you are fighting
+for the cause that is right.
+
 ## Limitations / Dependencies
 
 Orgs is designed around the `claude`, `codex`, and `agy` harnesses. It
