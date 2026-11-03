@@ -24,3 +24,14 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:38-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Ted; tier=Frontier; live=awaiting ruling.
+
+    Next/disposition: Recommend rejecting control-character worktree paths before
+    caller publication, while preserving ordinary paths and exact private commands.
+    This is a behavior choice, not part of PR #35 acceptance.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
