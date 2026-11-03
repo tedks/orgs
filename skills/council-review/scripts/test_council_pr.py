@@ -336,8 +336,11 @@ class HostileAndBrokenRecords(unittest.TestCase):
         o = opened("r1", H1, [full("anthropic")])
         h.post(outcome(o, [received(full("anthropic"))]))
         rounds, ignored = h.rounds()
-        self.assertEqual(rounds, [])
         self.assertIn("without an open record", ignored[0]["reason"])
+        # Kept only as finding evidence: no frame, so it covers and clears nothing.
+        self.assertEqual([r.get("orphan") for r in rounds], [True])
+        self.assertEqual(h.plan(resolved(head=H1))[0]["anthropic"]["scope"], "full")
+        self.assertFalse(h.clearance(resolved(head=H1))["clean"])
 
     def test_record_text_cannot_close_the_record_block(self):
         rec = opened("r1", H1, [full("anthropic")])
@@ -546,8 +549,11 @@ class RoundOneRegressions(unittest.TestCase):
         h.post(outcome(o2, [received(seat("openai", "disposition", H1))]))
         h.post(outcome(o2, [received(seat("openai", "disposition", H1), critical=1)]))
         seats, covered = h.plan(resolved(head=H1))
-        self.assertEqual(seats["openai"]["scope"], "full")
-        self.assertEqual({c["seat"] for c in covered}, {"anthropic", "google"})
+        self.assertEqual(seats["openai"]["scope"], "full")  # its coverage was voided
+        # The void round's Critical is still evidence: it stands, so the seats
+        # the void did not touch are dispatched to examine it, not carried.
+        self.assertEqual(covered, [])
+        self.assertEqual({seats["anthropic"]["scope"], seats["google"]["scope"]}, {"disposition"})
         self.assertTrue(h.open_round(resolved(head=H1)))
 
     def test_delta_across_a_force_push_is_not_coverage(self):
@@ -582,6 +588,10 @@ class RoundOneRegressions(unittest.TestCase):
         self.assertFalse(h.open_round(resolved(head=H2)))  # nothing left: no new round
 
     def test_findings_from_a_seat_the_latest_round_omitted_still_block(self):
+        """Round-1 I1 originally had a present seat receive in round 2; under the
+        standing-findings rule that round examines mistral's finding (its
+        snapshot lists it), so the blocking case is now a round with no received
+        review. The guard is not weaker: an unexamined finding still blocks."""
         h = History()
         o1 = h.post(opened("r1", H1, [full("anthropic"), full("mistral")]))
         h.post(outcome(o1, [received(full("anthropic")), received(full("mistral"), important=1)]))
@@ -796,6 +806,40 @@ class RoundTwoRegressions(unittest.TestCase):
         h.post(outcome(o2, [empty(seat("anthropic", "delta", H1), "timeout"),
                             received(seat("openai", "delta", H1)), received(seat("google", "delta", H1))]))
         self.assertFalse(h.clearance(resolved(head=H2))["clean"])
+
+    def test_finding_survives_a_merge_base_change(self):
+        # AUDIT-8 I6 scenario A: master merged into the branch moves the merge-base.
+        h = History()
+        first_round(h, {"anthropic": "findings", "openai": "clean", "google": "clean"})
+        new = resolved(head=H2, base=B2)
+        standing = cp.plan(new, h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
+        self.assertEqual(standing, [{"round": rid("r1", H1), "seat": "anthropic"}])
+        def full2(n):
+            return seat(n, "full", B2)
+        trimmed = h.post(opened("t", H2, [full2(n) for n in ("anthropic", "openai", "google")],
+                                base=B2), snapshot=False)
+        h.post(outcome(trimmed, [empty(full2("anthropic"), "usage-limit"),
+                                 received(full2("openai")), received(full2("google"))]))
+        self.assertFalse(h.clearance(new)["clean"])  # nobody was asked about it
+        o = h.post(opened("u", H2, [full2(n) for n in ("anthropic", "openai", "google")], base=B2))
+        h.post(outcome(o, [empty(full2("anthropic"), "usage-limit"),
+                           received(full2("openai")), received(full2("google"))]))
+        self.assertTrue(h.clearance(new)["clean"])  # the listing round examined it
+
+    def test_finding_in_a_void_round_still_stands(self):
+        # AUDIT-8 I6 scenario B: an unrelated conflicting record voids the round.
+        h = History()
+        o1 = h.post(opened("r1", H1, [full(n) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o1, [received(full("anthropic"), important=1), received(full("openai")),
+                            received(full("google"))]))
+        h.post(outcome(o1, [received(full("openai"), nit=1)]))  # mistaken second outcome: void
+        self.assertTrue(h.rounds()[0][0]["conflict"])
+        standing = cp.plan(resolved(head=H1), h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
+        self.assertEqual(standing, [{"round": rid("r1", H1), "seat": "anthropic"}])
+        o2 = h.post(opened("r2", H1, [full(n) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o2, [empty(full("anthropic"), "usage-limit"), received(full("openai")),
+                            received(full("google"))]))
+        self.assertTrue(h.clearance(resolved(head=H1))["clean"])
 
     def test_parse_keeps_pr_named_files_advisory(self):
         for advisory in ("PR.md", "pr-notes.md", "pr/x.py", "prompts/review.txt"):
@@ -1229,6 +1273,7 @@ MUTATIONS = {
         [{k: i[k] for k in ("id", "shape", "reason")} for i in cp.read_pending(cwd)["items"]], []),
     "check_host": lambda host, new_provider: None,
     "unexamined_findings": lambda rounds, head, base, target_ref, is_ancestor: [],
+    "finding_evidence": lambda rnd: {} if rnd["conflict"] else rnd["finding_posts"],
     "examines": lambda rnd, key, posted, head, base, target_ref, is_ancestor: (
         not rnd["conflict"] and rnd["order"] > posted
         and any(o["status"] == "received" for o in rnd["seats"].values())),
@@ -1253,12 +1298,26 @@ def consume_by_shape(cwd, invocation):
     cp.write_pending(cwd, state)
 
 
+def unexamined_current_frame_only(rounds, head, base, target_ref, is_ancestor):
+    """The pre-AUDIT-8 collection: findings only from valid current-frame rounds."""
+    stand = []
+    for rnd in rounds:
+        if rnd["conflict"] or not cp.same_frame(rnd, base, target_ref):
+            continue
+        for name, posted in rnd["finding_posts"].items():
+            key = {"round": rnd["id"], "seat": name}
+            if not any(cp.examines(r, key, posted, head, base, target_ref, is_ancestor) for r in rounds):
+                stand.append(key)
+    return stand
+
+
 def mutation_check():
     survived = []
     first_open_order = ("latest_round_at_head", lambda rounds, head, base, target_ref: max(
         (r for r in rounds if (head, base, target_ref) in r["frames"]),
         key=lambda r: r["order"], default=None))
-    mutants = list(MUTATIONS.items()) + [("consume_pending", consume_by_shape), first_open_order]
+    mutants = list(MUTATIONS.items()) + [("consume_pending", consume_by_shape), first_open_order,
+                                         ("unexamined_findings", unexamined_current_frame_only)]
     for name, mutant in mutants:
         original = getattr(cp, name)
         setattr(cp, name, mutant)
@@ -1269,7 +1328,8 @@ def mutation_check():
             setattr(cp, name, original)
         killed = not result.wasSuccessful()
         label = {consume_by_shape: "consume_pending (by shape)",
-                 first_open_order[1]: "latest_round_at_head (first-open order)"}.get(mutant, name)
+                 first_open_order[1]: "latest_round_at_head (first-open order)",
+                 unexamined_current_frame_only: "unexamined_findings (current frame only)"}.get(mutant, name)
         print(f"mutant {label}: {'killed' if killed else 'SURVIVED'}")
         if not killed:
             survived.append(name)

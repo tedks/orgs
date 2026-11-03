@@ -335,10 +335,37 @@ def assemble(usable):
         if not group["opens"]:
             ignored.extend({"comment": i["comment"], "reason": "outcome without an open record"}
                            for i in group["outcomes"])
+            # Kept only as finding evidence: it never examines, covers or
+            # becomes a latest round (it has no frame), but its findings stand.
+            rounds.append(_orphan_round(rid, group))
             continue
         rounds.append(_build_round(rid, group))
     rounds.sort(key=lambda r: r["order"])
     return rounds, ignored
+
+
+def _finding_posts(outcome_items):
+    """First posting time of each seat's received findings in a round's
+    outcome records, whatever their validity within the round: evidence of a
+    finding is never discarded, even where the round grants nothing."""
+    posts = {}
+    for item in outcome_items:
+        for seat in item["record"]["seats"]:
+            if seat["status"] == "received" and seat["verdict"] == "findings":
+                posts.setdefault(seat["seat"], _order(item))
+    return posts
+
+
+def _orphan_round(rid, group):
+    first = group["outcomes"][0]
+    rec = first["record"]
+    return {"id": rid, "orphan": True,
+            "open": {"head": rec["head"], "base": rec["base"], "target_ref": rec["target_ref"],
+                     "seats": [], "covered": [], "standing": [], "invocation": None},
+            "opened_at": first["created_at"], "order": _order(first),
+            "conflict": "outcome without an open record", "seats": {}, "unresolved": None,
+            "outcome_at": None, "named": set(), "frames": {}, "seat_posted": {},
+            "finding_posts": _finding_posts(group["outcomes"])}
 
 
 def _build_round(rid, group):
@@ -346,7 +373,8 @@ def _build_round(rid, group):
     opened = first["record"]
     rnd = {"id": rid, "open": opened, "opened_at": first["created_at"], "order": _order(first),
            "conflict": None, "seats": {}, "unresolved": None, "outcome_at": None,
-           "named": set(), "frames": {}, "seat_posted": {}}
+           "named": set(), "frames": {}, "seat_posted": {},
+           "finding_posts": _finding_posts(group["outcomes"])}
     # Re-posting an identical open record is a retry, not a second round.
     for item in group["opens"]:
         r = item["record"]
@@ -464,7 +492,8 @@ def unexamined_findings(rounds, head, base, target_ref, is_ancestor):
     """The one rule for findings: which findings still stand.
 
     A finding is one seat's received findings outcome in one round, named
-    {round, seat}. It stands until a later round examines it: a round that is
+    {round, seat}, collected from every round of the PR whatever its frame or
+    validity. It stands until a later round examines it: a round that is
     not void, at a head that is the current head or an ancestor of it, opened
     after the finding was posted, whose open record lists that finding in its
     `standing` snapshot (the snapshot its prompts were built from), and in
@@ -473,20 +502,21 @@ def unexamined_findings(rounds, head, base, target_ref, is_ancestor):
     finding posted after the snapshot, EMPTY outcomes, covered entries and
     silence examine nothing.
     """
-    found = []
-    for rnd in rounds:
-        if rnd["conflict"] or not same_frame(rnd, base, target_ref):
-            continue
-        for name, outcome in rnd["seats"].items():
-            if outcome["status"] == "received" and outcome["verdict"] == "findings":
-                found.append((rnd, name))
     stand = []
-    for rnd, name in found:
-        key = {"round": rnd["id"], "seat": name}
-        posted = rnd["seat_posted"][name]
-        if not any(examines(r, key, posted, head, base, target_ref, is_ancestor) for r in rounds):
-            stand.append(key)
+    # Evidence comes from every round of the PR: any frame, void or orphaned.
+    # Only examination is restricted to valid rounds of the current frame.
+    for rnd in rounds:
+        for name, posted in finding_evidence(rnd).items():
+            key = {"round": rnd["id"], "seat": name}
+            if not any(examines(r, key, posted, head, base, target_ref, is_ancestor)
+                       for r in rounds):
+                stand.append(key)
     return sorted(stand, key=lambda k: (k["round"], k["seat"]))
+
+
+def finding_evidence(rnd):
+    """{seat: first posting} of every received findings outcome in a round."""
+    return rnd["finding_posts"]
 
 
 def examines(rnd, key, posted, head, base, target_ref, is_ancestor):
