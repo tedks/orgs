@@ -22,7 +22,8 @@ Before this change, a merge gate needed a caller to type `/council-review formal
 - [x] (2026-11-03) Round 7 on `76de28e..75c4f1f`: OpenAI (identity-verified resume) received findings; Anthropic received findings (0 Critical, 1 Important: I11); Google EMPTY.
 - [x] (2026-11-03) Round 8 on `75c4f1f..9d8a8e0`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) received one Important (I12); Google EMPTY.
 - [x] (2026-11-03) Round 9 on `9d8a8e0..aad73d4`: OpenAI (identity-verified resume) received one Critical; Anthropic (same live native reviewer) CLEAN with one nit (N16); Google EMPTY.
-- [ ] Round 10 on the next fix delta, to fixpoint.
+- [x] (2026-11-03) Round 10 on `aad73d4..21856e7`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) CLEAN; Google EMPTY.
+- [ ] Round 11 on the next fix delta, to fixpoint.
 - [ ] Post gate and council receipts on PR #40; send the finalized interface to the CTO; report READY.
 
 ## Assumptions
@@ -127,9 +128,15 @@ Fixed. The fence tracking in `bare_marker_line` toggled on any backtick or tilde
 
 Fixed by the same change. The Anthropic seat returned CLEAN. It confirmed that the round-8 narrowing (only an unfenced exact marker line makes an edited comment unknown) leaves no realistic honest path open. Its nit N16 (probe P14) is the same fence looseness: prepending an inline span such as a triple-backtick `diff` span to an edited findings record hid the marker. It is treated as gate-relevant because it loses findings. The CommonMark opener rule (no backtick in a backtick fence's info string) closes it, and P14 now refuses clearance with a fixture. Its alternative, keying on the schema text, was not needed.
 
+## Round 10 triage
+
+Round 10 reviewed `aad73d4..21856e7`. Dispositions:
+
+Fixed (documentation). An edited discussion comment that quotes a record inside a fence that never closes is unknown evidence and blocks, yet the reference claimed that fenced discussion stays discussion (OpenAI I1). The current body alone cannot tell that comment from an edit that prepended an opener to hide a real record. Telling them apart would need durable record identity across edits, which is new machinery this PR does not add. The behaviour is the intended fail-closed choice, and the reference now states it as a limit. It says edited discussion stays discussion only for a closed fence, a block quote or indented code. Closing the fence or deleting the comment clears it, and the advice is to quote records in a closed fence. The existing unclosed-fence fixture names the limit. The Anthropic seat returned CLEAN after probing the fence edge cases directly (closed fences of either delimiter, an unclosed opener, a cross-delimiter close, four-space indent, a marker after a closed fence).
+
 ## Outcomes & Retrospective
 
-At the round-9 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 33 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
+At the round-10 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 33 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
 
 ## Context and Orientation
 
@@ -188,3 +195,5 @@ Plan revision note: after round 7, replaced a first draft (any edited comment me
 Plan revision note: after round 8, anchored the header at column zero, made edited comments with an unfenced exact marker line unknown evidence, corrected the recovery instructions to repost then delete, and recorded the eighth triage.
 
 Plan revision note: after round 9, matched fence closers to their openers as CommonMark does and recorded the ninth triage.
+
+Plan revision note: after round 10, documented the unclosed-fence fail-closed limit and recorded the tenth triage.
