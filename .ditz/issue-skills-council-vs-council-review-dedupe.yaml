@@ -16,8 +16,8 @@ type: task
 component: default
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-02T18:39:02-00:00
 references: []
 log_events:
@@ -62,3 +62,15 @@ log_events:
     head. Dotfiles #230 compatibility is confirmed deployed; #231 global wording follows
     orgs merge. Leave this issue in progress for CTO merge disposition. Follow-up
     docs nit: council-plan-cto-role-clarity.'
+- time: 2026-11-03T04:14:42-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Completed in orgs PR #39, normal merge f6b753feaf70e7aca297d3939c29fa1abbe5c953
+    from exact reviewed/tested head 459a95afbd5836f7848b0c1d382b50aa9d5e6075. One
+    canonical council-review entry point; active callers, protocol state/template
+    rules and discovery links updated; one-rung review and event ledger remain distinct.
+    Present provider council seats and independent one-rung review CLEAN; exact-head
+    local gates PASS, merged tree identical and merged-head flake check PASS. Deployment
+    owner confirms installer demotion and matching formal-gate global instructions
+    deployed together with orgs on all included hosts. Deferred documentation nit
+    tracked separately as council-plan-cto-role-clarity.'
