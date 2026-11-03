@@ -33,7 +33,8 @@ originate them.
 ## Gate
 
 The spec merges only after a **formal `council-review` round on the spec itself
-at a pushed SHA is CLEAN**. A boundary error caught here is cheap; caught after
+at a pushed SHA is CLEAN**: `/council-review PR #N` on the spec's PR, or, for
+a spec with no PR, the governing workflow's frozen gate without a PR. A boundary error caught here is cheap; caught after
 fan-out it is an amendment. Record the spec's CLEAN council in `orgs-ledger`.
 A spec is **substantive** — it is never the "trivial docs-only" change that
 `council-review` permits for mechanical changes; this gate is unconditional.

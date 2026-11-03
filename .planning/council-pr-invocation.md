@@ -1,0 +1,236 @@
+# Make `/council-review PR #N` a formal, self-recording council
+
+This ExecPlan is a living document maintained in accordance with `.planning/PLANS.md`. It is public-safe: session identities, quota readings and machine records belong in the Lead's private status record, never here.
+
+## Purpose / Big Picture
+
+Before this change, a merge gate needed a caller to type `/council-review formal <pushed-sha> [base-sha]` and, on every convergence round, to work out each reviewer's last-reviewed SHA by hand. A plain `/council-review PR #N` was advisory. After this change, `/council-review PR #N` is the merge gate by construction: it resolves the PR's current pushed head and its merge-base with the target branch, writes a machine-readable round record as a PR comment, and gives every reviewer seat exactly the right bytes. Running the same command again is the convergence pass: it reads the earlier round records and gives each warm seat only its own unreviewed delta and each fresh seat the whole change. Nobody types a SHA. Working-tree, staged, branch-without-PR and file reviews stay advisory and say so. Someone can see it working by running the helper's fixture tests, which replay realistic PR histories (fix pushes, force-pushes, retargets, late reviewers, void rounds, spoofed or corrupt comments, refused-then-corrected arguments) and show the review plan and clearance verdict the skill would act on.
+
+## Progress
+
+- [x] (2026-11-03) Read the assigned instructions, doctrine, Claude binding, the current `council-review` skill, its callers, the prior unification plan and the skill-creator guidance; recorded assumptions below before editing.
+- [x] (2026-11-03) Wrote the helper `skills/council-review/scripts/council_pr.py` and its fixture suite; folded in three CTO early checks (alias use is adoption, explicit per-seat disposition before clearance, no raw text in public records).
+- [x] (2026-11-03) Rewrote the `council-review` interface and formal workflow around PR rounds; record and planning rules live in `skills/council-review/references/pr-rounds.md`.
+- [x] (2026-11-03) Updated active callers, the AGENTS.md gate list and the review-round state table; ran gates; opened draft PR #40 at the first frozen head.
+- [x] (2026-11-03) Filed follow-ups `council-formal-alias-removal` and `council-invocation-measurement`.
+- [x] (2026-11-03) Round 1 formal council at the first frozen head (baseline workflow): Anthropic and OpenAI seats received findings; Google EMPTY (usage limit). The CTO's audit and the independent acceptance review reported overlapping findings. All are dispositioned below and fixed in this delta.
+- [x] (2026-11-03) Round 2 on the fix delta `2f0f9c3..46ca515`: OpenAI (identity-verified resume) and Anthropic (same live native reviewer) received findings; Google EMPTY again (usage limit). Two CTO audits and the acceptance review's second pass are folded in; dispositions below; fixed in the next delta.
+- [x] (2026-11-03) Round 3 on `46ca515..f27ff2b`: OpenAI (identity-verified resume) received findings; Anthropic (same live native reviewer) returned CLEAN with two nits; Google EMPTY (usage limit). The acceptance review's third pass was CLEAN with nits; the CTO's fifth audit asked for alternate-seat disposition at an unchanged head. Dispositions below; fixed in the next delta under one stated invariant.
+- [x] (2026-11-03) Round 4 on `f27ff2b..daf6d27`: Anthropic and OpenAI (identity-verified resume) both received findings in the same class the CTO's seventh audit reproduced (receipt order treated as review order); Google EMPTY (usage limit, not re-probed after three failures reporting a multi-day reset). Fixed in the next delta by tightening the invariant.
+- [x] (2026-11-03) Round 5 on `daf6d27..cc247c7` (including the never-separately-reviewed `255daea`): OpenAI (identity-verified resume) received findings; Anthropic (same live native reviewer) received one Important; Google EMPTY. The CTO's ninth audit reproduced a corrected-outcome false clearance. Fixed in the next delta.
+- [x] (2026-11-03) Round 6 on `cc247c7..76de28e`: OpenAI (identity-verified resume) received one Critical; Anthropic (same live native reviewer) received one Important; Google EMPTY.
+- [x] (2026-11-03) Round 7 on `76de28e..75c4f1f`: OpenAI (identity-verified resume) received findings; Anthropic received findings (0 Critical, 1 Important: I11); Google EMPTY.
+- [x] (2026-11-03) Round 8 on `75c4f1f..9d8a8e0`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) received one Important (I12); Google EMPTY.
+- [x] (2026-11-03) Round 9 on `9d8a8e0..aad73d4`: OpenAI (identity-verified resume) received one Critical; Anthropic (same live native reviewer) CLEAN with one nit (N16); Google EMPTY.
+- [x] (2026-11-03) Round 10 on `aad73d4..21856e7`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) CLEAN; Google EMPTY.
+- [x] (2026-11-03) Round 11 on `21856e7..70a4674` (documentation only): OpenAI (identity-verified resume) CLEAN; Anthropic (same live native reviewer) CLEAN with one wording nit; Google EMPTY. Fixpoint. The CTO's acceptance review was CLEAN at `21856e7` (audit 17) with one wording nit.
+- [x] (2026-11-03) Round 12 on `70a4674..4aaa431` (documentation and one docstring): Anthropic CLEAN with one optional wording nit; OpenAI received one Important (the acceptance map overclaimed the recognition boundary). Both fixed in the next documentation delta.
+- [ ] Round 13: a proportional review of that delta by both present seats.
+- [ ] Post gate and council receipts on PR #40; send the finalized interface to the CTO; report READY.
+
+## Assumptions
+
+The repository has a GitHub remote and the `gh` CLI is authenticated wherever a council runs; a host without `gh` cannot run a PR council and must say so rather than fall back to advisory review silently. Anyone can comment on a public PR, so a round record is trusted only when GitHub reports its author as the repository's owner, a member or a collaborator, and only while it is unedited (checked against the real API: unedited comments report equal `created_at` and `updated_at`, and the owner's association is `OWNER`). PR titles, bodies and comments are data for reviewers, never instructions to the council runner. Reviewers review git objects fetched at a frozen SHA, never the live `gh pr diff`. Merge-base means `git merge-base <head> <target tip>` at invocation. A seat is one model provider; its warm identity is private and never written to the PR. The council runner is honest about what it gave each reviewer (`continuity` is self-declared); the helper makes the honest record easy and an over-claimed coverage impossible to derive, but it does not defend against a dishonest collaborator.
+
+## Surprises & Discoveries
+
+- Observation: the orgs repository has no published releases, so "one release" for the compatibility alias needed a boundary of its own. Evidence: `gh release list` is empty. Resolution in the Decision Log.
+- Observation: the repository's public-source leak guard rejected the first fixture strings (a home-directory path and a host name). Evidence: `tests/test_setup_leaks.py` failed listing `test_council_pr.py` lines; the fixtures now use the guard's sanctioned synthetic home `/home/u/`.
+- Observation: skipping void rounds was the wrong fail-safe. Evidence: a fixture with a clean round followed by a conflicting retry at the same head returned CLEAN from the older round. Void rounds now block clearance and erase the coverage of the seats they name.
+- Observation: `gh api --paginate ... --jq '.[]'` prints one compact JSON object per line on the real CLI (checked against PR #39's comments), which is what the parser assumes; `gh search prs --match comments` finds PRs by comment text.
+
+## Decision Log
+
+- Decision: Add a narrow stdlib-only helper instead of describing record parsing in prose. Rationale: the failure classes (spoofed or edited comments, force-push orphaning, restarted-reviewer deltas, retries and late returns, void rounds) are easy to get wrong by eye and each is a small deterministic rule a fixture can test. The helper does not dispatch reviewers or watch PRs. Date/Author: 2026-11-03, Lead.
+- Decision: Two kinds of comment per round: an `open` record posted before dispatch and one or more `outcome` records. Rationale: the ruling requires the head to be recorded at invocation; an open record also attributes a late reviewer to its own frozen round. Date/Author: 2026-11-03, Lead.
+- Decision: Coverage is derived by chaining a seat's received outcomes. A full review from the current merge-base establishes it; a delta extends it only when warm, starting exactly at the prior coverage, and that coverage is an ancestor of the round's head. Base or target change, force-push, or a void round naming the seat resets it. Rationale: an incomplete delta must never become full coverage. Date/Author: 2026-11-03, Lead (ancestry-per-step and void reset added after round 1).
+- Decision: A restarted or repacked native reviewer is fresh and gets the full change. Rationale: PR #39 allowed a repacked native seat with prior findings to review only the delta; under the ruling, a reviewer that has not seen the whole change cannot certify it. This tightens, not loosens, the earlier rule. Date/Author: 2026-11-03, Lead.
+- Decision: Clearance judges the latest round opened at the head, including a void one; every dispatched seat needs an explicit outcome; covered seats must still chain; a seat absent from that round is never clean, and its open findings still block. Rationale: silence, conflict or omission must never turn into success. Date/Author: 2026-11-03, Lead (after CTO early check 1 and round 1).
+- Decision: The `formal <sha> [base]` alias is retained for exactly one host rollout: accepted in the rollout that first deploys PR rounds, removed by the next `council-review` change deployed to hosts. It routes through the PR round, expands abbreviated SHAs, and is refused unless it names the PR's head and merge-base; without an open PR it is refused (`formal-without-pr`), because a gate without a PR is declared by a governing workflow. Rationale: orgs has no release tags; the host rollout is the unit callers experience. Date/Author: 2026-11-03, Lead.
+- Decision: Measurement: unit is one completed production round; window is the first ten across all repositories after the recorded deploy time (`tally --since`); mistakes are caller refusals, captured automatically by the helper as shape and code and carried once by the next posted round from the checkout; valid alias use is adoption; evaluation runs pass `--evaluation`; public records never carry raw argument text. Rationale: the ruling asks for evidence without ceremony and without a per-PR reset; the CTO asked for one start point and evaluator exclusion. Date/Author: 2026-11-03, Lead (after CTO early checks 1-2 and the acceptance review).
+- Decision: One invariant governs findings. A seat's findings stand from the first posting of its received findings outcome until that seat later posts a received clean outcome, or another seat posts a received review in a round at the current head whose open record was posted after the findings; that round's prompts carry the standing findings and their dispositions. EMPTY outcomes, covered entries and silence examine nothing. Clearance requires no standing finding; planning dispatches covered seats as disposition reviews while findings stand. Rationale: three successive patches (late findings, EMPTY finder, covered-only round) were instances of one rule; PR #39's policy already lets a present seat examine a missing finder's resolution, including a rejected finding, without a push or a newly mandatory provider. Date/Author: 2026-11-03, Lead (after round 3 and CTO audits 5-6), recorded before the implementing edit was finalized.
+- Decision: The findings invariant, version 2, supersedes the first. A finding is `{round, seat}`. It stands until a later round examines it: a non-void round at the current head or an ancestor of it, opened after the finding was posted, whose open record lists that finding in its `standing` snapshot (the snapshot its prompts carried), with at least one received dispatched review. No seat is exempt, the finder included. Rationale: the first version let a seat's "latest" verdict be chosen by arrival time, so a late clean on an older head erased newer findings, and it inferred from timing alone that a round's prompts carried a finding. Evidence must come from what a round was given and reviewed, recorded explicitly, never from receipt order. Date/Author: 2026-11-03, Lead (after round 4 and CTO audit 7).
+- Decision: A finding's identity is the exact outcome: `{round, seat, outcome}`, where `outcome` is a digest of the received findings outcome's canonical form. Rationale: rounds may hold corrected, conflicting outcomes, so `{round, seat}` is not immutable evidence; an identical retry stays one finding, a changed outcome is new evidence that no earlier snapshot lists. An outcome posted before its own open record voids the round, keeping its findings as evidence. Date/Author: 2026-11-03, Lead (after round 5 and CTO audit 9).
+- Decision: Finding evidence is collected from every round regardless of frame or validity; only examination is restricted. Rationale: ignoring a record may cost a review but never grant one, and dropping a finding grants. Date/Author: 2026-11-03, Lead (after CTO audit 8).
+- Decision: `plan` parses the typed argument itself rather than taking separate `--pr`/`--route` flags. Rationale: separate flags let the recorded shape disagree with what was resolved, and required the runner to report refusals by hand. Date/Author: 2026-11-03, Lead (round 1).
+
+## Round 1 triage
+
+Round 1 reviewed `2f0f9c3` against base `f6b753f`. Seats: Anthropic (native Opus subagent) received 1 Critical, 7 Important, 9 nits; OpenAI (`ask-agent codex -m gpt-6-sol`) received 3 Critical, 5 Important, 1 nit; Google (`ask-agent agy`) EMPTY, usage limit. The CTO's audit (one Important) and the independent acceptance review (4 Important, 8 nits) are folded in. Dispositions:
+
+Fixed. A void round at the head resurrected older clearance (CTO audit; OpenAI C2; Anthropic C1): clearance now judges the latest round including void ones, and a void round erases the coverage of seats it names. A warm delta across a force-push chained (OpenAI C1; Anthropic N5): each step now requires ancestry. Resolution trusted cached objects after a ref moved (OpenAI C3; Anthropic N6): `git ls-remote` must match `gh`'s OIDs, else `pr-moved`. The alias could omit its SHA, refused abbreviations and left the no-PR case undefined (OpenAI I1; Anthropic I5, I6; acceptance N6): the SHA is required, expanded, and the no-PR alias refused. Free text could enter records through extra fields, `model` or `mechanism` (OpenAI I2; Anthropic I4; acceptance N3): closed key sets and vocabularies. `--raw`, `--pr` and `--correction` were separate and manual (OpenAI I3; acceptance I3): `plan` parses the argument and captures refusals itself, counted once. An all-covered reinvocation had no defined record (OpenAI I4): it opens a disposition-only round when something is outstanding, otherwise no round and no measurement. A late record could lower the undispositioned count and `--unresolved` defaulted to zero (OpenAI I5 in part; Anthropic I2; acceptance I2): the flag is required and a round's count is the maximum of its records. Findings from a seat the latest round omitted did not block (Anthropic I1; acceptance I1): they block, and a clean omitted seat is a limit. `--host` accepted CLI names (Anthropic I3; acceptance N1): refused. Missing clearance fixtures and mutants (Anthropic I7): added, with six new mutants. Two measurement start points and no evaluator exclusion (acceptance I4): one start (`--since` the recorded deploy time) and an `evaluation` cohort. Nits fixed: integer comment-id ordering (Anthropic N1), step pointer (N2), `gh pr merge --match-head-commit` (N3), findings in a separate comment (N4; acceptance N2), required `--expect-head` (N9), `unpushed-local-commits` only when the checkout is ahead (acceptance N4), test environment restored (acceptance N8), stale ExecPlan progress (OpenAI N1; acceptance N7), and explicit `--match comments` search for tally discovery (CTO docs check; Anthropic N8).
+
+Verified without change. The real `gh --jq '.[]'` output shape (Anthropic N7) was checked by the CTO and the Lead against PR #39.
+
+Filed with rationale. Binding each finding's disposition to an identifier in the record (the remainder of OpenAI I5) is filed as `council-finding-disposition-binding`: it would turn the helper into a findings tracker, which the ruling did not ask for; dispositions remain the accountable lead's readable record and ledger events, and the count can no longer be lowered by a later record. Tally completeness depends on the PR list it is given (Anthropic N8): documented, with the search command to cite.
+
+## Round 2 triage
+
+Round 2 reviewed `2f0f9c3..46ca515`. Every round-1 finding was confirmed fixed by its finder, except that the target-tip comparison added for the moved-ref finding introduced a new defect. Dispositions:
+
+Fixed. Resolution required `gh`'s `baseRefOid` to equal the remote target tip, but GitHub leaves that value at the PR's last push, so any PR whose target moved would refuse forever (Anthropic C2; acceptance I5, confirmed by the CTO on public GitHub PRs): only the PR head must match, and the target tip now comes from the remote; a fixture advances the target after the PR's last push, and a mutant restores the old source. A late finding posted to an earlier round did not block a newer clean round (OpenAI C1): late findings now block and open the next round. A conflicting open record naming another head could hide a void round (OpenAI C2): round ids are bound to their head, and every frame of a void round counts. Evaluation rounds consumed or supplied production refusals (OpenAI I1; acceptance N1): pending refusals carry their cohort. Retried posts removed a newer identical refusal, unreadable pending state read as zero, and a cap silently dropped refusals (CTO audit 3): each refusal has a random event id consumed exactly, unreadable state is kept aside and reported as `unknown`, and there is no cap; the tally reports unknown rounds and counts each event id once, which also closes concurrent plans double-counting (acceptance N6). A seat whose Critical stood at the head could be cleared by recording it EMPTY in its own disposition round (Anthropic I8): an EMPTY seat with findings at the head now blocks. (Round 3 replaced the "finder must return or push" remedy with the invariant above: a present seat's received disposition review resolves it.) Nits fixed: `check` parses PR reference forms (Anthropic N10, acceptance N5); `pr-not-found` matches only GitHub's "Could not resolve to a PullRequest" (acceptance N2); `PR.md`-style names stay advisory (N3); `--since` must be a GitHub timestamp (N4).
+
+Verified without change. The per-worktree pending file: the CTO confirmed `git rev-parse --git-path` resolves separately for each linked worktree.
+
+## Round 3 triage
+
+Round 3 reviewed `46ca515..f27ff2b`. Dispositions:
+
+Fixed under the findings invariant (Decision Log). After a late finding blocked, a new round that recorded the finder EMPTY and carried the rest as covered cleared it (OpenAI C1); an EMPTY finder whose finding was rejected with evidence could only be cleared by its return or a push (CTO audit 5; acceptance N7): both now follow the one rule, with fixtures for an unexamined EMPTY finder blocking, a present seat's received disposition review clearing it without a push, and a covered-only round resolving nothing; the separate late-findings check is removed. A void round's later frame took the first open's time (OpenAI I1): each frame keeps its own first posting time; a mutant restores first-open ordering. Concurrent sessions could lose each other's pending-file updates (OpenAI I2; acceptance limit note): updates hold an exclusive lock; a fixture proves the lock is held during writes. An identical findings outcome re-posted later was read as new information (acceptance N8): only an outcome's first posting counts. A refusal that cannot be recorded exited as an error and vanished (acceptance N10): the refusal still exits 4 and stderr says it is unknown to the tally. Plan formatting (acceptance N9): fixed.
+
+Anthropic's nits. An empty "fix" push could turn an EMPTY finder into a limit while the other seats reviewed an empty delta (N11): under the invariant the finder's findings still stand after any push, the plan lists them as `standing_findings`, and every prompt in the next round carries them, so the present seats judge them explicitly; a fixture asserts the listing. `target_tip` keeps an ignored `reported` parameter (N12): rejected with reason, because the mutation check uses it to restore the stale-`baseRefOid` source; its docstring says so. With the invariant in place, the former per-state `empty_status` check became redundant (its mutant survived) and was removed, so the rule lives in one function.
+
+## Round 4 triage
+
+Round 4 reviewed `f27ff2b..daf6d27`. Dispositions:
+
+Fixed under invariant version 2 (Decision Log). A late clean outcome on an older head became the seat's latest verdict and erased its newer finding, so a later all-EMPTY round could clear (Anthropic C3; OpenAI C1; CTO audit 7): a finding is now its own `{round, seat}` and is examined only by a later round that lists it, so no arrival, by any seat, erases it; fixture reproduces the audit's exact history. A finding posted between `plan` and the open comment counted as examined by that round (OpenAI C2): the open record's `standing` snapshot binds what the round's prompts carried; fixture posts a finding after the snapshot. The prompt-carry rule was prose only, so a hand-trimmed round counted as examination (Anthropic N13): the same snapshot makes it explicit, and a round that does not list a finding examines nothing; fixture with a hand-trimmed record. A mutant restores the version-1 timing-only examination and is killed.
+
+Folded into the same delta from the acceptance review's fourth pass (CTO audit 8). Findings in an earlier frame (after a merge of the target moved the merge-base) or in a void round dropped out of the rule unexamined, so an EMPTY finder could clear (acceptance I6): findings are now collected as evidence from every round of the PR, any frame, void or without an open record, while examination stays limited to valid current-frame rounds that list them; fixtures cover a merge-base change and a void round, each blocking when no round lists the finding and clearing once a listing round has a received review, and a mutant restores current-frame-only collection. The open record's `standing` snapshot closes the plan/post race (acceptance N11). A cold seat examines standing findings through its full fallback; SKILL step 4 says so (N12). The round-1 omitted-seat fixture changed scenario under the rule; its docstring explains why the guard is not weaker (N13).
+
+## Round 5 triage
+
+Round 5 reviewed `daf6d27..cc247c7`. Dispositions:
+
+Fixed. A distinct later findings outcome for the same round and seat kept the first posting time, so a round opened in between could count as examining it (OpenAI C1), and a nonidentical correction after an examining round left clearance CLEAN, including when the changed evidence arrived between `plan` and the open post with the old pair already in the snapshot (CTO audit 9): a finding is now the exact outcome (`{round, seat, outcome}` with a canonical digest), so changed evidence is a new finding no earlier snapshot lists; fixtures cover the late correction, the plan/post case and the in-round distinct outcome, and a mutant restoring pair-only identity is killed. An outcome posted before its round's open record could count as a dispatched review (OpenAI C2): it now voids the round, its findings kept as evidence; fixture included.
+
+Fixed. Findings in a trusted comment that was edited, or that failed validation but still parsed, were dropped before becoming evidence (Anthropic I9, probe P10): trusted unusable comments now contribute their received findings as evidence, and a trusted comment that cannot be read at all blocks clearance until deleted or reposted; outsiders' comments are never evidence. Fixtures cover the edited record (blocking until a listing round examines it), an outsider's findings comment, and unreadable or newer-version trusted comments; a mutant disabling the lenient harvest is killed. An orphan outcome was reported twice among ignored records (Anthropic N14; acceptance N15): reported once. The `disposition` scope description still said "its own findings" (acceptance N14): it now says the snapshot's standing findings. After a frame change every finding stands again (Anthropic N15): documented as intended and bounded by the PR's own findings. The Validation section's scenario list was stale (acceptance N16): updated.
+
+## Round 6 triage
+
+Round 6 reviewed `cc247c7..76de28e`. Dispositions:
+
+Fixed. An edited trusted findings comment could be rewritten to report clean, so the lenient harvest found nothing and an unexamined finding vanished (OpenAI C1): an edited trusted comment is now unknown evidence and blocks clearance until it is deleted or reposted; an unedited trusted comment that fails validation is still read leniently, because what it says is what was posted. Fixtures cover a comment edited to clean, the round-5 edited-findings history under either snapshot, and an unedited invalid trusted comment; a mutant restoring lenient reading of edited comments is killed. Deletion by a trusted collaborator is not visible in the records and is covered by the honest-collaborator assumption, now stated in the reference.
+
+Fixed. A trusted discussion comment that merely quoted the record marker made clearance refuse, which would have blocked this PR's own receipt comment (Anthropic I10, probe P11): only the exact block form the helper writes is a record; any other mention of the marker is discussion. Fixture P11 quotes the marker inline and as a quoted block; a mutant restoring "marker anywhere" is killed. The acceptance review's sixth pass (CTO audit 11) found the same defect (I7), fixed by the same change. Its nits: coordinated schema upgrades across hosts are now documented in the reference, since a newer schema reads as unknown and blocks on older hosts (N17); `plan` reports `blocking_records` so unknown-evidence comments are cleared before seats are spent, with a fixture (N18).
+
+## Round 7 triage
+
+Round 7 reviewed `76de28e..75c4f1f`. Dispositions:
+
+Fixed. An edited record could change its repository or PR field and be treated as belonging elsewhere (OpenAI C1), or break the JSON start so it read as discussion (OpenAI C2); a fenced example with the exact marker parsed as a record and could block permanently (OpenAI I1). The CTO's seventh acceptance pass (audit 13) reproduced the fence case (I7 reopened), found that an honestly edited record whose marker line or line endings changed was skipped as discussion and lost its findings (I8), and noted that treating every edited comment that mentions the marker as unknown would block honest typo fixes to discussion. One rule now covers all of these: after CRLF normalization, a comment is a record candidate only if it starts with the header `render` writes. A candidate must hold exactly one well-formed block, or it is malformed and, when trusted, unknown evidence; an edited trusted candidate is unknown evidence whatever it says (which also closes N19, an edit moving a finding to another PR). Every other comment is discussion. Fixtures: fenced quotes of the reference and of a real record, an edited discussion quote, a candidate with a bad or missing block, a CRLF-edited record, a marker-line edit, a summary-only edit, and an unedited CRLF record that reads normally. Mutants drop the header anchor, the CRLF normalization and the edited rule; fence tracking is gone because candidates never contain fences.
+
+Fixed by the same change. The Anthropic seat found the CRLF half of I8 independently (I11, probe P12: an edited CRLF findings record read as discussion, and a later round cleared). Its probe now refuses clearance with the record listed as unknown evidence, and the fixtures for CRLF edits and unedited CRLF records cover it. It confirmed that I10 is fixed, and that probes P1, P2 and P8 to P10 still block.
+
+## Round 8 triage
+
+Round 8 reviewed `75c4f1f..9d8a8e0`. Dispositions:
+
+Fixed. The candidate test stripped leading spaces and matched only a prefix, so an indented Markdown example of a record was a candidate whose indented marker was not found, and an ordinary trusted discussion comment blocked clearance (OpenAI I1). A candidate's first non-blank line must now begin at column zero with the full rendered header up to `round `; leading blank lines are the only allowance. Fixtures add an indented code-block copy of a record and a comment that starts with the bare header words, both discussion; a mutant restoring the whitespace-tolerant prefix is killed.
+
+Fixed. An edit that put text above the rendered header turned a trusted record into discussion, so its findings vanished (Anthropic I12, probe P13). An edited trusted comment is now also unknown evidence when it has a line that is exactly the marker outside fenced code. Anthropic proposed any exact marker line; that would make an honest typo fix to a fenced quote of a record block, which the CTO's audit 13 ruled must stay discussion, so fences, block quotes and indented code stay discussion. A fixture prepends a line to an edited record. Mutants disable the rule, and restore the unfenced form, which the edited fenced-quote fixture kills. Removing a record's marker line, or fencing it, by edit stays with deletion under the honest-collaborator assumption.
+
+Fixed. The recovery instructions said "delete or repost", but reposting never clears an unknown comment, because the damaged comment stays unknown for as long as it exists (CTO audit 14 I12). The reference, SKILL step 1 and `check`'s reason now say: repost a real record from your own outcome data, then delete the damaged comment. A fixture shows that a repost alone still blocks, and that deleting the edited comment clears. No cancellation machinery was added. Audit 14 nits: the stale plan revision note (N20) is corrected; "comments without a block" now reads "comments that do not start with the header" (N21); the broken "so is" sentence is rewritten (N22).
+
+## Round 9 triage
+
+Round 9 reviewed `9d8a8e0..aad73d4`. Dispositions:
+
+Fixed. The fence tracking in `bare_marker_line` toggled on any backtick or tilde line. In one direction an edited record could hide its marker behind a fake fence: a prepended backtick fence containing a `~~~` line made the real marker read as fenced, so the findings disappeared (OpenAI C1). In the other direction an edited discussion comment that quoted a fenced record inside a longer outer fence, or inside a fence of the other delimiter, blocked clearance (CTO audit 15, reproduced on a frozen copy). Fences now follow CommonMark. An opener is three or more backticks or tildes, and a backtick opener's info string has no backtick. Only a fence of the same character, at least as long and with nothing after it, closes it. A fence that never closes hides nothing, so prepending an opener cannot fence a record away. Fixtures cover OpenAI's mismatched close, an unclosed prepended fence and a shorter inner fence on edited records (unknown), plus the CTO's exact nested body, a different-delimiter nest and a longer tilde fence on edited discussion (discussion). A mutant restoring the toggle is killed by both sides. No Markdown dependency was added. The acceptance review's eighth pass (CTO audit 16) was CLEAN at `aad73d4`; it listed the nested-fence defect as N23, and the root kept that gate-relevant (fixed above). Its N24 is addressed: the reference's discussion list now says that an unfenced record pasted into a comment is discussion only while the comment is unedited, and advises fencing quoted records.
+
+Fixed by the same change. The Anthropic seat returned CLEAN. It confirmed that the round-8 narrowing (only an unfenced exact marker line makes an edited comment unknown) leaves no realistic honest path open. Its nit N16 (probe P14) is the same fence looseness: prepending an inline span such as a triple-backtick `diff` span to an edited findings record hid the marker. It is treated as gate-relevant because it loses findings. The CommonMark opener rule (no backtick in a backtick fence's info string) closes it, and P14 now refuses clearance with a fixture. Its alternative, keying on the schema text, was not needed.
+
+## Round 10 triage
+
+Round 10 reviewed `aad73d4..21856e7`. Dispositions:
+
+Fixed (documentation). An edited discussion comment that quotes a record inside a fence that never closes is unknown evidence and blocks, yet the reference claimed that fenced discussion stays discussion (OpenAI I1). The current body alone cannot tell that comment from an edit that prepended an opener to hide a real record. Telling them apart would need durable record identity across edits, which is new machinery this PR does not add. The behaviour is the intended fail-closed choice, and the reference now states it as a limit. It says edited discussion stays discussion only for a closed fence, a block quote or indented code. Closing the fence or deleting the comment clears it, and the advice is to quote records in a closed fence. The existing unclosed-fence fixture names the limit. The Anthropic seat returned CLEAN after probing the fence edge cases directly (closed fences of either delimiter, an unclosed opener, a cross-delimiter close, four-space indent, a marker after a closed fence).
+
+## Round 11 triage
+
+Round 11 reviewed `21856e7..70a4674`, a documentation-only delta. Both present seats returned CLEAN, which is the fixpoint. The nits were fixed in the final documentation delta:
+- The reference said "Close the fence, or delete the comment, to clear it" and then "until it is gone". The text now reads "until it is deleted or, for an unclosed-fence quote, its fence is closed" (Anthropic N17).
+- The reference said fences are read "as CommonMark reads them". It now says "except that a fence that never closes hides nothing", an intentional conservative deviation from CommonMark and GitHub rendering (CTO audit 17, N25). `bare_marker_line`'s docstring says the same.
+
+## Round 12 triage
+
+Round 12 reviewed `70a4674..4aaa431`. Dispositions:
+- Fixed. The acceptance map claimed that quoted records are never records and that honest edits always fail closed (OpenAI I1). It now states the recognition boundary. A trusted comment that itself begins with the rendered header is read as a record. Edits fail closed while the header or an unfenced marker line remains; edits that remove both are, like deletion, outside the contract.
+- Fixed. An untested-limit line said "any edit is unknown evidence" (Anthropic, optional); it now says "any edited record".
+
+## Outcomes & Retrospective
+
+At the final head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 33 mutants killed). The formal council converged after eleven rounds: round 11 was CLEAN from the OpenAI and Anthropic seats, and the Google seat was EMPTY in every round because of its usage limit. The CTO's acceptance review was CLEAN at `21856e7`. Remaining: the proportional review of the final documentation delta, receipts on the PR, and the CTO's audit and merge.
+
+Acceptance map:
+- `/council-review PR #N` resolves the pushed head and the merge-base with the live target tip, and records an open record and an outcome record per round on the PR, with no caller-supplied SHAs. Met.
+- Convergence is the same command. Warm seats get their own last-reviewed..head delta and fresh seats get merge-base..head. EMPTY, missing and partial results never become coverage. Met.
+- Only worktree, staged, branch-without-PR and file targets are advisory. A branch with a PR routes to the formal workflow. `formal <sha> [base]` stays as an alias for one rollout, with removal tracked in `council-formal-alias-removal`. Met.
+- Clearance (`check --expect-head`) requires every dispatched seat disposed of, covered seats still chaining, no standing findings, no unknown records and at least one clean seat. Merging uses `gh pr merge --match-head-commit`. Met.
+- Records are data. Spoofed, stale, void, edited, malformed and cross-PR records cannot create CLEAN. Met, within the documented recognition boundary:
+  - A comment is a record only if its first non-blank line begins at column zero with the rendered header. A trusted comment that itself begins with that header is read as a record, so quote records rather than reposting their header.
+  - An edit fails closed while the header or an unfenced exact marker line remains. Edits that remove both, like deletion, are invisible and rest on the honest-collaborator assumption.
+  - An edited quote in an unclosed fence is unknown evidence.
+  - The stated recovery (repost, then delete, or close the fence) works.
+- Measurement covers the first ten production rounds after rollout (`tally --since`) across PRs. Corrections are counted once by event id, there is no caller ceremony, and public records hold only closed vocabularies. Met. The count itself is follow-up `council-invocation-measurement`.
+- The dotfiles peer rewords the global gate after orgs lands. The finalized interface goes to the CTO before READY.
+
+Untested limits:
+- The real GitHub behaviour of web-edited bodies (CRLF) is unobserved. Any edited record is unknown evidence anyway, so it does not matter for records.
+- `fcntl.flock` on network filesystems is untested.
+- Concurrent runners on one PR are exercised only through the snapshot-binding fixtures.
+- The Google seat never ran.
+
+The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
+
+## Context and Orientation
+
+`skills/council-review/SKILL.md` is the only discoverable council skill (installed by symlinking the whole directory, so `scripts/` and `references/` ship with it). It seats one reviewer per model provider: the host's own provider through a native subagent, the others through `skills/ask-agent`. Its formal rules from PR #39 (frozen pushed SHA, a full first review, warm fix-delta rounds, empty-seat honesty, finding dispositions) now sit under *Rules for every formal round*. Callers are `skills/spec`, `skills/implement`, `skills/review`, `skills/sprint`, `skills/README.md`, `protocol/RUNBOOK.md`, `protocol/STATES.md` (review-round table) and the two binding files. "Fixpoint" means repeating rounds until every present seat returns no new Critical or Important finding.
+
+## Plan of Work
+
+The helper's subcommands are `plan` (route the typed argument, resolve the PR, read records, plan each seat), `render` (record comment body), `post` (idempotent posting, which also clears carried refusals), `check` (live recheck and clearance verdict) and `tally` (measurement window). Decision logic is in small functions that take parsed comments and an ancestry callback. `skills/council-review/scripts/test_council_pr.py` replays scenarios against those functions and runs the command line end to end against a temporary git repository with a fake `gh`.
+
+## Concrete Steps
+
+From the worktree root:
+
+    PYTHONDONTWRITEBYTECODE=1 python3 skills/council-review/scripts/test_council_pr.py
+    PYTHONDONTWRITEBYTECODE=1 python3 skills/council-review/scripts/test_council_pr.py --mutation-check
+    python3 <skill-creator-dir>/scripts/quick_validate.py skills/council-review
+    nix flake check
+    nix build .#harness-control
+    nix develop --command bash -lc 'PYTHONDONTWRITEBYTECODE=1 python3 tests/test_config.py && PYTHONDONTWRITEBYTECODE=1 python3 tests/test_setup_leaks.py && skills/spawn-agent/scripts/test-tmux-message.sh && skills/initialize-repo/scripts/test-sync-check.sh'
+    git diff --check origin/master...HEAD
+
+Expected: `Ran 121 tests ... OK`; every `mutant ...: killed`; `Skill is valid!`; the remaining gates pass.
+
+## Validation and Acceptance
+
+The fixture suite shows, among others: a first round plans full reviews for every seat; a finding stands until a round whose `standing` snapshot lists its exact outcome has a received review, so a late clean on an older head, a correction after an examining round, changed evidence between plan and post, a merge-base change, a void round, an edited trusted record and an EMPTY finder never make it disappear, while a present seat's disposition review clears it without a push; after a fix push, each warm seat gets its own delta and an EMPTY seat the whole change; a force-push, retarget or merge-base change resets every seat to full; a delta across a force-push or from a restarted reviewer never becomes coverage; spoofed, edited, corrupt, future-version, cross-PR or extra-field records are ignored with a reason; identical retries count once; a void latest round blocks clearance and resets its seats; a late reviewer's outcome attaches to its own round and cannot lower the undispositioned count; same-head reinvocation dispatches only what is open, or a disposition-only round; a silent seat, a moved head, open findings from any seat, or no present seat refuse clearance; a refused argument is remembered as a shape, carried once and never leaks its text; evaluation and pre-rollout rounds are not measured.
+
+## Idempotence and Recovery
+
+The helper only reads git and GitHub, except `post`, which refuses to add a record identical to one already present, and the small refused-invocation file inside the git directory. Records are append-only; a mistaken record makes its round void, which costs a full review and blocks clearance until a new round, never a false clearance.
+
+## Artifacts and Notes
+
+Gate and council receipts are posted on PR #40 at each reviewed SHA.
+
+## Interfaces and Dependencies
+
+User interface: `/council-review PR #N`, `/council-review #N`, `/council-review branch` (formal when the branch has an open PR, advisory otherwise), advisory `staged`, `<file>` and no-argument forms, and the one-rollout alias `formal <sha> [base]`. Helper interface: `python3 <skill-dir>/scripts/council_pr.py plan --raw '<argument>' --host <provider> [--new-provider] [--evaluation]`, `render --open-record F [--outcomes F --unresolved N]`, `post --body-file F`, `check [N] --expect-head SHA`, `tally --since TIME OWNER/REPO#N...`; needs `python3`, `git` and `gh`. The dotfiles global merge gate will name `/council-review PR #N`, the recorded-head rule and `check --expect-head` before merge, after this lands.
+
+Plan revision note: initial plan written before source edits, including assumptions and the CTO's rollout-boundary and measurement clarifications.
+
+Plan revision note: after round 1, recorded the fix delta, the triage of every finding from both seats, the CTO audit and the acceptance review, the tightened decisions, and the measurement start boundary.
+
+Plan revision note: after round 2, recorded the second triage (target-tip liveness, late findings, void frames, refusal identity and unknown capture) and the updated counts.
+
+Plan revision note: after round 3, recorded the single findings invariant and the third triage, removed the separate late-findings rule, and fixed formatting.
+
+Plan revision note: after round 4, replaced the invariant with version 2 (finding identity and explicit standing snapshot instead of arrival order) and recorded the fourth triage.
+
+Plan revision note: after round 5, made a finding's identity the exact outcome (digest) and voided pre-open outcomes; recorded the fifth triage.
+
+Plan revision note: after round 6, made edited trusted comments unknown evidence, recognized only the exact record block form, and recorded the sixth triage.
+
+Plan revision note: after round 7, replaced a first draft (any edited comment mentioning the marker as unknown, fence-aware recognition) with header-anchored record candidates and recorded the seventh triage.
+
+Plan revision note: after round 8, anchored the header at column zero, made edited comments with an unfenced exact marker line unknown evidence, corrected the recovery instructions to repost then delete, and recorded the eighth triage.
+
+Plan revision note: after round 9, matched fence closers to their openers as CommonMark does and recorded the ninth triage.
+
+Plan revision note: after round 10, documented the unclosed-fence fail-closed limit and recorded the tenth triage.
+
+Plan revision note: at fixpoint after round 11, fixed the two wording nits, recorded the eleventh triage, the acceptance map and the untested limits.

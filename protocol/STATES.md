@@ -98,11 +98,11 @@ the lead's `review-seat-outcome` events are the record.
 
 | From | To | Who (records) | Evidence |
 |---|---|---|---|
-| — | OPENED | accountable lead | names a frozen pushed revision (SHA / PR head) and a quiescent tree; scope: full PR (round 1 and any seat's first received round) or exact fix delta (warm seats in round N) |
+| — | OPENED | accountable lead | names a frozen pushed revision (SHA / PR head) and a quiescent tree, and for a PR round the round id, head and merge-base from its open record on the PR; scope: full PR (round 1 and any seat's first received round) or exact fix delta (warm seats in round N) |
 | OPENED | FINDINGS | lead, from council seat outputs (fresh or warm-chained; warm seats identity-verified per round) | one `review-seat-outcome` per seat: received findings (severity, claim, evidence), received `no-finding`, or `EMPTY` with reason (not a verdict) |
 | FINDINGS | DISPOSITIONED | accountable lead | per finding: fixed / filed with rationale / rejected with reason — never silently dropped |
 | DISPOSITIONED | OPENED | lead | opens the next round; warm seats review only the exact fix delta, while a newly available seat first receives the full change |
-| any round | CLEAN | lead | `review-clean` citing every seat's outcome event: zero new Critical/Important; fixpoint reached for present seats at the named frozen SHA (full review plus fix deltas); unavailable seats stay EMPTY and do not count as CLEAN; only an explicitly stricter governing seat policy adds a landing condition, with any scoped exception naming issuer, SHA, seat, scope and expiry |
+| any round | CLEAN | lead | `review-clean` citing every seat's outcome event (for a PR round, also a passing `council_pr.py check` at the exact head): zero new Critical/Important; fixpoint reached for present seats at the named frozen SHA (full review plus fix deltas); unavailable seats stay EMPTY and do not count as CLEAN; only an explicitly stricter governing seat policy adds a landing condition, with any scoped exception naming issuer, SHA, seat, scope and expiry |
 
 ## Sprint
 
