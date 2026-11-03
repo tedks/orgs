@@ -35,6 +35,7 @@ SCHEMA = "council-review-round"
 VERSION = 1
 MARK_OPEN = "<!-- council-review-round"
 MARK_CLOSE = "-->"
+RECORD_HEADER = "**council-review-round v"
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 HEX_ABBREV = re.compile(r"^[0-9a-fA-F]{7,40}$")
@@ -114,23 +115,39 @@ def encode_block(record):
     return f"{MARK_OPEN}\n{text}\n{MARK_CLOSE}"
 
 
-RECORD_START = re.compile(r"(?m)^" + re.escape(MARK_OPEN) + r"\n(?=\{)")
+def normalize(body):
+    """GitHub may return an edited body with CRLF line endings."""
+    return body.replace("\r\n", "\n")
+
+
+def is_candidate(body):
+    """A comment is a round record only if it starts with the header `render`
+    writes. Anything else is discussion, whatever markers or fenced examples
+    it quotes. `body` is normalized."""
+    return body.lstrip(" \n").startswith(RECORD_HEADER)
 
 
 def extract(body):
-    """Return (record, error). (None, None) when the body has no record.
+    """Return (record, error). (None, None) when the body is not a record.
 
-    A record is only the exact block encode_block writes: a line that is the
-    marker, a JSON object starting on the next line, and a line beginning
-    with the closing `-->`. Any other mention of the marker (quoted in a
-    review, say) is ordinary discussion.
+    A record candidate (see is_candidate) must hold exactly one block: a line
+    that is exactly the marker, the JSON, then a line starting with `-->`.
+    A candidate with a missing, duplicated or malformed block is an error,
+    never discussion.
     """
-    starts = [m.end() for m in RECORD_START.finditer(body)]
-    if not starts:
+    body = normalize(body)
+    if not is_candidate(body):
         return None, None
+    starts, offset = [], 0
+    for line in body.split("\n"):
+        offset += len(line) + 1
+        if line == MARK_OPEN:
+            starts.append(offset)
+    if not starts:
+        return None, "record header without a record block"
     if len(starts) > 1:
         return None, "more than one record block"
-    end = body.find("\n" + MARK_CLOSE, starts[0])
+    end = body.find("\n" + MARK_CLOSE, starts[0] - 1)
     if end < 0:
         return None, "unterminated record block"
     try:
@@ -322,7 +339,16 @@ def _order(item):
 def load_records(comments, repo, pr):
     usable, ignored = [], []
     for comment in comments:
-        rec, err = extract(comment.get("body") or "")
+        body = normalize(comment.get("body") or "")
+        if not is_candidate(body):
+            continue
+        if edited_trusted(comment):
+            # Its original contents are unknowable: the edit may have removed
+            # findings, changed the fields or broken the block.
+            ignored.append({"comment": comment.get("id"), "unreadable": True,
+                            "reason": "edited after posting (contents unknown)"})
+            continue
+        rec, err = extract(body)
         if rec is None and err is None:
             continue
         why = err or trust_reason(comment) or validate(rec, repo, pr)
@@ -347,18 +373,16 @@ def load_records(comments, repo, pr):
     return usable, ignored
 
 
-def trusted_evidence(comment, rec, repo, pr):
-    """Findings evidence in a trusted comment that is not a usable record.
+def edited_trusted(comment):
+    """A trusted record candidate that was edited is unknown evidence,
+    whatever it now says (edited records are never read)."""
+    return (comment.get("author_association") in TRUSTED_ASSOCIATIONS
+            and comment.get("updated_at") != comment.get("created_at"))
 
-    An edited comment's original contents are unknowable (it may have been
-    edited from findings to clean), so it is unknown evidence: None, which
-    blocks clearance until the comment is deleted or reposted. An unedited
-    one is read leniently.
-    """
-    if comment.get("updated_at") != comment.get("created_at"):
-        names_other_pr = (isinstance(rec, dict) and rec.get("repo") is not None
-                          and (rec.get("repo"), rec.get("pr")) != (repo, pr))
-        return [] if names_other_pr else None
+
+def trusted_evidence(comment, rec, repo, pr):
+    """Findings evidence in an unedited trusted comment that is not a usable
+    record, read leniently (what it says is what was posted)."""
     return harvest_findings(rec, repo, pr)
 
 

@@ -92,6 +92,11 @@ def outcome(open_rec, seats, unresolved=0):
     return rec
 
 
+def as_record(block):
+    """A comment body as `render` would start it: the header, then `block`."""
+    return "**council-review-round v1: round `x` outcomes**\n\n" + block
+
+
 class History:
     """Comments in posting order, with GitHub-style metadata."""
 
@@ -306,30 +311,30 @@ class HostileAndBrokenRecords(unittest.TestCase):
         self.assert_ignored("edited", edited=True)
 
     def test_corrupt_json_is_ignored(self):
-        self.assert_ignored("invalid JSON", body=cp.MARK_OPEN + "\n{not json\n" + cp.MARK_CLOSE)
+        self.assert_ignored("invalid JSON", body=as_record(cp.MARK_OPEN + "\n{not json\n" + cp.MARK_CLOSE))
 
     def test_unterminated_block_is_ignored(self):
-        self.assert_ignored("unterminated", body=cp.MARK_OPEN + '\n{"a": 1}')
+        self.assert_ignored("unterminated", body=as_record(cp.MARK_OPEN + '\n{"a": 1}'))
 
     def test_two_blocks_in_one_comment_are_ignored(self):
         block = cp.encode_block(opened("r1", H1, [full("anthropic")]))
-        self.assert_ignored("more than one", body=block + "\n" + block)
+        self.assert_ignored("more than one", body=as_record(block + "\n" + block))
 
     def test_future_version_is_ignored(self):
         rec = dict(opened("r1", H1, [full("anthropic")]), version=2)
-        self.assert_ignored("future version", body=cp.encode_block(rec))
+        self.assert_ignored("future version", body=as_record(cp.encode_block(rec)))
 
     def test_record_copied_from_another_pr_is_ignored(self):
         rec = opened("r1", H1, [full("anthropic")], pr=8)
-        self.assert_ignored("another repository or PR", body=cp.encode_block(rec))
+        self.assert_ignored("another repository or PR", body=as_record(cp.encode_block(rec)))
 
     def test_short_sha_is_ignored(self):
         rec = opened("r1", H1[:12], [full("anthropic")])
-        self.assert_ignored("bad head", body=cp.encode_block(rec))
+        self.assert_ignored("bad head", body=as_record(cp.encode_block(rec)))
 
     def test_full_scope_not_starting_at_base_is_ignored(self):
         rec = opened("r1", H1, [seat("anthropic", "full", H1)])
-        self.assert_ignored("must start at the base", body=cp.encode_block(rec))
+        self.assert_ignored("must start at the base", body=as_record(cp.encode_block(rec)))
 
     def test_verdict_must_match_counts(self):
         o = opened("r1", H1, [full("anthropic")])
@@ -941,12 +946,75 @@ class RoundTwoRegressions(unittest.TestCase):
         self.assertTrue(h.clearance(resolved(head=H1))["clean"])
         self.assertEqual(h.rounds()[1], [])  # nothing ignored, nothing unreadable
 
+    def edited_history(self, body):
+        h = History()
+        o1 = h.post(opened("a", H2, [full(n) for n in ("anthropic", "openai")]))
+        h.post(outcome(o1, [received(full("anthropic")), received(full("openai"))]))
+        h.post(None, edited=True, body=body)
+        return h
+
+    def test_edited_record_cannot_escape_by_changing_its_fields_or_shape(self):
+        # Round 7: repo/pr changed, the JSON start broken, or the block fenced.
+        o = opened("a", H2, [full("anthropic")])
+        moved = dict(outcome(o, [received(full("anthropic"), critical=1)]), pr=999)
+        for body in (as_record(cp.encode_block(moved)),
+                     as_record(cp.MARK_OPEN + "\nnot json any more\n" + cp.MARK_CLOSE),
+                     as_record("```\n" + cp.encode_block(outcome(o, [received(full("anthropic"))]))
+                               + "\n```")):
+            result = self.edited_history(body).clearance(resolved(head=H2))
+            self.assertFalse(result["clean"], body[:40])
+            self.assertTrue(any("unknown" in r for r in result["reasons"]))
+
+    def test_record_header_with_a_bad_payload_is_not_discussion(self):
+        for block in (cp.MARK_OPEN + "\nthis is not JSON\n" + cp.MARK_CLOSE, "no block at all"):
+            h = History()
+            first_round(h)
+            h.post(None, body=as_record(block))  # unedited, trusted
+            self.assertFalse(h.clearance(resolved(head=H1))["clean"], block)
+
+    def test_honestly_edited_helper_record_blocks_as_unknown(self):
+        # Round 7 I8: a web edit may return CRLF line endings or touch the
+        # marker line; either way the record is unknown, never discussion.
+        o = opened("a", H2, [full("anthropic")])
+        body = cp.render(outcome(o, [received(full("anthropic"), important=1)]))
+        for edit in (body.replace("\n", "\r\n"),
+                     body.replace(cp.MARK_OPEN + "\n", cp.MARK_OPEN + " \n"),
+                     body.replace("Do not edit", "Do not ever edit")):
+            result = self.edited_history(edit).clearance(resolved(head=H2))
+            self.assertFalse(result["clean"])
+            self.assertTrue(any("unknown" in r for r in result["reasons"]))
+
+    def test_unedited_crlf_record_is_read(self):
+        h = History()
+        o1 = h.post(opened("a", H2, [full(n) for n in ("anthropic", "openai")]))
+        rec = outcome(o1, [received(full("anthropic"), important=1), received(full("openai"))])
+        h.post(None, body=cp.render(rec).replace("\n", "\r\n"))
+        rounds, ignored = h.rounds()
+        self.assertEqual(ignored, [])
+        self.assertEqual(h.clearance(resolved(head=H2))["seats"]["anthropic"], "findings")
+
+    def test_fenced_record_example_is_discussion(self):
+        h = History()
+        o = first_round(h)
+        example = "Example record:\n```\n" + cp.MARK_OPEN + "\n{ corrupt example\n" + cp.MARK_CLOSE + "\n```"
+        h.post(None, body=example)
+        reference = open(os.path.join(os.path.dirname(os.path.abspath(cp.__file__)),
+                                      "..", "references", "pr-rounds.md")).read()
+        h.post(None, body="Per the reference:\n\n" + reference)
+        quoted = cp.render(outcome(o, [received(full("anthropic"), critical=1)]))
+        h.post(None, body="This record looked wrong to me:\n```\n" + quoted + "\n```")
+        # An honest typo fix to a discussion comment keeps it discussion.
+        h.post(None, edited=True, body="Fixed typo. Example:\n```\n" + quoted + "\n```")
+        self.assertTrue(h.clearance(resolved(head=H1))["clean"])
+        self.assertEqual(cp.plan(resolved(head=H1), h.rounds()[0], "anthropic", is_ancestor)
+                         ["blocking_records"], [])
+
     def test_unedited_invalid_trusted_record_is_read_leniently(self):
         h = History()
         o1 = h.post(opened("a", H2, [full(n) for n in ("anthropic", "openai")]))
         bad = outcome(o1, [received(full("anthropic"), important=1), received(full("openai"))])
         bad["extra"] = "invalid field"  # fails validation, but is exactly what was posted
-        h.post(None, body=cp.encode_block(bad))
+        h.post(None, body=as_record(cp.encode_block(bad)))
         result = h.clearance(resolved(head=H2))
         self.assertFalse(result["clean"])
         self.assertEqual(result["seats"]["anthropic"], "findings")
@@ -961,7 +1029,7 @@ class RoundTwoRegressions(unittest.TestCase):
     def test_unreadable_trusted_record_blocks_as_unknown(self):
         h = History()
         first_round(h)
-        h.post(None, body=cp.MARK_OPEN + "\n{broken\n" + cp.MARK_CLOSE)
+        h.post(None, body=as_record(cp.MARK_OPEN + "\n{broken\n" + cp.MARK_CLOSE))
         result = h.clearance(resolved(head=H1))
         self.assertFalse(result["clean"])
         self.assertTrue(any("unknown" in r for r in result["reasons"]))
@@ -970,7 +1038,7 @@ class RoundTwoRegressions(unittest.TestCase):
         h2 = History()
         o = first_round(h2)
         future = dict(outcome(o, [received(full("anthropic"))]), version=2)
-        h2.post(None, body=cp.encode_block(future))
+        h2.post(None, body=as_record(cp.encode_block(future)))
         self.assertFalse(h2.clearance(resolved(head=H1))["clean"])
 
     def test_parse_keeps_pr_named_files_advisory(self):
@@ -1407,7 +1475,9 @@ MUTATIONS = {
     "unexamined_findings": lambda rounds, head, base, target_ref, is_ancestor: [],
     "finding_evidence": lambda rnd: {} if rnd["conflict"] else rnd["finding_posts"],
     "harvest_findings": lambda rec, repo, pr: [],
-    "trusted_evidence": lambda comment, rec, repo, pr: cp.harvest_findings(rec, repo, pr),
+    "edited_trusted": lambda comment: False,
+    "is_candidate": lambda body: cp.MARK_OPEN in body,
+    "normalize": lambda body: body,
     # Pair-only identity: every outcome of one seat in one round is the same finding.
     "finding_key": lambda round_id, seat, digest: {"round": round_id, "seat": seat,
                                                    "outcome": "0" * 12},
