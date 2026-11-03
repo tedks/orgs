@@ -14,7 +14,8 @@ Before this change, a merge gate needed a caller to type `/council-review formal
 - [x] (2026-11-03) Updated active callers, the AGENTS.md gate list and the review-round state table; ran gates; opened draft PR #40 at the first frozen head.
 - [x] (2026-11-03) Filed follow-ups `council-formal-alias-removal` and `council-invocation-measurement`.
 - [x] (2026-11-03) Round 1 formal council at the first frozen head (baseline workflow): Anthropic and OpenAI seats received findings; Google EMPTY (usage limit). The CTO's audit and the independent acceptance review reported overlapping findings. All are dispositioned below and fixed in this delta.
-- [ ] Convergence round on the fix delta (warm seats review their own delta; the Google seat, if available, reviews the full change).
+- [x] (2026-11-03) Round 2 on the fix delta `2f0f9c3..46ca515`: OpenAI (identity-verified resume) and Anthropic (same live native reviewer) received findings; Google EMPTY again (usage limit). Two CTO audits and the acceptance review's second pass are folded in; dispositions below; fixed in the next delta.
+- [ ] Round 3 on the next fix delta, to fixpoint.
 - [ ] Post gate and council receipts on PR #40; send the finalized interface to the CTO; report READY.
 
 ## Assumptions
@@ -49,9 +50,17 @@ Verified without change. The real `gh --jq '.[]'` output shape (Anthropic N7) wa
 
 Filed with rationale. Binding each finding's disposition to an identifier in the record (the remainder of OpenAI I5) is filed as `council-finding-disposition-binding`: it would turn the helper into a findings tracker, which the ruling did not ask for; dispositions remain the accountable lead's readable record and ledger events, and the count can no longer be lowered by a later record. Tally completeness depends on the PR list it is given (Anthropic N8): documented, with the search command to cite.
 
+## Round 2 triage
+
+Round 2 reviewed `2f0f9c3..46ca515`. Every round-1 finding was confirmed fixed by its finder, except that the target-tip comparison added for the moved-ref finding introduced a new defect. Dispositions:
+
+Fixed. Resolution required `gh`'s `baseRefOid` to equal the remote target tip, but GitHub leaves that value at the PR's last push, so any PR whose target moved would refuse forever (Anthropic C2; acceptance I5, confirmed by the CTO on public GitHub PRs): only the PR head must match, and the target tip now comes from the remote; a fixture advances the target after the PR's last push, and a mutant restores the old source. A late finding posted to an earlier round did not block a newer clean round (OpenAI C1): late findings now block and open the next round. A conflicting open record naming another head could hide a void round (OpenAI C2): round ids are bound to their head, and every frame of a void round counts. Evaluation rounds consumed or supplied production refusals (OpenAI I1; acceptance N1): pending refusals carry their cohort. Retried posts removed a newer identical refusal, unreadable pending state read as zero, and a cap silently dropped refusals (CTO audit 3): each refusal has a random event id consumed exactly, unreadable state is kept aside and reported as `unknown`, and there is no cap; the tally reports unknown rounds and counts each event id once, which also closes concurrent plans double-counting (acceptance N6). A seat whose Critical stood at the head could be cleared by recording it EMPTY in its own disposition round (Anthropic I8): an EMPTY seat with findings at the head now blocks. This follows the existing rule that a missing finder's fix must be examined by a present seat; with no fix pushed there is nothing for a present seat to examine, so the finder must return or a fix must be pushed; after a fix push the EMPTY finder is a limit, as before. Nits fixed: `check` parses PR reference forms (Anthropic N10, acceptance N5); `pr-not-found` matches only GitHub's "Could not resolve to a PullRequest" (acceptance N2); `PR.md`-style names stay advisory (N3); `--since` must be a GitHub timestamp (N4); ``check` accepts PR reference forms (N5, as above).
+
+Verified without change. The per-worktree pending file: the CTO confirmed `git rev-parse --git-path` resolves separately for each linked worktree.
+
 ## Outcomes & Retrospective
 
-At the fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (81 scenarios, 14 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle.
+At the round-2 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (95 scenarios, 19 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle.
 
 ## Context and Orientation
 
@@ -73,7 +82,7 @@ From the worktree root:
     nix develop --command bash -lc 'PYTHONDONTWRITEBYTECODE=1 python3 tests/test_config.py && PYTHONDONTWRITEBYTECODE=1 python3 tests/test_setup_leaks.py && skills/spawn-agent/scripts/test-tmux-message.sh && skills/initialize-repo/scripts/test-sync-check.sh'
     git diff --check origin/master...HEAD
 
-Expected: `Ran 81 tests ... OK`; every `mutant ...: killed`; `Skill is valid!`; the remaining gates pass.
+Expected: `Ran 95 tests ... OK`; every `mutant ...: killed`; `Skill is valid!`; the remaining gates pass.
 
 ## Validation and Acceptance
 
@@ -92,5 +101,7 @@ Gate and council receipts are posted on PR #40 at each reviewed SHA.
 User interface: `/council-review PR #N`, `/council-review #N`, `/council-review branch` (formal when the branch has an open PR, advisory otherwise), advisory `staged`, `<file>` and no-argument forms, and the one-rollout alias `formal <sha> [base]`. Helper interface: `python3 <skill-dir>/scripts/council_pr.py plan --raw '<argument>' --host <provider> [--new-provider] [--evaluation]`, `render --open-record F [--outcomes F --unresolved N]`, `post --body-file F`, `check [N] --expect-head SHA`, `tally --since TIME OWNER/REPO#N...`; needs `python3`, `git` and `gh`. The dotfiles global merge gate will name `/council-review PR #N`, the recorded-head rule and `check --expect-head` before merge, after this lands.
 
 Plan revision note: initial plan written before source edits, including assumptions and the CTO's rollout-boundary and measurement clarifications.
+
+Plan revision note: after round 2, recorded the second triage (target-tip liveness, late findings, void frames, refusal identity and unknown capture) and the updated counts.
 
 Plan revision note: after round 1, recorded the fix delta, the triage of every finding from both seats, the CTO audit and the acceptance review, the tightened decisions, and the measurement start boundary.
