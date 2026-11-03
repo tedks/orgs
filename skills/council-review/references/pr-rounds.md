@@ -117,17 +117,17 @@ block; GitHub's web editor may also return the body with CRLF line endings.
 So is a trusted comment that cannot be read well enough to know (corrupt
 JSON, a newer schema version), and an edited trusted comment that still has
 a line that is exactly the marker outside fenced code, even if the edit put
-text above the header. Fences are read as CommonMark reads them: only a
-fence of the opener's character, at least as long, closes it, and a fence
-that never closes hides nothing. An edited discussion comment otherwise
+text above the header. Fences are read as CommonMark reads them (only a
+fence of the opener's character, at least as long, closes it), except that
+a fence that never closes hides nothing, where CommonMark and GitHub run it
+to the end of the comment: an intentional conservative deviation. An edited discussion comment otherwise
 stays discussion, so an honest typo fix to a comment that quotes a record in
 a closed fence, a block quote or indented code blocks nothing. The body
 alone cannot tell an unclosed fence that quotes a record from an edit that
 prepended an opener to hide one, so an edited comment whose quote sits in an
-unclosed fence is unknown evidence: a deliberate fail-closed limit. Close
-the fence, or delete the comment, to clear it. Any unknown comment refuses clearance until
-it is gone. If it was a
-real record, first repost the round's record from your own outcome data
+unclosed fence is unknown evidence: a deliberate fail-closed limit. Any unknown
+comment refuses clearance until it is deleted or, for an unclosed-fence
+quote, its fence is closed. If it was a real record, first repost the round's record from your own outcome data
 (`render` then `post`), then delete the edited or unreadable comment;
 reposting alone clears nothing, because the damaged comment stays unknown
 evidence for as long as it exists. Deleting a comment, or editing away both a

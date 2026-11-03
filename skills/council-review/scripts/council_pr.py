@@ -384,9 +384,9 @@ def bare_marker_line(body):
 
     Fences follow CommonMark: an opener is three or more backticks or tildes
     (a backtick opener's info string has no backtick); only the same
-    character, at least as long, with nothing after it, closes it. A fence
-    that never closes hides nothing, so an edit cannot fence a record away by
-    prepending an opener. `body` is normalized.
+    character, at least as long, with nothing after it, closes it. Unlike
+    CommonMark, a fence that never closes hides nothing, so an edit cannot
+    fence a record away by prepending an opener. `body` is normalized.
     """
     lines, opener, inside = body.split("\n"), None, []
     for line in lines:
