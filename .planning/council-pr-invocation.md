@@ -24,7 +24,8 @@ Before this change, a merge gate needed a caller to type `/council-review formal
 - [x] (2026-11-03) Round 9 on `9d8a8e0..aad73d4`: OpenAI (identity-verified resume) received one Critical; Anthropic (same live native reviewer) CLEAN with one nit (N16); Google EMPTY.
 - [x] (2026-11-03) Round 10 on `aad73d4..21856e7`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) CLEAN; Google EMPTY.
 - [x] (2026-11-03) Round 11 on `21856e7..70a4674` (documentation only): OpenAI (identity-verified resume) CLEAN; Anthropic (same live native reviewer) CLEAN with one wording nit; Google EMPTY. Fixpoint. The CTO's acceptance review was CLEAN at `21856e7` (audit 17) with one wording nit.
-- [ ] A proportional review of the final documentation delta (the nits below and this plan) by both present seats.
+- [x] (2026-11-03) Round 12 on `70a4674..4aaa431` (documentation and one docstring): Anthropic CLEAN with one optional wording nit; OpenAI received one Important (the acceptance map overclaimed the recognition boundary). Both fixed in the next documentation delta.
+- [ ] Round 13: a proportional review of that delta by both present seats.
 - [ ] Post gate and council receipts on PR #40; send the finalized interface to the CTO; report READY.
 
 ## Assumptions
@@ -141,6 +142,12 @@ Round 11 reviewed `21856e7..70a4674`, a documentation-only delta. Both present s
 - The reference said "Close the fence, or delete the comment, to clear it" and then "until it is gone". The text now reads "until it is deleted or, for an unclosed-fence quote, its fence is closed" (Anthropic N17).
 - The reference said fences are read "as CommonMark reads them". It now says "except that a fence that never closes hides nothing", an intentional conservative deviation from CommonMark and GitHub rendering (CTO audit 17, N25). `bare_marker_line`'s docstring says the same.
 
+## Round 12 triage
+
+Round 12 reviewed `70a4674..4aaa431`. Dispositions:
+- Fixed. The acceptance map claimed that quoted records are never records and that honest edits always fail closed (OpenAI I1). It now states the recognition boundary. A trusted comment that itself begins with the rendered header is read as a record. Edits fail closed while the header or an unfenced marker line remains; edits that remove both are, like deletion, outside the contract.
+- Fixed. An untested-limit line said "any edit is unknown evidence" (Anthropic, optional); it now says "any edited record".
+
 ## Outcomes & Retrospective
 
 At the final head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 33 mutants killed). The formal council converged after eleven rounds: round 11 was CLEAN from the OpenAI and Anthropic seats, and the Google seat was EMPTY in every round because of its usage limit. The CTO's acceptance review was CLEAN at `21856e7`. Remaining: the proportional review of the final documentation delta, receipts on the PR, and the CTO's audit and merge.
@@ -150,12 +157,16 @@ Acceptance map:
 - Convergence is the same command. Warm seats get their own last-reviewed..head delta and fresh seats get merge-base..head. EMPTY, missing and partial results never become coverage. Met.
 - Only worktree, staged, branch-without-PR and file targets are advisory. A branch with a PR routes to the formal workflow. `formal <sha> [base]` stays as an alias for one rollout, with removal tracked in `council-formal-alias-removal`. Met.
 - Clearance (`check --expect-head`) requires every dispatched seat disposed of, covered seats still chaining, no standing findings, no unknown records and at least one clean seat. Merging uses `gh pr merge --match-head-commit`. Met.
-- Records are data. Spoofed, stale, void, edited, malformed and cross-PR records cannot create CLEAN. Discussion that quotes records is never a record. Honest edits fail closed, and the stated recovery works. Met, within two documented limits: trusted collaborators are assumed honest about deletion, and an edited quote in an unclosed fence is unknown evidence.
+- Records are data. Spoofed, stale, void, edited, malformed and cross-PR records cannot create CLEAN. Met, within the documented recognition boundary:
+  - A comment is a record only if its first non-blank line begins at column zero with the rendered header. A trusted comment that itself begins with that header is read as a record, so quote records rather than reposting their header.
+  - An edit fails closed while the header or an unfenced exact marker line remains. Edits that remove both, like deletion, are invisible and rest on the honest-collaborator assumption.
+  - An edited quote in an unclosed fence is unknown evidence.
+  - The stated recovery (repost, then delete, or close the fence) works.
 - Measurement covers the first ten production rounds after rollout (`tally --since`) across PRs. Corrections are counted once by event id, there is no caller ceremony, and public records hold only closed vocabularies. Met. The count itself is follow-up `council-invocation-measurement`.
 - The dotfiles peer rewords the global gate after orgs lands. The finalized interface goes to the CTO before READY.
 
 Untested limits:
-- The real GitHub behaviour of web-edited bodies (CRLF) is unobserved. Any edit is unknown evidence anyway, so it does not matter.
+- The real GitHub behaviour of web-edited bodies (CRLF) is unobserved. Any edited record is unknown evidence anyway, so it does not matter for records.
 - `fcntl.flock` on network filesystems is untested.
 - Concurrent runners on one PR are exercised only through the snapshot-binding fixtures.
 - The Google seat never ran.
