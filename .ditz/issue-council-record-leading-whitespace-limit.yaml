@@ -1,0 +1,26 @@
+id: council-record-leading-whitespace-limit
+title: Assess the documented leading-whitespace boundary for council round records
+desc: 'PR #40 final council (Anthropic round 13) noted that a first line containing
+  only spaces fails toward discussion, rather than becoming a record candidate. The
+  helper emits its header at column zero, so its generated records do not hit this
+  case. Deferred as a non-blocking recognition limit: changing permissiveness without
+  evidence could reintroduce indented-code false positives. The final receipt documents
+  it at https://github.com/tedks/orgs/pull/40#issuecomment-6599172791.
+
+
+  Owner: Orgs CTO. Revisit only if real use demonstrates the need; compare honest
+  edits and indented quoted records, keep both fixtures if changing recognition. No
+  product ruling or source merge is blocked.'
+type: task
+component: council-review
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T08:45:05-00:00
+references: []
+log_events:
+- time: 2026-11-03T08:45:05-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
