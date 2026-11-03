@@ -46,9 +46,13 @@ def resolved(head=H2, base=B, target_ref="master"):
             "target_ref": target_ref, "target_oid": T, "local_head": head}
 
 
-def rid(name):
-    """A valid round id derived from a short fixture name."""
-    return f"{'0' * 12}-20261103T100000Z-{name.encode().hex()[:6].ljust(6, '0')}"
+def rid(name, head):
+    """A valid round id (bound to its head) derived from a short fixture name."""
+    return f"{head[:12]}-20261103T100000Z-{name.encode().hex()[:6].ljust(6, '0')}"
+
+
+def corr(event, reason="supplied-sha-mismatch", shape="formal-sha"):
+    return {"id": event, "shape": shape, "reason": reason}
 
 
 def seat(name, scope, start, continuity=None, **extra):
@@ -61,9 +65,10 @@ def seat(name, scope, start, continuity=None, **extra):
 def opened(name, head, seats, base=B, target_ref="master", shape="pr-ref", route="pr",
            notes=(), corrections=(), pr=PR, covered=(), cohort="production"):
     return {"schema": cp.SCHEMA, "version": 1, "phase": "open", "repo": REPO, "pr": pr,
-            "round_id": rid(name), "head": head, "base": base, "target_ref": target_ref,
+            "round_id": rid(name, head), "head": head, "base": base, "target_ref": target_ref,
             "target_oid": T, "invocation": {"shape": shape, "route": route, "notes": list(notes),
-                                            "corrections": list(corrections), "cohort": cohort},
+                                            "corrections": list(corrections), "unknown": [],
+                                            "cohort": cohort},
             "covered": [{"seat": c, "through": head} for c in covered],
             "seats": [dict(s, status="dispatched") for s in seats]}
 
@@ -332,8 +337,7 @@ class HostileAndBrokenRecords(unittest.TestCase):
         rec["invocation"]["raw"] = "PR #7"
         self.assertEqual(cp.validate(rec, REPO, PR), "bad invocation")
         rec = opened("r1", H1, [full("anthropic")],
-                     corrections=[{"shape": "other", "reason": "unrecognized-argument",
-                                   "raw": "x"}])
+                     corrections=[dict(corr("0a0a0a0a"), raw="x")])
         self.assertEqual(cp.validate(rec, REPO, PR), "bad invocation corrections")
 
     def test_empty_reason_must_be_a_code(self):
@@ -364,10 +368,26 @@ class RetriesDuplicatesAndLateReviewers(unittest.TestCase):
     def test_conflicting_open_records_make_the_round_count_for_nothing(self):
         h = History()
         h.post(opened("r1", H1, [full("anthropic")]))
-        h.post(opened("r1", H2, [full("anthropic")]))
+        h.post(opened("r1", H1, [full("openai")]))
         rounds, _ = h.rounds()
         self.assertEqual(rounds[0]["conflict"], "conflicting open records")
         self.assertEqual(h.plan(resolved(head=H1))[0]["anthropic"]["scope"], "full")
+
+    def test_round_id_must_name_its_own_head(self):
+        rec = opened("r1", H2, [full("anthropic")])
+        rec["round_id"] = rid("r1", H1)  # an H1 round id carrying an H2 frame
+        self.assertIn("bad round_id", cp.validate(rec, REPO, PR))
+
+    def test_void_round_is_seen_from_every_frame_it_names(self):
+        h = History()
+        first_round(h)  # clean at H1
+        o = opened("r9", H1, [full("anthropic")])
+        h.post(o)
+        h.post(dict(o, seats=[dict(full("openai"), status="dispatched")]))  # conflicting open
+        rounds, _ = h.rounds()
+        rnd = rounds[-1]
+        rnd["frames"].add((H2, B, "master"))  # as if one open had named another head
+        self.assertIs(cp.latest_round_at_head(rounds, H2, B, "master"), rnd)
 
     def test_conflicting_outcomes_for_a_seat_void_the_round(self):
         h = History()
@@ -592,6 +612,67 @@ class RoundOneRegressions(unittest.TestCase):
         self.assertIn("at least one seat", cp.validate(opened("r1", H1, []), REPO, PR))
 
 
+class RoundTwoRegressions(unittest.TestCase):
+    """Scenarios from the second council round and acceptance audits."""
+
+    def test_late_findings_in_an_earlier_round_block_a_newer_clean_round(self):
+        h = History()
+        o1 = first_round(h, {"anthropic": "clean", "openai": "clean", "google": "empty"})
+        o2 = h.post(opened("r2", H2, [seat("anthropic", "delta", H1), seat("openai", "delta", H1),
+                                      full("google")]))
+        h.post(outcome(o2, [received(seat("anthropic", "delta", H1)),
+                            received(seat("openai", "delta", H1)), empty(full("google"))]))
+        self.assertTrue(h.clearance(resolved(head=H2))["clean"])
+        h.post(outcome(o1, [received(full("google"), important=1)]))  # google, late, with findings
+        result = h.clearance(resolved(head=H2))
+        self.assertFalse(result["clean"])
+        self.assertTrue(any("after round" in r for r in result["reasons"]), result["reasons"])
+        self.assertTrue(h.open_round(resolved(head=H2)))
+
+    def test_finder_gone_empty_at_the_same_head_still_blocks(self):
+        h = History()
+        o1 = h.post(opened("a", H2, [full("anthropic"), full("openai")]))
+        h.post(outcome(o1, [received(full("anthropic"), critical=1), received(full("openai"))]))
+        o2 = h.post(opened("b", H2, [seat("anthropic", "disposition", H2)], covered=("openai",)))
+        h.post(outcome(o2, [empty(seat("anthropic", "disposition", H2), "timeout")], 0))
+        result = h.clearance(resolved(head=H2))
+        self.assertFalse(result["clean"])
+        self.assertEqual(result["seats"]["anthropic"], "findings")
+
+    def test_finder_gone_empty_after_a_fix_push_is_a_limit(self):
+        h = History()
+        first_round(h, {"anthropic": "findings", "openai": "clean", "google": "clean"})
+        o2 = h.post(opened("b", H2, [seat(n, "delta", H1) for n in ("anthropic", "openai", "google")]))
+        h.post(outcome(o2, [empty(seat("anthropic", "delta", H1), "timeout"),
+                            received(seat("openai", "delta", H1)), received(seat("google", "delta", H1))]))
+        result = h.clearance(resolved(head=H2))  # present seats examined the fix in their delta
+        self.assertTrue(result["clean"], result["reasons"])
+        self.assertIn("anthropic: empty", result["limits"])
+
+    def test_parse_keeps_pr_named_files_advisory(self):
+        for advisory in ("PR.md", "pr-notes.md", "pr/x.py", "prompts/review.txt"):
+            self.assertIsNone(cp.parse_invocation(advisory), advisory)
+        for bad in ("PR", "PR x", "PR#x", "#"):
+            with self.assertRaises(cp.Refusal, msg=bad):
+                cp.parse_invocation(bad)
+
+    def test_concurrent_rounds_carrying_one_refusal_count_it_once(self):
+        rows = []
+        for i, name in enumerate(("a", "b")):
+            rec = opened(name, H1, [full("anthropic")], corrections=[corr("0badcafe")])
+            rows.append(("o/r", {"id": name, "open": rec, "outcome_at": "x",
+                                 "opened_at": f"2026-11-10T00:0{i}:00Z"}))
+        result = cp.tally(rows, since="2026-11-01T00:00:00Z")
+        self.assertEqual((result["rounds"], result["mistakes"]), (2, 1))
+
+    def test_unknown_capture_is_reported_not_zero(self):
+        rec = opened("u", H1, [full("anthropic")])
+        rec["invocation"]["unknown"] = ["deadbeef"]
+        result = cp.tally([("o/r", {"id": "u", "open": rec, "outcome_at": "x",
+                                     "opened_at": "2026-11-10T00:00:00Z"})], since="2026-11-01T00:00:00Z")
+        self.assertEqual(result["rounds_with_unknown_corrections"], 1)
+
+
 class LegacyAliasAndMeasurement(unittest.TestCase):
     full_sha = staticmethod(lambda sha: {H2[:12]: H2, H1[:9]: H1}.get(sha, sha))
 
@@ -645,7 +726,7 @@ class LegacyAliasAndMeasurement(unittest.TestCase):
         rows = []
         for i in range(12):
             pr = 7 if i % 2 else 8
-            corrections = [{"shape": "formal-sha", "reason": "supplied-sha-mismatch"}] if i == 3 else []
+            corrections = [corr("0000000%d" % (i % 10))] if i == 3 else []
             notes = ["legacy-formal-alias"] if i == 5 else []
             rec = opened(f"r{i}", H1, [full("anthropic")], notes=notes, corrections=corrections, pr=pr)
             rows.append(("o/r", {"id": f"r{i}", "open": rec, "outcome_at": "x",
@@ -872,7 +953,8 @@ class EndToEnd(unittest.TestCase):
         plan = self.run_round({}, raw=f"formal {self.h1[:10]}")  # corrected: abbreviated head
         inv = plan["open_record"]["invocation"]
         self.assertEqual(inv["notes"], ["legacy-formal-alias"])
-        self.assertEqual(inv["corrections"], [{"shape": "formal-sha", "reason": "supplied-sha-mismatch"}])
+        self.assertEqual([(c["shape"], c["reason"]) for c in inv["corrections"]],
+                         [("formal-sha", "supplied-sha-mismatch")])
         h2 = self.commit("fix")
         self.publish(h2)
         plan = self.run_round({})
@@ -888,8 +970,8 @@ class EndToEnd(unittest.TestCase):
         self.assertNotIn("SECRETVALUE", Path(cp.pending_path(str(self.work))).read_text())
         code, out = self.plan()
         plan = json.loads(out)
-        self.assertEqual(plan["open_record"]["invocation"]["corrections"],
-                         [{"shape": "other", "reason": "unrecognized-argument"}])
+        self.assertEqual([(c["shape"], c["reason"]) for c in plan["open_record"]["invocation"]["corrections"]],
+                         [("other", "unrecognized-argument")])
         rec_path = self.post_open(plan)
         code, tallied = self.cli("tally", "o/r#7", "--since", "2026-01-01T00:00:00Z")
         self.assertEqual(json.loads(tallied)["rounds"], 0)  # no outcome yet: not a council
@@ -910,6 +992,64 @@ class EndToEnd(unittest.TestCase):
                                       for s in plan["open_record"]["seats"]])
         code, tallied = self.cli("tally", "o/r#7", "--since", "2026-01-01T00:00:00Z")
         self.assertEqual(json.loads(tallied)["rounds"], 0)
+
+    def test_target_advanced_after_last_push_still_resolves(self):
+        git(self.work, "checkout", "--quiet", "master")
+        tip = self.commit("someone else merged")
+        git(self.work, "push", "--quiet", "origin", "master")
+        git(self.work, "checkout", "--quiet", "feature")
+        # gh still reports the base as it was at the PR's last push.
+        code, out = self.plan()
+        self.assertEqual(code, 0, out)
+        res = json.loads(out)["resolved"]
+        self.assertEqual(res["target_oid"], tip)
+        self.assertEqual(res["base"], self.base)  # merge-base unchanged: no needless reset
+        self.assertEqual(self.cli("check", "PR #7", "--expect-head", self.h1)[0], 1)  # parses
+
+    def pending(self):
+        return json.loads(Path(cp.pending_path(str(self.work))).read_text())
+
+    def test_retried_post_does_not_consume_a_newer_identical_refusal(self):
+        self.assertEqual(self.plan("formal")[0], 4)
+        code, out = self.plan()
+        plan = json.loads(out)
+        rec_path = self.post_open(plan)  # posts, then a retry ("already posted") consumes again
+        self.assertEqual(self.plan("formal")[0], 4)  # the same mistake, made again
+        body = self.tmp / "body.md"
+        body.write_text(self.cli("render", "--open-record", str(rec_path))[1])
+        self.assertIn("already posted", self.cli("post", "--body-file", str(body))[1])
+        self.assertEqual([i["reason"] for i in self.pending()["items"]], ["formal-sha-missing"])
+
+    def test_unreadable_pending_state_is_kept_and_reported_unknown(self):
+        path = Path(cp.pending_path(str(self.work)))
+        path.write_text("{not json")
+        code, out = self.plan()
+        inv = json.loads(out)["open_record"]["invocation"]
+        self.assertEqual(len(inv["unknown"]), 1)
+        self.assertEqual(len(list(path.parent.glob(path.name + ".unreadable-*"))), 1)
+        self.post_open(json.loads(out))
+        self.assertFalse(path.exists())  # reported once, then cleared by id
+
+    def test_many_refusals_are_all_kept(self):
+        for _ in range(25):
+            self.assertEqual(self.plan("PR seven")[0], 4)
+        code, out = self.plan()
+        self.assertEqual(len(json.loads(out)["open_record"]["invocation"]["corrections"]), 25)
+
+    def test_evaluation_and_production_refusals_stay_apart(self):
+        self.assertEqual(self.plan("PR seven")[0], 4)                  # production mistake
+        self.assertEqual(self.plan("PR eight", "--evaluation")[0], 4)  # evaluator's mistake
+        code, out = self.plan("PR #7", "--evaluation")
+        ev = json.loads(out)["open_record"]["invocation"]
+        self.assertEqual([c["shape"] for c in ev["corrections"]], ["other"])
+        self.post_open(json.loads(out))
+        code, out = self.plan()
+        prod = json.loads(out)["open_record"]["invocation"]
+        self.assertEqual(len(prod["corrections"]), 1)  # the production one survived
+        self.assertNotEqual(prod["corrections"][0]["id"], ev["corrections"][0]["id"])
+
+    def test_tally_since_must_be_a_github_timestamp(self):
+        self.assertEqual(self.cli("tally", "o/r#7", "--since", "2026-11-03")[0], 2)
 
     def test_host_cli_name_is_an_error(self):
         self.assertEqual(self.cli("plan", "--raw", "PR #7", "--host", "claude")[0], 2)
@@ -935,8 +1075,13 @@ MUTATIONS = {
         (r for r in reversed(rounds) if not r["conflict"] and r["open"]["head"] == head), None),
     "unknown_keys": lambda obj, allowed: None,
     "unlisted_status": lambda rounds, name, head, base, target_ref, is_ancestor: "missing",
-    "consume_pending": lambda cwd, corrections: None,
+    "consume_pending": lambda cwd, invocation: None,
+    "late_findings": lambda rounds, latest, base, target_ref: [],
+    "target_tip": lambda tips, ref, reported: reported,
+    "carried": lambda cwd, cohort: (
+        [{k: i[k] for k in ("id", "shape", "reason")} for i in cp.read_pending(cwd)["items"]], []),
     "check_host": lambda host, new_provider: None,
+    "empty_status": lambda rounds, name, head, base, target_ref, is_ancestor: "empty",
 }
 
 
@@ -945,9 +1090,22 @@ def run_suite(verbosity):
     return unittest.TextTestRunner(verbosity=verbosity, stream=sys.stderr).run(suite)
 
 
+def consume_by_shape(cwd, invocation):
+    """The pre-audit consumption rule: match by shape and code, not identity."""
+    state = cp.read_pending(cwd)
+    for c in invocation["corrections"]:
+        for item in state["items"]:
+            if (item["shape"], item["reason"]) == (c["shape"], c["reason"]):
+                state["items"].remove(item)
+                break
+    state["unknown"] = []
+    cp.write_pending(cwd, state)
+
+
 def mutation_check():
     survived = []
-    for name, mutant in MUTATIONS.items():
+    mutants = list(MUTATIONS.items()) + [("consume_pending", consume_by_shape)]
+    for name, mutant in mutants:
         original = getattr(cp, name)
         setattr(cp, name, mutant)
         try:
@@ -956,7 +1114,8 @@ def mutation_check():
         finally:
             setattr(cp, name, original)
         killed = not result.wasSuccessful()
-        print(f"mutant {name}: {'killed' if killed else 'SURVIVED'}")
+        label = name if mutant is not consume_by_shape else "consume_pending (by shape)"
+        print(f"mutant {label}: {'killed' if killed else 'SURVIVED'}")
         if not killed:
             survived.append(name)
     return 1 if survived else 0

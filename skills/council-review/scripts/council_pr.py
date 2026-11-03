@@ -39,6 +39,7 @@ SEAT_NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$")
 REF_NAME = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 ROUND_ID = re.compile(r"^[0-9a-f]{12}-\d{8}T\d{6}Z-[0-9a-f]{6}$")
+EVENT_ID = re.compile(r"^[0-9a-f]{8}$")
 # Provider seats, in council order, with the ask-agent CLI and Lead-tier model.
 SEATS = {
     "anthropic": {"cli": "claude", "model": "opus"},
@@ -173,11 +174,12 @@ def validate(rec, repo, pr):
     why = unknown_keys(rec, RECORD_KEYS[phase])
     if why:
         return why
-    if not isinstance(rec.get("round_id"), str) or not ROUND_ID.match(rec["round_id"]):
-        return "bad round_id"
     for key in ("head", "base", "target_oid"):
         if not _sha(rec.get(key)):
             return f"bad {key}"
+    if not isinstance(rec.get("round_id"), str) or not ROUND_ID.match(rec["round_id"]) \
+            or rec["round_id"][:12] != rec["head"][:12]:
+        return "bad round_id (must be <head prefix>-<time>-<hex>)"
     if not isinstance(rec.get("target_ref"), str) or not REF_NAME.match(rec["target_ref"]):
         return "bad target_ref"
     seats = rec.get("seats")
@@ -208,7 +210,7 @@ def validate(rec, repo, pr):
         return "an open record must dispatch or cover at least one seat"
     inv = rec.get("invocation")
     if not isinstance(inv, dict) or set(inv) != {"shape", "route", "notes", "corrections",
-                                                 "cohort"} \
+                                                 "unknown", "cohort"} \
             or inv.get("shape") not in ARG_SHAPES or inv.get("cohort") not in COHORTS:
         return "bad invocation"
     if inv.get("route") not in ROUTES:
@@ -217,12 +219,19 @@ def validate(rec, repo, pr):
     if not isinstance(notes, list) or not set(notes) <= INFO_NOTES:
         return "bad invocation notes"
     corrections = inv.get("corrections")
-    if not isinstance(corrections, list) or not all(
-        isinstance(c, dict) and set(c) == {"shape", "reason"}
-        and c["shape"] in ARG_SHAPES and c["reason"] in CALLER_REFUSALS for c in corrections
-    ):
+    if not isinstance(corrections, list) or not all(valid_correction(c) for c in corrections):
         return "bad invocation corrections"
+    unknown = inv.get("unknown")
+    if not isinstance(unknown, list) or not all(isinstance(u, str) and EVENT_ID.match(u)
+                                                for u in unknown):
+        return "bad invocation unknown"
     return None
+
+
+def valid_correction(c):
+    return (isinstance(c, dict) and set(c) == {"id", "shape", "reason"}
+            and isinstance(c["id"], str) and bool(EVENT_ID.match(c["id"]))
+            and c["shape"] in ARG_SHAPES and c["reason"] in CALLER_REFUSALS)
 
 
 def _seat_reason(seat, rec, phase):
@@ -328,9 +337,11 @@ def _build_round(rid, group):
     opened = first["record"]
     rnd = {"id": rid, "open": opened, "opened_at": first["created_at"], "order": _order(first),
            "conflict": None, "seats": {}, "unresolved": None, "outcome_at": None,
-           "named": set()}
+           "named": set(), "frames": set(), "findings_posted": []}
     # Re-posting an identical open record is a retry, not a second round.
     for item in group["opens"]:
+        r = item["record"]
+        rnd["frames"].add((r["head"], r["base"], r["target_ref"]))
         rnd["named"].update(s["seat"] for s in item["record"]["seats"])
         rnd["named"].update(c["seat"] for c in item["record"]["covered"])
         if canonical(item["record"]) != canonical(opened):
@@ -354,6 +365,8 @@ def _build_round(rid, group):
                 continue
             target = received if seat["status"] == "received" else empty
             target.setdefault(name, {})[canonical(seat)] = seat
+            if seat.get("verdict") == "findings":
+                rnd["findings_posted"].append((_order(item), name))
         # A later record (a late reviewer's, say) can never lower the count.
         rnd["unresolved"] = max(rnd["unresolved"] or 0, rec["unresolved_findings"])
         rnd["outcome_at"] = item["created_at"]
@@ -386,7 +399,12 @@ def chain_step(coverage, outcome, round_head, is_ancestor):
 
 
 def same_frame(rnd, base, target_ref):
-    return rnd["open"]["base"] == base and rnd["open"]["target_ref"] == target_ref
+    """True when any of the round's open records has this frame.
+
+    A void round may hold conflicting open records; each of their frames
+    counts, so a conflicting record can never hide the void from a head.
+    """
+    return any(b == base and t == target_ref for _, b, t in rnd["frames"])
 
 
 def void_resets(rnd, seat):
@@ -423,8 +441,19 @@ def coverage_in_head(coverage, head, is_ancestor):
 
 def latest_round_at_head(rounds, head, base, target_ref):
     """The last round opened at this head and frame, void or not."""
-    at_head = [r for r in rounds if same_frame(r, base, target_ref) and r["open"]["head"] == head]
+    at_head = [r for r in rounds if (head, base, target_ref) in r["frames"]]
     return at_head[-1] if at_head else None
+
+
+def late_findings(rounds, latest, base, target_ref):
+    """Findings posted to an earlier round after `latest` was opened.
+
+    A late reviewer's findings are new information the latest round never
+    saw; they block until a subsequent round accounts for them.
+    """
+    return [(r["id"], seat) for r in rounds
+            if r is not latest and not r["conflict"] and same_frame(r, base, target_ref)
+            for order, seat in r["findings_posted"] if order > latest["order"]]
 
 
 def plan(resolved, rounds, host, is_ancestor):
@@ -453,7 +482,8 @@ def plan(resolved, rounds, host, is_ancestor):
     # the new round's outcome restates the disposition count.
     latest = latest_round_at_head(rounds, head, base, target_ref)
     outstanding = latest is not None and bool(
-        latest["conflict"] or latest["outcome_at"] is None or latest["unresolved"])
+        latest["conflict"] or latest["outcome_at"] is None or latest["unresolved"]
+        or late_findings(rounds, latest, base, target_ref))
     return {"seats": seats, "covered": covered, "open_round": bool(seats) or outstanding}
 
 
@@ -505,7 +535,10 @@ def parse_invocation(raw):
             return {"route": "legacy-formal", "pr": None, "sha": rest[0],
                     "base": rest[1] if len(rest) == 2 else None}
         raise Refusal("unrecognized-argument", "formal takes <pushed-sha> [base-sha]")
-    if re.match(r"^(?:PR\b|#)", text, re.I):
+    # Only a PR-reference prefix ("PR", "PR #", "PR7", "#") is a malformed PR
+    # argument; "PR.md" or "pr-notes.md" are files and stay advisory.
+    if text.startswith("#") or (words and words[0].upper() == "PR") \
+            or re.match(r"^PR[#\d]", text, re.I):
         raise Refusal("unrecognized-argument", "expected PR #<number>")
     return None  # worktree, staged, branch without PR, or a file: advisory
 
@@ -611,7 +644,7 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
             if name in silent or got is None:
                 continue
             if got["status"] == "empty":
-                seats[name] = "empty"
+                seats[name] = empty_status(rounds, name, head, base, target_ref, is_ancestor)
             else:
                 coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
                 seats[name] = verdict if coverage == head else "unchained"
@@ -619,6 +652,9 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
             name = entry["seat"]
             coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
             seats[name] = "clean" if (coverage == head and verdict == "clean") else "unchained"
+        for rid_, seat_ in late_findings(rounds, latest, base, target_ref):
+            reasons.append(f"seat {seat_} posted findings to round {rid_} after round "
+                           f"{latest['id']} opened; run the council again")
         if latest["outcome_at"] is None:
             reasons.append(f"round {latest['id']} has no outcome record")
         elif latest["unresolved"]:
@@ -641,6 +677,17 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
                        if v in ("empty", "missing", "stale", "unlisted")]}
 
 
+def empty_status(rounds, name, head, base, target_ref, is_ancestor):
+    """An EMPTY seat whose own findings stand at this head still blocks.
+
+    Its findings were never re-examined: nothing was pushed for a present seat
+    to review, and the finder did not return. A fix push lets present seats
+    examine the fix in their delta; otherwise the finder must return.
+    """
+    coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
+    return "findings" if coverage == head and verdict == "findings" else "empty"
+
+
 def unlisted_status(rounds, name, head, base, target_ref, is_ancestor):
     """A seat the latest round did not name: never clean; findings still block."""
     coverage, verdict = seat_state(rounds, name, head, base, target_ref, is_ancestor)
@@ -652,7 +699,7 @@ def unlisted_status(rounds, name, head, base, target_ref, is_ancestor):
 def tally(open_rounds, since, limit=10):
     """open_rounds: [(repo, rnd)]. Count the first `limit` production rounds
     across PRs opened at or after `since` (the rollout's deploy time)."""
-    seen, rows = set(), []
+    seen, seen_events, rows = set(), set(), []
     for repo, rnd in sorted(open_rounds, key=lambda x: (x[1]["opened_at"], x[0], x[1]["id"])):
         if (repo, rnd["id"]) in seen or not rnd.get("outcome_at") or rnd["opened_at"] < since:
             continue  # a retry seen twice, an abandoned open-only round, or pre-rollout
@@ -663,13 +710,19 @@ def tally(open_rounds, since, limit=10):
         rows.append({"opened_at": rnd["opened_at"], "repo": repo, "pr": rnd["open"]["pr"],
                      "round_id": rnd["id"], "shape": inv["shape"], "route": inv["route"],
                      "notes": list(inv["notes"]),
-                     "mistakes": [c["reason"] for c in inv["corrections"]]})
+                     # Two rounds planned concurrently may carry one refusal; count it once.
+                     "mistakes": [c["reason"] for c in inv["corrections"]
+                                  if c["id"] not in seen_events],
+                     "unknown": len(inv["unknown"])})
+        seen_events.update(c["id"] for c in inv["corrections"])
         if len(rows) == limit:
             break
     return {"rounds": len(rows), "window": limit,
             "rounds_with_mistakes": sum(1 for r in rows if r["mistakes"]),
             "mistakes": sum(len(r["mistakes"]) for r in rows),
             "alias_uses": sum(1 for r in rows if "legacy-formal-alias" in r["notes"]),
+            # Rounds whose refusal capture was lost: their mistake count is a floor.
+            "rounds_with_unknown_corrections": sum(1 for r in rows if r["unknown"]),
             "rows": rows}
 
 
@@ -760,7 +813,7 @@ def resolve(cwd, pr=None):
         msg = (proc.stderr or proc.stdout).strip()
         if pr is None and "no pull requests found" in msg.lower():
             return None
-        if pr is not None and re.search(r"could not resolve|not found", msg, re.I):
+        if pr is not None and "could not resolve to a pullrequest" in msg.lower():
             raise Refusal("pr-not-found", f"PR #{pr} does not exist here")
         raise EnvError(f"gh pr view failed: {msg}")
     info = json.loads(proc.stdout)
@@ -772,18 +825,23 @@ def resolve(cwd, pr=None):
     if not match:
         raise EnvError(f"cannot read the repository from PR url {info.get('url')!r}")
     repo, number = match.group(1), int(match.group(2))
-    head, target_oid, target_ref = info["headRefOid"], info["baseRefOid"], info["baseRefName"]
+    head, target_ref = info["headRefOid"], info["baseRefName"]
     remote = find_remote(cwd, repo)
     refs = (f"refs/pull/{number}/head", f"refs/heads/{target_ref}")
     run(["git", "fetch", "--no-tags", "--quiet", remote, *refs], cwd)
-    # The snapshot is consistent only if the remote's refs still equal what gh
-    # reported; locally cached objects would otherwise hide a moved PR.
+    # The head is consistent only if the remote's PR ref still equals what gh
+    # reported; locally cached objects would otherwise hide a moved PR. The
+    # target tip comes from the remote itself: gh's baseRefOid is recorded at
+    # the PR's last push and lags a target branch that has moved since.
     tips = {}
     for line in run(["git", "ls-remote", remote, *refs], cwd).stdout.splitlines():
         sha, _, ref = line.partition("\t")
         tips[ref.strip()] = sha.strip()
-    if tips.get(refs[0]) != head or tips.get(refs[1]) != target_oid:
-        raise Refusal("pr-moved", "the PR head or target moved while resolving; run again")
+    if tips.get(refs[0]) != head:
+        raise Refusal("pr-moved", "the PR head moved while resolving; run again")
+    target_oid = target_tip(tips, refs[1], info.get("baseRefOid"))
+    if not target_oid or not SHA_RE.match(target_oid):
+        raise EnvError(f"target branch {target_ref} not found on the remote")
     for sha in (head, target_oid):
         if run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd, check=False).returncode:
             raise Refusal("head-not-fetchable", f"{sha} is not fetchable; run again")
@@ -793,6 +851,12 @@ def resolve(cwd, pr=None):
             "head_ref": info["headRefName"], "target_ref": target_ref,
             "target_oid": target_oid, "base": base,
             "local_head": local.stdout.strip() if local.returncode == 0 else None}
+
+
+def target_tip(tips, ref, reported):
+    """The live remote tip of the target branch; `reported` (gh's baseRefOid,
+    which lags a target that moved after the PR's last push) is ignored."""
+    return tips.get(ref)
 
 
 def fetch_comments(cwd, repo, pr):
@@ -809,46 +873,88 @@ def rounds_for(cwd, repo, pr):
 
 
 # Refused invocations wait here (per checkout, inside the git directory) until
-# a round record carries them. Only shapes and codes are stored.
+# a round record carries them. Each entry has a random id, so consuming it is
+# exact and retry-safe. A file that cannot be read is moved aside, never
+# discarded, and replaced by an `unknown` marker that the next round records:
+# lost capture is reported as unknown, never as zero.
+
+PENDING_VERSION = 1
+
 
 def pending_path(cwd):
     path = run(["git", "rev-parse", "--git-path", PENDING_FILE], cwd).stdout.strip()
     return path if os.path.isabs(path) else os.path.join(cwd, path)
 
 
-def load_pending(cwd):
-    try:
-        with open(pending_path(cwd), encoding="utf-8") as handle:
-            items = json.load(handle)
-    except (OSError, ValueError):
-        return []
-    if not isinstance(items, list):
-        return []
-    return [i for i in items if isinstance(i, dict) and set(i) == {"shape", "reason"}
-            and i["shape"] in ARG_SHAPES and i["reason"] in CALLER_REFUSALS][:20]
+def _valid_pending(state):
+    return (isinstance(state, dict) and set(state) == {"version", "unknown", "items"}
+            and state["version"] == PENDING_VERSION
+            and isinstance(state["unknown"], list)
+            and all(isinstance(u, str) and EVENT_ID.match(u) for u in state["unknown"])
+            and isinstance(state["items"], list)
+            and all(isinstance(i, dict) and set(i) == {"id", "shape", "reason", "cohort"}
+                    and valid_correction({k: i[k] for k in ("id", "shape", "reason")})
+                    and i["cohort"] in COHORTS for i in state["items"]))
 
 
-def save_pending(cwd, items):
+def read_pending(cwd):
     path = pending_path(cwd)
-    if not items:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            state = json.load(handle)
+        if _valid_pending(state):
+            return state
+    except FileNotFoundError:
+        return {"version": PENDING_VERSION, "unknown": [], "items": []}
+    except (OSError, ValueError):
+        pass
+    # Unreadable or malformed: keep the bytes for inspection, record the loss.
+    marker = secrets.token_hex(4)
+    try:
+        os.replace(path, f"{path}.unreadable-{marker}")
+    except OSError as exc:
+        raise EnvError(f"cannot set aside unreadable {path}: {exc}") from exc
+    state = {"version": PENDING_VERSION, "unknown": [marker], "items": []}
+    write_pending(cwd, state)
+    return state
+
+
+def write_pending(cwd, state):
+    path = pending_path(cwd)
+    if not state["unknown"] and not state["items"]:
         if os.path.exists(path):
             os.remove(path)
         return
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(items, handle)
+    tmp = f"{path}.tmp-{secrets.token_hex(4)}"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(state, handle)
+    os.replace(tmp, path)
 
 
-def remember_refusal(cwd, raw, code):
+def remember_refusal(cwd, raw, code, cohort):
     if code in CALLER_REFUSALS:
-        save_pending(cwd, (load_pending(cwd) + [{"shape": arg_shape(raw), "reason": code}])[-20:])
+        state = read_pending(cwd)
+        state["items"].append({"id": secrets.token_hex(4), "shape": arg_shape(raw),
+                               "reason": code, "cohort": cohort})
+        write_pending(cwd, state)
 
 
-def consume_pending(cwd, corrections):
-    remaining = load_pending(cwd)
-    for corr in corrections:
-        if corr in remaining:
-            remaining.remove(corr)
-    save_pending(cwd, remaining)
+def carried(cwd, cohort):
+    """(corrections, unknown) the next `cohort` round records."""
+    state = read_pending(cwd)
+    corrections = [{k: i[k] for k in ("id", "shape", "reason")}
+                   for i in state["items"] if i["cohort"] == cohort]
+    # Only a production round reports lost capture, so evaluation never hides it.
+    return corrections, (list(state["unknown"]) if cohort == "production" else [])
+
+
+def consume_pending(cwd, invocation):
+    """Remove exactly the entries a posted open record carried, by id."""
+    state = read_pending(cwd)
+    ids = {c["id"] for c in invocation["corrections"]}
+    state["items"] = [i for i in state["items"] if i["id"] not in ids]
+    state["unknown"] = [u for u in state["unknown"] if u not in invocation["unknown"]]
+    write_pending(cwd, state)
 
 
 # --------------------------------------------------------------------------
@@ -869,6 +975,7 @@ def check_host(host, new_provider):
 
 def cmd_plan(args):
     check_host(args.host, args.new_provider)
+    cohort = "evaluation" if args.evaluation else "production"
     try:
         route = parse_invocation(args.raw)
         if route is None:
@@ -885,7 +992,7 @@ def cmd_plan(args):
         if route["route"] == "legacy-formal":
             check_legacy(resolved, route["sha"], route["base"], git_expand(args.repo_dir))
     except Refusal as exc:
-        remember_refusal(args.repo_dir, args.raw, exc.code)
+        remember_refusal(args.repo_dir, args.raw, exc.code, cohort)
         raise
     rounds, ignored = rounds_for(args.repo_dir, resolved["repo"], resolved["pr"])
     seat_plan = plan(resolved, rounds, args.host, git_is_ancestor(args.repo_dir))
@@ -894,9 +1001,9 @@ def cmd_plan(args):
     invocation = {
         "shape": arg_shape(args.raw), "route": route["route"],
         "notes": invocation_notes(route["route"], bool(local) and not is_ancestor(local, resolved["head"])),
-        "corrections": load_pending(args.repo_dir),
-        "cohort": "evaluation" if args.evaluation else "production",
+        "cohort": cohort,
     }
+    invocation["corrections"], invocation["unknown"] = carried(args.repo_dir, cohort)
     out = {"resolved": resolved, "plan": seat_plan, "ignored": ignored,
            "previous_rounds": [{"id": r["id"], "head": r["open"]["head"],
                                 "void": bool(r["conflict"])} for r in rounds]}
@@ -951,12 +1058,18 @@ def cmd_post(args):
              "--body-file", args.body_file], args.repo_dir)
         print("posted")
     if rec["phase"] == "open":
-        consume_pending(args.repo_dir, rec["invocation"]["corrections"])
+        consume_pending(args.repo_dir, rec["invocation"])
     return 0
 
 
 def cmd_check(args):
-    resolved = resolve(args.repo_dir, int(args.pr) if args.pr else None)
+    number = None
+    if args.pr:
+        route = parse_invocation(args.pr)
+        if not route or route["route"] != "pr":
+            raise EnvError(f"check takes a PR reference, got {args.pr!r}")
+        number = route["pr"]
+    resolved = resolve(args.repo_dir, number)
     if resolved is None:
         print("no open PR for the current branch", file=sys.stderr)
         return 3
@@ -968,6 +1081,8 @@ def cmd_check(args):
 
 
 def cmd_tally(args):
+    if not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", args.since):
+        raise EnvError("--since must be UTC as YYYY-MM-DDTHH:MM:SSZ, like GitHub timestamps")
     collected = []
     for ref in args.prs:
         match = re.fullmatch(r"([^/\s]+/[^#\s]+)#(\d+)", ref)
