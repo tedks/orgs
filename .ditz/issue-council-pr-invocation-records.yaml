@@ -1,0 +1,42 @@
+id: council-pr-invocation-records
+title: Make PR council reviews formal by construction with recorded revision history
+desc: 'Follow-up to skills-council-vs-council-review-dedupe and PR #39. CEO ruling
+  2026-11-03: preserve unification guarantees while removing caller-facing mode/SHA
+  ceremony.
+
+
+  /council-review PR #N resolves and pins the current pushed PR head and merge-base
+  with its target, and records the head, base, seat verdicts and each seat''s last-reviewed
+  SHA in a round-record PR comment. Repeating the same command reads the records:
+  warm seats review their own last-reviewed..head delta; fresh seats review merge-base..head.
+  No caller-supplied SHA is required. Working-tree, staged, branch-without-PR and
+  file reviews remain labelled advisory. Retain formal as an explicit compatibility
+  alias for one release, with its removal tracked. Preserve provider-relative seating,
+  immutable review bytes, finding disposition, fixpoint, org pack/ledger semantics
+  and exact-head gates.
+
+
+  Measure argument/mode mistakes for the next ten real councils in their round records;
+  evidence, not intuition, controls further interface changes. Define the sampling/record
+  convention without adding caller arguments or running synthetic councils as real
+  observations.
+
+
+  Owner: Orgs CTO; execution tier: Lead. Dotfiles CTO owns matching global instructions
+  and coordinated deployment after ORGS-LANDED. Acceptance: meaningful routing/record
+  fixtures including head/base changes and late seats, appropriate local gates, provider
+  council to fixpoint and independent final audit. No unrelated runtime repair or
+  host edits.'
+type: feature
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T06:53:15-00:00
+references: []
+log_events:
+- time: 2026-11-03T06:53:15-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
