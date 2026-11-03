@@ -72,7 +72,10 @@ verifying the built executable. Also run
 `PYTHONDONTWRITEBYTECODE=1 python3 tests/test_setup_leaks.py`,
 `skills/spawn-agent/scripts/test-tmux-message.sh`, and
 `skills/initialize-repo/scripts/test-sync-check.sh` for the imported
-configuration, public-source guard, and installer interfaces. The
+configuration, public-source guard, and installer interfaces, and
+`PYTHONDONTWRITEBYTECODE=1 python3 skills/council-review/scripts/test_council_pr.py`
+(plus `--mutation-check` after changing a guard) for the PR council's
+round-record helper. The
 protocol-specific tools under `tools/` retain their own tests.
 
 ## Issue tracking (ditz)

@@ -31,7 +31,7 @@ references, not leaks.
 | `decompose` | lead → tracer bullet, work packages, necessity challenge | templates, `pack` |
 | `implement` | one worker builds one package in firewalled scope | — |
 | `review` | the accountable lead's one-rung-up review to fixpoint (+ council CLEAN = ACCEPTED) | `pack` |
-| `council-review` | provider-aware exploratory reviews and formal cross-provider gates to fixpoint | `ask-agent`; `pack` and `ledger` in org sprints |
+| `council-review` | `PR #N` formal cross-provider rounds to fixpoint, recorded on the PR; advisory reviews of other targets | `ask-agent`; `pack` and `ledger` in org sprints |
 | `standup` | forced re-observation — redirect/halt a drifting agent | `tools/standup/` |
 | `crystal` | speculative merge-check; report conflicts to the lead | `tools/crystal/` |
 | `integrate` | merge ACCEPTED packages, keep the trunk green | — |

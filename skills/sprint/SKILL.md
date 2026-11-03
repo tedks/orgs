@@ -44,8 +44,9 @@ deviation. Assumed everywhere below.
    own worktree/branch, inside firewalled scope, and **self-review** against
    the acceptance criteria before handing off. → produces commits + status.
 5. **[standup]** and **[crystal]** run *alongside* the fan-out (see Wiring).
-6. **[council-review]** — formal cross-provider review to fixpoint on each
-   frozen, pushed PR head.
+6. **[council-review]** — `/council-review PR #N`: formal cross-provider
+   rounds to fixpoint on each frozen, pushed PR head; rerunning the same
+   command is the convergence pass.
 7. **[review]** — the accountable lead's one-rung-up review to fixpoint,
    fresh context. Council CLEAN + lead-review CLEAN → **ACCEPTED**.
 8. **[integrate]** — the integration owner merges each package *as it is
