@@ -31,8 +31,8 @@ type: feature
 component: default
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-03T06:53:15-00:00
 references: []
 log_events:
@@ -57,6 +57,17 @@ log_events:
   what: commented
   comment: 'Lead: implementation on PR #40 (draft) at 2f0f9c3; follow-ups filed: council-formal-alias-removal,
     council-invocation-measurement. Council pending.'
+- time: 2026-11-03T08:48:41-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Completed in PR #40, normal merge 954652f5963539090cc45a599ce143723f95ac40
+    of accepted e1b2b112f720e1b58d8a83eebacc8d8e263bfa7e. Two present council seats
+    and independent final audit CLEAN; Google EMPTY. Exact final-head 121 helper scenarios
+    and 33 mutation guards PASS; Nix/build and imported gates PASS. Merged tree identical.
+    Source complete; coordinated global wording/deployment handed to dotfiles owner
+    via ORGS-LANDED, receipt pending. Future alias removal, first-ten-production-round
+    measurement, finding disposition binding and documented optional nits remain separate
+    tracker issues.'
 blocks:
 - council-formal-alias-removal
 - council-invocation-measurement
