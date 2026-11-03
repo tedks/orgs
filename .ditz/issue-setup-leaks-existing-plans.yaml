@@ -20,3 +20,16 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:40-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Lead; live=reclassified coverage
+    audit.
+
+    Next/disposition: Current master a6d609d passes tests/test_setup_leaks.py (4 tests)
+    under nix develop. This does not prove old planning details were removed because
+    guard scope changed in consolidation. Reconcile with orgs-public-docs-leak-guard;
+    do not close as fixed from the green gate alone.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
