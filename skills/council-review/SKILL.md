@@ -366,8 +366,9 @@ the repository's owner, members or collaborators, and only unedited.
    `disposition`), `from`, `continuity` and a full-review `fallback`, the
    `covered` seats that need no dispatch, any ignored or void records with
    reasons, `blocking_records` (trusted record comments whose findings are
-   unknown: clear them by deleting or reposting before spending seats, since
-   no round can clear past them), and the `open_record` when a round is
+   unknown: before spending seats, repost a real record from your own outcome
+   data, then delete the damaged comment; reposting alone clears nothing,
+   and no round can clear past them), and the `open_record` when a round is
    needed. With no
    `open_record` nothing is outstanding at this head: go to step 7.
 

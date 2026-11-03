@@ -18,8 +18,9 @@ authoritative block:
 
 The summary's first line is the header `**council-review-round v1: round
 …**`, which makes records findable with search and is what makes a comment
-a record. After normalizing CRLF line endings to LF, a comment whose body
-starts with that header is a record candidate; it must hold exactly one
+a record. After normalizing CRLF line endings to LF, a comment whose first
+non-blank line begins, at column zero, with `**council-review-round v<N>:
+round ` is a record candidate (an indented or quoted copy is not); it must hold exactly one
 block, from a line that is exactly the marker to a line beginning with
 `-->`, whose payload is valid JSON. A candidate with a missing, duplicated
 or malformed block is a malformed record, never discussion. Any other
@@ -79,8 +80,8 @@ A comment counts only if its author's association is `OWNER`, `MEMBER` or
 It is ignored, with the reason reported, when its block is unterminated,
 repeated, not JSON, of another schema or a newer version, about another
 repository or PR, or malformed by the rules above. An outcome without an open
-record for its round id is ignored. Comments without a block are ordinary
-discussion and are skipped silently. Ignoring a comment can only cost a
+record for its round id is ignored. Comments that do not start with the
+header are ordinary discussion and are skipped silently. Ignoring a comment can only cost a
 review; it can never produce coverage or clearance.
 
 Re-posting an identical record is a retry and counts once. A round is
@@ -110,10 +111,18 @@ its received findings, read leniently, are still evidence. An edited trusted
 record candidate is unknown evidence, whatever it now says, because the edit
 may have removed findings, changed the repository or PR fields or broken the
 block; GitHub's web editor may also return the body with CRLF line endings.
-An edited discussion comment stays discussion, so an honest typo fix to a
-comment that quotes a record blocks nothing; so is a trusted comment that cannot be read well
-enough to know (corrupt JSON, a newer schema version). Either refuses
-clearance until the comment is deleted or reposted. Deleting a comment, or editing a record's header away so it reads as
+So is a trusted comment that cannot be read well enough to know (corrupt
+JSON, a newer schema version), and an edited trusted comment that still has
+a line that is exactly the marker outside fenced code, even if the edit put
+text above the header. An edited discussion comment stays discussion, so an
+honest typo fix to a comment that quotes a record in a fence, a block quote
+or indented code blocks nothing. Any unknown comment refuses clearance until
+it is gone. If it was a
+real record, first repost the round's record from your own outcome data
+(`render` then `post`), then delete the edited or unreadable comment;
+reposting alone clears nothing, because the damaged comment stays unknown
+evidence for as long as it exists. Deleting a comment, or editing away both a
+record's header and its marker line (or fencing the block) so it reads as
 discussion, is not visible in the records; the trusted collaborators who can delete are
 assumed honest about the record, as everywhere else in this protocol. Comments from anyone else are never evidence, so an
 outsider cannot block a PR. After a merge-base change or retarget, every
