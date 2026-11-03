@@ -39,3 +39,16 @@ log_events:
   comment: 'PR #9 README and plan now acknowledge the CTO 2026-10-16 configured control-prefix
     follow-up direction. The stale-cancel repair itself continues counting all native
     root input; no prefix exemption is introduced in that PR.'
+- time: 2026-11-03T00:50:27-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Ted; tier=Frontier; live=awaiting ruling
+    confirmation.
+
+    Next/disposition: The history proposes a configured control-prefix convention
+    while the original issue recommends authenticated provenance. Recommend retaining
+    current all-root-input cancellation until the trust contract is confirmed; a textual
+    prefix alone is a convention, not authentication.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
