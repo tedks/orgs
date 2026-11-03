@@ -16,11 +16,16 @@ authoritative block:
 -->
 ```
 
-The summary's first line contains `council-review-round v1`, which makes
-records findable with search. Only this exact block form is a record: a line
-that is exactly the marker, the JSON object starting on the next line, and a
-line beginning with `-->`. A comment that merely mentions or quotes the
-marker is ordinary discussion. The JSON has `schema: "council-review-round"`,
+The summary's first line is the header `**council-review-round v1: round
+…**`, which makes records findable with search and is what makes a comment
+a record. After normalizing CRLF line endings to LF, a comment whose body
+starts with that header is a record candidate; it must hold exactly one
+block, from a line that is exactly the marker to a line beginning with
+`-->`, whose payload is valid JSON. A candidate with a missing, duplicated
+or malformed block is a malformed record, never discussion. Any other
+comment is ordinary discussion, whatever it quotes: the marker inline, in a
+block quote, a fenced example, this reference, or a whole record pasted
+after some text. The JSON has `schema: "council-review-round"`,
 `version: 1`, `phase` (`open` or `outcome`), `repo` (`owner/name`), `pr`,
 `round_id` (`<first 12 hex of head>-<UTC time>-<random hex>`, bound to the
 record's own head), and the round's frame:
@@ -102,11 +107,14 @@ has no open record: such records grant nothing, but their findings remain
 evidence. The same holds for an unedited comment from the owner, a member or
 a collaborator that fails validation: what it says is what was posted, so
 its received findings, read leniently, are still evidence. An edited trusted
-comment is unknown evidence, because its original contents may have held
-findings the edit removed; so is a trusted comment that cannot be read well
+record candidate is unknown evidence, whatever it now says, because the edit
+may have removed findings, changed the repository or PR fields or broken the
+block; GitHub's web editor may also return the body with CRLF line endings.
+An edited discussion comment stays discussion, so an honest typo fix to a
+comment that quotes a record blocks nothing; so is a trusted comment that cannot be read well
 enough to know (corrupt JSON, a newer schema version). Either refuses
-clearance until the comment is deleted or reposted. Deleting a comment is
-not visible in the records; the trusted collaborators who can delete are
+clearance until the comment is deleted or reposted. Deleting a comment, or editing a record's header away so it reads as
+discussion, is not visible in the records; the trusted collaborators who can delete are
 assumed honest about the record, as everywhere else in this protocol. Comments from anyone else are never evidence, so an
 outsider cannot block a PR. After a merge-base change or retarget, every
 finding in the PR's history stands again for the new frame, so the next
