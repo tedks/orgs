@@ -21,7 +21,8 @@ Before this change, a merge gate needed a caller to type `/council-review formal
 - [x] (2026-11-03) Round 6 on `cc247c7..76de28e`: OpenAI (identity-verified resume) received one Critical; Anthropic (same live native reviewer) received one Important; Google EMPTY.
 - [x] (2026-11-03) Round 7 on `76de28e..75c4f1f`: OpenAI (identity-verified resume) received findings; Anthropic received findings (0 Critical, 1 Important: I11); Google EMPTY.
 - [x] (2026-11-03) Round 8 on `75c4f1f..9d8a8e0`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) received one Important (I12); Google EMPTY.
-- [ ] Round 9 on the next fix delta, to fixpoint.
+- [x] (2026-11-03) Round 9 on `9d8a8e0..aad73d4`: OpenAI (identity-verified resume) received one Critical; Anthropic (same live native reviewer) CLEAN with one nit (N16); Google EMPTY.
+- [ ] Round 10 on the next fix delta, to fixpoint.
 - [ ] Post gate and council receipts on PR #40; send the finalized interface to the CTO; report READY.
 
 ## Assumptions
@@ -118,9 +119,17 @@ Fixed. An edit that put text above the rendered header turned a trusted record i
 
 Fixed. The recovery instructions said "delete or repost", but reposting never clears an unknown comment, because the damaged comment stays unknown for as long as it exists (CTO audit 14 I12). The reference, SKILL step 1 and `check`'s reason now say: repost a real record from your own outcome data, then delete the damaged comment. A fixture shows that a repost alone still blocks, and that deleting the edited comment clears. No cancellation machinery was added. Audit 14 nits: the stale plan revision note (N20) is corrected; "comments without a block" now reads "comments that do not start with the header" (N21); the broken "so is" sentence is rewritten (N22).
 
+## Round 9 triage
+
+Round 9 reviewed `9d8a8e0..aad73d4`. Dispositions:
+
+Fixed. The fence tracking in `bare_marker_line` toggled on any backtick or tilde line. In one direction an edited record could hide its marker behind a fake fence: a prepended backtick fence containing a `~~~` line made the real marker read as fenced, so the findings disappeared (OpenAI C1). In the other direction an edited discussion comment that quoted a fenced record inside a longer outer fence, or inside a fence of the other delimiter, blocked clearance (CTO audit 15, reproduced on a frozen copy). Fences now follow CommonMark. An opener is three or more backticks or tildes, and a backtick opener's info string has no backtick. Only a fence of the same character, at least as long and with nothing after it, closes it. A fence that never closes hides nothing, so prepending an opener cannot fence a record away. Fixtures cover OpenAI's mismatched close, an unclosed prepended fence and a shorter inner fence on edited records (unknown), plus the CTO's exact nested body, a different-delimiter nest and a longer tilde fence on edited discussion (discussion). A mutant restoring the toggle is killed by both sides. No Markdown dependency was added. The acceptance review's eighth pass (CTO audit 16) was CLEAN at `aad73d4`; it listed the nested-fence defect as N23, and the root kept that gate-relevant (fixed above). Its N24 is addressed: the reference's discussion list now says that an unfenced record pasted into a comment is discussion only while the comment is unedited, and advises fencing quoted records.
+
+Fixed by the same change. The Anthropic seat returned CLEAN. It confirmed that the round-8 narrowing (only an unfenced exact marker line makes an edited comment unknown) leaves no realistic honest path open. Its nit N16 (probe P14) is the same fence looseness: prepending an inline span such as a triple-backtick `diff` span to an edited findings record hid the marker. It is treated as gate-relevant because it loses findings. The CommonMark opener rule (no backtick in a backtick fence's info string) closes it, and P14 now refuses clearance with a fixture. Its alternative, keying on the schema text, was not needed.
+
 ## Outcomes & Retrospective
 
-At the round-8 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 32 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
+At the round-9 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 33 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
 
 ## Context and Orientation
 
@@ -177,3 +186,5 @@ Plan revision note: after round 6, made edited trusted comments unknown evidence
 Plan revision note: after round 7, replaced a first draft (any edited comment mentioning the marker as unknown, fence-aware recognition) with header-anchored record candidates and recorded the seventh triage.
 
 Plan revision note: after round 8, anchored the header at column zero, made edited comments with an unfenced exact marker line unknown evidence, corrected the recovery instructions to repost then delete, and recorded the eighth triage.
+
+Plan revision note: after round 9, matched fence closers to their openers as CommonMark does and recorded the ninth triage.
