@@ -83,10 +83,21 @@ full change again. Every frame named by any of a void round's open records
 counts, so a conflicting record cannot hide the void from a head. A received outcome supersedes an EMPTY one for the same
 seat in the same round: that is a late reviewer, attributed to that round's
 frozen head. A round's `unresolved_findings` is the largest value any of its
-outcome records reports, so a later record cannot lower it. Findings posted
-to an earlier round after the latest round at the head was opened are **late
-findings**: that latest round never saw them, so they block clearance and
-make the next invocation open a round.
+outcome records reports, so a later record cannot lower it.
+
+**Standing findings, the one rule.** A seat's findings stand from the first
+posting of its received findings outcome until that seat later posts a
+received clean outcome, or another seat posts a received review in a round at
+the current head whose open record was posted after the findings. That later
+round's prompts carry the standing findings and their dispositions, so its
+received reviews examine them: a delta after a fix push examines the fix, and
+a `disposition` review at an unchanged head examines a rejection or deferral.
+EMPTY outcomes, `covered` entries and silence examine nothing. Every case
+follows from this: a late reviewer's findings posted after the latest round
+opened stand; a finder that goes EMPTY does not erase its findings, and a
+present seat's received disposition review resolves them without a push; a
+round that only carries seats as covered resolves nothing. An identical
+outcome re-posted later is a retry and keeps its first posting time.
 
 ## Planning
 
@@ -102,7 +113,9 @@ is cleared.
 The plan per seat is then: no coverage gives `full` from `base`; coverage at
 an older ancestor gives a warm `delta` from it; coverage at the head with a
 clean latest verdict is `covered`; coverage at the head with open findings
-gives a warm `disposition`. Every non-full plan carries a `fallback` full
+gives a warm `disposition`. While any finding stands, covered seats are
+dispatched as `disposition` instead, and the plan lists `standing_findings`
+for every prompt. Every non-full plan carries a `fallback` full
 review for a seat whose warm identity is unavailable. Consequences:
 
 - A fix push gives each warm seat its own last-reviewed..head delta, and an
@@ -114,7 +127,8 @@ review for a seat whose warm identity is unavailable. Consequences:
   neither becomes coverage.
 - Re-running at the same head dispatches only uncovered seats and seats with
   open findings. When nothing needs dispatch but the latest round at the head
-  is void, has no outcome, or reports undispositioned findings, the plan
+  is void, has no outcome, reports undispositioned findings, or a finding
+  stands, the plan
   opens a disposition-only round (every seat `covered`) whose outcome
   restates the count. When nothing is outstanding, no round is opened and the
   invocation is not a measured round.
@@ -127,14 +141,9 @@ equals the expected head; that the latest round is not void (an earlier round
 never stands in for it); that every seat it dispatched has a received or
 EMPTY outcome (a silent seat blocks; record EMPTY if it is not coming); that
 every `covered` seat still chains to a clean review of the head; that no
-seat, listed, EMPTY or not, has open Critical/Important findings at the
-head (a finder that went EMPTY without a fix push left its findings
-unexamined; after a fix push, present seats examine the fix in their delta,
-and the EMPTY finder is a limit); that
-at least one seat is clean; and that the round's count of undispositioned
-findings is zero; and that no late findings were posted to an earlier round
-after the latest round opened. EMPTY, missing, stale and unlisted seats are reported as
-limits and never counted as clean.
+finding stands (above); that at least one seat is clean; and that the
+round's count of undispositioned findings is zero. EMPTY, missing, stale and
+unlisted seats are reported as limits and never counted as clean.
 
 ## Resolution
 
@@ -175,7 +184,10 @@ The question is how often callers still get the argument or mode wrong.
   carries those entries, and posting it removes exactly those ids, so a
   retried post can never remove a newer refusal and each refusal is counted
   once; the tally also counts each event id once, so two rounds planned
-  concurrently cannot double-count. There is no cap. A pending file that
+  concurrently cannot double-count. Updates to the file hold an exclusive
+  lock, so concurrent sessions in one checkout cannot lose each other's
+  entries. There is no cap. If a refusal cannot be recorded at all, the
+  helper says so on stderr and the refusal is unknown to the tally. A pending file that
   cannot be read is moved aside (`.unreadable-<id>`, kept for inspection),
   and the next production record lists that id under `unknown`: the tally
   reports such rounds as `rounds_with_unknown_corrections`, whose mistake

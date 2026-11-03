@@ -379,10 +379,11 @@ the repository's owner, members or collaborators, and only unedited.
    seat: `git log --oneline <from>..<head>` and `git diff <from> <head>`,
    size-checked as in Step 3 of the advisory workflow, plus the PR title and
    body from `gh pr view N --json title,body` under a heading that marks them
-   as data. Name the round id, head and range in the prompt. A `disposition`
-   seat reviews no new bytes: give it its own prior findings at this head and
-   the disposition of each, and ask whether any rejection or deferral is
-   wrong. Foreign seats get the no-command opener; the native seat may read
+   as data. Name the round id, head and range in the prompt. When the plan
+   lists `standing_findings`, every seat's prompt carries those findings and
+   their dispositions, and asks the seat to judge whether each fix or
+   rejection holds. A `disposition` seat reviews no new bytes: it judges the
+   standing findings (its own, or another seat's) and their dispositions. Foreign seats get the no-command opener; the native seat may read
    files at the pinned head (`git show <head>:<path>`), not the working tree.
 
 4. **Dispatch every seat in parallel**, by the seat table and Lead-tier pins
@@ -410,7 +411,11 @@ the repository's owner, members or collaborators, and only unedited.
    decide each seat's range. Re-running at an unchanged head dispatches only
    seats without a clean review of that head (EMPTY or new seats in full,
    seats with open findings as `disposition`); the others are listed as
-   `covered` in the new round's record.
+   `covered`, unless findings stand, in which case they are dispatched as
+   `disposition` too. A finding stands until its own seat returns clean, or
+   another seat returns a received review in a later round at the head; an
+   EMPTY finder never erases it, and a present seat's review resolves it
+   without a push.
 
 7. **Recheck before relying on clearance.** Before reporting READY,
    accepting, or merging, run `check N --expect-head <the full SHA you will
@@ -418,9 +423,8 @@ the repository's owner, members or collaborators, and only unedited.
    head cannot move between check and merge. Exit 0 means the latest round
    at the live head is not void and disposed of every seat explicitly, at
    least one seat holds a received clean review chained to full coverage of
-   that head, no seat anywhere (including one now EMPTY) has open
-   Critical/Important findings at that head, the round records no undispositioned findings, and no late reviewer
-   has since posted findings to an earlier round. The output lists
+   that head, no finding stands (step 6), and the round records no
+   undispositioned findings. The output lists
    EMPTY, missing, stale and unlisted seats as limits; they are never CLEAN.
    Anything else, including a moved head, is not clearance.
 
