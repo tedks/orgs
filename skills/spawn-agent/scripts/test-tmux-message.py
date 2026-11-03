@@ -2175,18 +2175,25 @@ def typed_mutations():
         ('literal', 'self.pane, "-l", "--", text', 'self.pane, "--", text'),
         ('typed_evidence', 'return inp.kind == "text" and inp.text == self.payload',
          'return paste_evidence(inp, self.payload)'),
+        ('claude_dim_suggestion', 'elif (harness == "claude" and',
+         'elif (False and harness == "claude" and'),
     ]
-    with tempfile.TemporaryDirectory(prefix='typed-command-mutations-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='tmux-message-mutations-') as tmp:
         target = Path(tmp)
         for name in ('test-tmux-message.py', 'claude-send-screen.py'):
             shutil.copy2(root / name, target / name)
+        shutil.copy2(root.parents[1] / '_shared' / 'agent_skills_config.py',
+                     target / 'agent_skills_config.py')
         shutil.copytree(root / 'fixtures', target / 'fixtures')
         for name, before, after in cases:
             assert original.count(before) == 1, name
             code = original.replace(before, after)
             compile(code, name, 'exec')
             (target / 'tmux-message.py').write_text(code)
-            result = subprocess.run([sys.executable, str(target / 'test-tmux-message.py')],
+            command = [sys.executable, str(target / 'test-tmux-message.py')]
+            if name == 'claude_dim_suggestion':
+                command += ['-k', 'claude_cto_live_scrubbed_layouts']
+            result = subprocess.run(command,
                                     capture_output=True, text=True, timeout=30)
             assert result.returncode != 0 and 'FAIL:' in result.stderr and 'ERROR:' not in result.stderr, (name, result.stderr)
             print('killed:', name)
