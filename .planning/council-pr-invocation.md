@@ -23,7 +23,8 @@ Before this change, a merge gate needed a caller to type `/council-review formal
 - [x] (2026-11-03) Round 8 on `75c4f1f..9d8a8e0`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) received one Important (I12); Google EMPTY.
 - [x] (2026-11-03) Round 9 on `9d8a8e0..aad73d4`: OpenAI (identity-verified resume) received one Critical; Anthropic (same live native reviewer) CLEAN with one nit (N16); Google EMPTY.
 - [x] (2026-11-03) Round 10 on `aad73d4..21856e7`: OpenAI (identity-verified resume) received one Important; Anthropic (same live native reviewer) CLEAN; Google EMPTY.
-- [ ] Round 11 on the next fix delta, to fixpoint.
+- [x] (2026-11-03) Round 11 on `21856e7..70a4674` (documentation only): OpenAI (identity-verified resume) CLEAN; Anthropic (same live native reviewer) CLEAN with one wording nit; Google EMPTY. Fixpoint. The CTO's acceptance review was CLEAN at `21856e7` (audit 17) with one wording nit.
+- [ ] A proportional review of the final documentation delta (the nits below and this plan) by both present seats.
 - [ ] Post gate and council receipts on PR #40; send the finalized interface to the CTO; report READY.
 
 ## Assumptions
@@ -134,9 +135,32 @@ Round 10 reviewed `aad73d4..21856e7`. Dispositions:
 
 Fixed (documentation). An edited discussion comment that quotes a record inside a fence that never closes is unknown evidence and blocks, yet the reference claimed that fenced discussion stays discussion (OpenAI I1). The current body alone cannot tell that comment from an edit that prepended an opener to hide a real record. Telling them apart would need durable record identity across edits, which is new machinery this PR does not add. The behaviour is the intended fail-closed choice, and the reference now states it as a limit. It says edited discussion stays discussion only for a closed fence, a block quote or indented code. Closing the fence or deleting the comment clears it, and the advice is to quote records in a closed fence. The existing unclosed-fence fixture names the limit. The Anthropic seat returned CLEAN after probing the fence edge cases directly (closed fences of either delimiter, an unclosed opener, a cross-delimiter close, four-space indent, a marker after a closed fence).
 
+## Round 11 triage
+
+Round 11 reviewed `21856e7..70a4674`, a documentation-only delta. Both present seats returned CLEAN, which is the fixpoint. The nits were fixed in the final documentation delta:
+- The reference said "Close the fence, or delete the comment, to clear it" and then "until it is gone". The text now reads "until it is deleted or, for an unclosed-fence quote, its fence is closed" (Anthropic N17).
+- The reference said fences are read "as CommonMark reads them". It now says "except that a fence that never closes hides nothing", an intentional conservative deviation from CommonMark and GitHub rendering (CTO audit 17, N25). `bare_marker_line`'s docstring says the same.
+
 ## Outcomes & Retrospective
 
-At the round-10 fix head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 33 mutants killed). Remaining: the convergence council on the fix delta, receipts on the PR, and the CTO's audit and merge. The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
+At the final head, the interface, records, planning and clearance rules are implemented and fixture-tested (121 scenarios, 33 mutants killed). The formal council converged after eleven rounds: round 11 was CLEAN from the OpenAI and Anthropic seats, and the Google seat was EMPTY in every round because of its usage limit. The CTO's acceptance review was CLEAN at `21856e7`. Remaining: the proportional review of the final documentation delta, receipts on the PR, and the CTO's audit and merge.
+
+Acceptance map:
+- `/council-review PR #N` resolves the pushed head and the merge-base with the live target tip, and records an open record and an outcome record per round on the PR, with no caller-supplied SHAs. Met.
+- Convergence is the same command. Warm seats get their own last-reviewed..head delta and fresh seats get merge-base..head. EMPTY, missing and partial results never become coverage. Met.
+- Only worktree, staged, branch-without-PR and file targets are advisory. A branch with a PR routes to the formal workflow. `formal <sha> [base]` stays as an alias for one rollout, with removal tracked in `council-formal-alias-removal`. Met.
+- Clearance (`check --expect-head`) requires every dispatched seat disposed of, covered seats still chaining, no standing findings, no unknown records and at least one clean seat. Merging uses `gh pr merge --match-head-commit`. Met.
+- Records are data. Spoofed, stale, void, edited, malformed and cross-PR records cannot create CLEAN. Discussion that quotes records is never a record. Honest edits fail closed, and the stated recovery works. Met, within two documented limits: trusted collaborators are assumed honest about deletion, and an edited quote in an unclosed fence is unknown evidence.
+- Measurement covers the first ten production rounds after rollout (`tally --since`) across PRs. Corrections are counted once by event id, there is no caller ceremony, and public records hold only closed vocabularies. Met. The count itself is follow-up `council-invocation-measurement`.
+- The dotfiles peer rewords the global gate after orgs lands. The finalized interface goes to the CTO before READY.
+
+Untested limits:
+- The real GitHub behaviour of web-edited bodies (CRLF) is unobserved. Any edit is unknown evidence anyway, so it does not matter.
+- `fcntl.flock` on network filesystems is untested.
+- Concurrent runners on one PR are exercised only through the snapshot-binding fixtures.
+- The Google seat never ran.
+
+The first round showed that "ignore what is invalid" is only safe when ignoring can cost a review and never grant one; three separate reviewers found the same violation of that principle. Rounds 2 to 4 showed a second lesson: evidence must be what a round was given and reviewed, recorded explicitly, never inferred from when a comment arrived.
 
 ## Context and Orientation
 
@@ -197,3 +221,5 @@ Plan revision note: after round 8, anchored the header at column zero, made edit
 Plan revision note: after round 9, matched fence closers to their openers as CommonMark does and recorded the ninth triage.
 
 Plan revision note: after round 10, documented the unclosed-fence fail-closed limit and recorded the tenth triage.
+
+Plan revision note: at fixpoint after round 11, fixed the two wording nits, recorded the eleventh triage, the acceptance map and the untested limits.
