@@ -22,3 +22,15 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:33-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Lead; live=priority coverage
+    audit.
+
+    Next/disposition: Current master a6d609d passes all 4 setup-leak tests via nix
+    develop. Existing scope excludes historical docs; passing is not a clearance of
+    those documents. Inventory and review coverage before any allowlist change.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
