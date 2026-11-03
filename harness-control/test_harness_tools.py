@@ -98,15 +98,23 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
             run.assert_called_once_with(
                 ['/bin/token-usage', 'posture', '--no-scan', '--json'], capture_output=True,
                 text=True, encoding='utf-8', errors='strict', timeout=5, check=False)
+        stale_with_no_expiry = {**posture,
+                                'staleness': {**posture['staleness'], 'stale': True, 'expired': {}}}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0, stdout=json.dumps(stale_with_no_expiry), stderr='')):
+            self.assertEqual(server._read_usage_posture(), stale_with_no_expiry)
         # The current producer adds `expired` even when empty. After a weekly
         # reset it emits null scores and usage for that expired meter.
         current = {**posture, 'staleness': {**posture['staleness'], 'expired': {}}}
         expired = {**current, 'scores': {'openai': None, 'anthropic': 0.8},
                    'used_percent': {'openai': None, 'anthropic': 40},
+                   'stale': {'openai': True, 'anthropic': False},
                    'staleness': {**current['staleness'], 'stale': True,
                                  'expired': {'openai': 3600, 'anthropic.five_hour': 60}}}
         anthropic_expired = {**current, 'scores': {'openai': 1.2, 'anthropic': None},
                              'used_percent': {'openai': 60, 'anthropic': None},
+                             'stale': {'openai': False, 'anthropic': True},
                              'staleness': {**current['staleness'], 'stale': True,
                                            'expired': {'anthropic.seven_day': 120}}}
         for item in (current, expired, anthropic_expired):
@@ -114,6 +122,50 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
                     patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
                         args=['token-usage'], returncode=0, stdout=json.dumps(item), stderr='')):
                 self.assertEqual(server._read_usage_posture(), item)
+        expired_openai = {**posture,
+                          'scores': {'openai': None, 'anthropic': 0.8},
+                          'used_percent': {'openai': None, 'anthropic': 40},
+                          'stale': {'openai': True, 'anthropic': False},
+                          'staleness': {**posture['staleness'], 'stale': True,
+                                        'expired': {'openai': 7200}}}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0, stdout=json.dumps(expired_openai), stderr='')):
+            self.assertEqual(server._read_usage_posture(), expired_openai)
+        expired_five_hour = {**posture,
+                             'scores': {'openai': 1.2, 'anthropic': 0.8},
+                             'staleness': {**posture['staleness'], 'stale': True,
+                                           'expired': {'anthropic.five_hour': 3600}}}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0, stdout=json.dumps(expired_five_hour), stderr='')):
+            self.assertEqual(server._read_usage_posture(), expired_five_hour)
+        expired_five_hour_weekly_gated = {**expired_five_hour,
+                                          'used_percent': {'openai': 60, 'anthropic': 100},
+                                          'gated': {'openai': False, 'anthropic': True}}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0,
+                    stdout=json.dumps(expired_five_hour_weekly_gated), stderr='')):
+            self.assertEqual(server._read_usage_posture(), expired_five_hour_weekly_gated)
+        expired_anthropic_weekly = {**posture,
+                                    'scores': {'openai': 1.2, 'anthropic': None},
+                                    'used_percent': {'openai': 60, 'anthropic': None},
+                                    'stale': {'openai': False, 'anthropic': True},
+                                    'staleness': {**posture['staleness'], 'stale': True,
+                                                  'expired': {'anthropic.seven_day': 3600}}}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0, stdout=json.dumps(expired_anthropic_weekly), stderr='')):
+            self.assertEqual(server._read_usage_posture(), expired_anthropic_weekly)
+        expired_both_anthropic = {**expired_anthropic_weekly,
+                                  'staleness': {**expired_anthropic_weekly['staleness'],
+                                                'expired': {'anthropic.seven_day': 3600,
+                                                            'anthropic.five_hour': 3600}}}
+        with patch('shutil.which', return_value='/bin/token-usage'), \
+                patch.object(server.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    args=['token-usage'], returncode=0, stdout=json.dumps(expired_both_anthropic), stderr='')):
+            self.assertEqual(server._read_usage_posture(), expired_both_anthropic)
         for stdout in ('not json', '[]', '{"reason":"missing provider"}',
                        '{"provider":"Mars"}', '{"provider":"openai"}'):
             with patch('shutil.which', return_value='/bin/token-usage'), \
@@ -140,6 +192,23 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
             {**posture, 'scores': {'openai': 'bad', 'anthropic': 0.8}},
             {**posture, 'scores': {'openai': 10 ** 400, 'anthropic': 0.8}},
             {**posture, 'scores': {'openai': float('nan'), 'anthropic': 0.8}},
+            {**posture, 'scores': {'openai': None, 'anthropic': 0.8}},
+            {**posture, 'used_percent': {'openai': None, 'anthropic': 40}},
+            {**posture, 'staleness': {**posture['staleness'], 'stale': True,
+                                      'expired': {'unknown': 10}}},
+            {**expired, 'staleness': {**expired['staleness'], 'expired': {'openai': -1}}},
+            {**expired, 'staleness': {**expired['staleness'], 'expired': {'openai': True}}},
+            {**stale_with_no_expiry,
+             'staleness': {**stale_with_no_expiry['staleness'], 'expired': []}},
+            {**expired, 'staleness': {**expired['staleness'], 'stale': False}},
+            {**expired, 'scores': posture['scores']},
+            {**expired_five_hour, 'used_percent': {'openai': 60, 'anthropic': None}},
+            {**expired_anthropic_weekly, 'used_percent': posture['used_percent']},
+            {**expired, 'stale': {'openai': False, 'anthropic': False}},
+            {**expired, 'gated': {'openai': True, 'anthropic': False}},
+            {**expired, 'gated': {}},
+            {**expired_anthropic_weekly, 'stale': {'openai': False, 'anthropic': False}},
+            {**expired_both_anthropic, 'gated': {'openai': False, 'anthropic': True}},
             {**posture, 'used_percent': {'openai': float('inf'), 'anthropic': 40}},
             {**posture, 'staleness': None},
             {**posture, 'staleness': {**posture['staleness'], 'path': '/private'}},
