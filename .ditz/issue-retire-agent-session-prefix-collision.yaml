@@ -29,3 +29,15 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:37-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Implementer; live=priority
+    queue.
+
+    Next/disposition: Use full recorded session identity for legacy-shard matching
+    and collision-safe filenames; prove two distinct sessions sharing a short prefix
+    remain distinct. Keep deliberate resume and ambiguous-offer recovery documented.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
