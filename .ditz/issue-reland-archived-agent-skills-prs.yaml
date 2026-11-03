@@ -16,8 +16,8 @@ type: task
 component: default
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-03T00:24:47-00:00
 references: []
 log_events:
@@ -42,3 +42,11 @@ log_events:
 
     Triage records accountability and next action; it does not itself start an implementation
     lane or change an existing pause.'
+- time: 2026-11-03T01:11:08-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Accepted and normally merged in orgs PRs #36/#37 at 1341e399d46a6575cd7786fc43ebbe5755dcb5bf
+    and 93f3af8415a6e5fc7224384eacf13ed0efb1fd9f. Present Lead-tier council seats
+    CLEAN, Google quota-empty; residual Codex image-placeholder nit tracked. Combined
+    and final-head local gates passed. Host deployment is separately delegated, not
+    claimed complete here.'
