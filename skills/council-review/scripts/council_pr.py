@@ -374,18 +374,34 @@ def load_records(comments, repo, pr):
     return usable, ignored
 
 
+FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
+
+
 def bare_marker_line(body):
     """True when a line outside fenced code is exactly the marker: the shape
     of a helper record, even if an edit moved or removed its header. Quotes
     in fences, block quotes, indented code or inline text are discussion.
-    `body` is normalized."""
-    fenced = False
-    for line in body.split("\n"):
-        if line.lstrip().startswith(("```", "~~~")):
-            fenced = not fenced
-        elif not fenced and line == MARK_OPEN:
-            return True
-    return False
+
+    Fences follow CommonMark: an opener is three or more backticks or tildes
+    (a backtick opener's info string has no backtick); only the same
+    character, at least as long, with nothing after it, closes it. A fence
+    that never closes hides nothing, so an edit cannot fence a record away by
+    prepending an opener. `body` is normalized.
+    """
+    lines, opener, inside = body.split("\n"), None, []
+    for line in lines:
+        m = FENCE.match(line)
+        if opener is None:
+            if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                opener, inside = m.group(1), []
+            elif line == MARK_OPEN:
+                return True
+        elif m and m.group(1)[0] == opener[0] and len(m.group(1)) >= len(opener) \
+                and not m.group(2).strip():
+            opener = None
+        else:
+            inside.append(line)
+    return opener is not None and MARK_OPEN in inside
 
 
 def edited_trusted(comment):

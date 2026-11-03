@@ -980,6 +980,10 @@ class RoundTwoRegressions(unittest.TestCase):
         body = cp.render(outcome(o, [received(full("anthropic"), important=1)]))
         for edit in (body.replace("\n", "\r\n"),
                      "Update: fixed a typo below.\n\n" + body,  # Anthropic round 8 I12 (P13)
+                     "Note:\n```\n~~~\n```\n" + body,  # OpenAI round 9: mismatched fence close
+                     "```\n" + body,  # a fence that never closes hides nothing
+                     "````\n```\n" + body,  # a shorter fence does not close a longer one
+                     "```diff``` was wrong, fixed.\n" + body,  # Anthropic round 9 N16 (P14)
                      body.replace(cp.MARK_OPEN + "\n", cp.MARK_OPEN + " \n"),
                      body.replace("Do not edit", "Do not ever edit")):
             result = self.edited_history(edit).clearance(resolved(head=H2))
@@ -1024,6 +1028,11 @@ class RoundTwoRegressions(unittest.TestCase):
         h.post(None, body="**council-review-round v1 notes**: the header alone is not a record")
         # An honest typo fix to a discussion comment keeps it discussion.
         h.post(None, edited=True, body="Fixed typo. Example:\n```\n" + quoted + "\n```")
+        h.post(None, edited=True, body="Fixed typo. Example:\n~~~~ text\n" + quoted + "\n~~~~~")
+        # CTO audit 15: nested fences, shorter inner and different delimiter.
+        h.post(None, edited=True, body="Example of fenced record:\n````markdown\n```\n<!-- council-review-round"
+                                       "\n{ ...JSON... }\n-->\n```\n````")
+        h.post(None, edited=True, body="Example:\n```\n~~~\n" + quoted + "\n~~~\n```")
         self.assertTrue(h.clearance(resolved(head=H1))["clean"])
         self.assertEqual(cp.plan(resolved(head=H1), h.rounds()[0], "anthropic", is_ancestor)
                          ["blocking_records"], [])
@@ -1553,6 +1562,17 @@ def extract_anywhere(body):
         return None, f"invalid JSON ({exc})"
 
 
+def bare_marker_line_toggling(body):
+    """The round-8 fence rule: any backtick or tilde line toggles."""
+    fenced = False
+    for line in body.split("\n"):
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+        elif not fenced and line == cp.MARK_OPEN:
+            return True
+    return False
+
+
 def bare_marker_line_unfenced(body):
     """Anthropic's round-8 proposal: any exact marker line, fences ignored."""
     return cp.MARK_OPEN in body.split("\n")
@@ -1566,7 +1586,8 @@ def mutation_check():
     mutants = list(MUTATIONS.items()) + [("consume_pending", consume_by_shape), first_open_order,
                                          ("unexamined_findings", unexamined_current_frame_only),
                                          ("extract", extract_anywhere),
-                                         ("bare_marker_line", bare_marker_line_unfenced)]
+                                         ("bare_marker_line", bare_marker_line_unfenced),
+                                         ("bare_marker_line", bare_marker_line_toggling)]
     for name, mutant in mutants:
         original = getattr(cp, name)
         setattr(cp, name, mutant)
