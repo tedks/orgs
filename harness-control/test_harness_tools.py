@@ -107,7 +107,7 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
         # The current producer adds `expired` even when empty. After a weekly
         # reset it emits null scores and usage for that expired meter.
         current = {**posture, 'staleness': {**posture['staleness'], 'expired': {}}}
-        expired = {**current, 'scores': {'openai': None, 'anthropic': None},
+        expired = {**current, 'scores': {'openai': None, 'anthropic': 0.8},
                    'used_percent': {'openai': None, 'anthropic': 40},
                    'stale': {'openai': True, 'anthropic': False},
                    'staleness': {**current['staleness'], 'stale': True,
@@ -133,7 +133,7 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
                     args=['token-usage'], returncode=0, stdout=json.dumps(expired_openai), stderr='')):
             self.assertEqual(server._read_usage_posture(), expired_openai)
         expired_five_hour = {**posture,
-                             'scores': {'openai': 1.2, 'anthropic': None},
+                             'scores': {'openai': 1.2, 'anthropic': 0.8},
                              'staleness': {**posture['staleness'], 'stale': True,
                                            'expired': {'anthropic.five_hour': 3600}}}
         with patch('shutil.which', return_value='/bin/token-usage'), \
