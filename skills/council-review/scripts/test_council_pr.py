@@ -982,6 +982,8 @@ class RoundTwoRegressions(unittest.TestCase):
                      "Update: fixed a typo below.\n\n" + body,  # Anthropic round 8 I12 (P13)
                      "Note:\n```\n~~~\n```\n" + body,  # OpenAI round 9: mismatched fence close
                      "```\n" + body,  # a fence that never closes hides nothing
+                     # ...which also covers honest discussion quoting a record in an
+                     # unclosed fence: a documented fail-closed limit (OpenAI round 10).
                      "````\n```\n" + body,  # a shorter fence does not close a longer one
                      "```diff``` was wrong, fixed.\n" + body,  # Anthropic round 9 N16 (P14)
                      body.replace(cp.MARK_OPEN + "\n", cp.MARK_OPEN + " \n"),
