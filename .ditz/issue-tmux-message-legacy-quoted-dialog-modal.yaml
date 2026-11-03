@@ -30,3 +30,14 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:47-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Implementer; live=queued.
+
+    Next/disposition: Repair legacy frame-scoped dialog detection with quoted-history
+    positive cases and true-dialog zero-input negatives. Keep separate from unrelated
+    sender changes unless the same root cause is proved.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
