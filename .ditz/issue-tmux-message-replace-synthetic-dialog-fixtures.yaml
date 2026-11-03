@@ -26,3 +26,15 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-03T00:50:48-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Implementer; live=awaiting
+    observed UI.
+
+    Next/disposition: Replace provisional fixtures only with scrubbed read-only captures
+    and recorded version/dimensions. Do not manipulate a live dialog to manufacture
+    evidence.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
