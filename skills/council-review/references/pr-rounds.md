@@ -33,14 +33,15 @@ short model name), `scope`, `from`, `continuity` and `status`. Scopes:
 - `full` — reviewed `base..head`; `from` must equal `base`.
 - `delta` — reviewed `from..head`, where `from` is this seat's previous
   coverage; requires `continuity: warm`.
-- `disposition` — no new bytes at an unchanged head; the seat re-examined
-  the dispositions of its own findings; `from` equals `head`; requires warm.
+- `disposition` — no new bytes at an unchanged head; the seat judged the
+  standing findings in the round's snapshot (its own or another seat's) and
+  their dispositions; `from` equals `head`; requires warm.
 
 An `open` record is posted before dispatch. Its seats have status
 `dispatched`; its `covered` list names seats whose clean review of this head
 is reused rather than re-dispatched; it must name at least one seat either
 way. Its `standing` list is the snapshot of standing findings,
-`{round, seat}`, that the round's prompts carry. Its `invocation` block holds `shape`, `route`, `notes`, `corrections`
+`{round, seat, outcome}`, that the round's prompts carry. Its `invocation` block holds `shape`, `route`, `notes`, `corrections`
 (each `{id, shape, reason}` with a random 8-hex event id), `unknown` (event
 ids of lost refusal capture) and `cohort` (below). An `outcome` record repeats the frame and carries, per
 seat, `status: received` (with `verdict` `clean` or `findings` and `counts`
@@ -78,7 +79,8 @@ Re-posting an identical record is a retry and counts once. A round is
 **void** when it has two different open records, an outcome whose frame
 differs from its open record, an outcome for a seat it did not dispatch, an
 outcome claiming a scope other than its dispatch (except a full review), or
-two different received outcomes for one seat. A void round grants nothing,
+two different received outcomes for one seat, or an outcome posted before
+its round's open record. A void round grants nothing,
 and it erases the coverage of every seat it names: those seats review the
 full change again. Every frame named by any of a void round's open records
 counts, so a conflicting record cannot hide the void from a head. A received outcome supersedes an EMPTY one for the same
@@ -86,12 +88,24 @@ seat in the same round: that is a late reviewer, attributed to that round's
 frozen head. A round's `unresolved_findings` is the largest value any of its
 outcome records reports, so a later record cannot lower it.
 
-**Standing findings, the one rule.** A finding is one seat's received
-findings outcome in one round, named `{round, seat}`. Findings are collected
+**Standing findings, the one rule.** A finding is one exact received
+findings outcome of one seat in one round, named `{round, seat, outcome}`,
+where `outcome` is a 12-hex digest of that outcome's canonical form. An
+identical retry is the same finding; a corrected or otherwise changed outcome
+is a new finding that no earlier snapshot can list. Findings are collected
 from every round of the PR, whatever its frame (a merge-base change or
 retarget does not drop them) and even when the round is void or its outcome
 has no open record: such records grant nothing, but their findings remain
-evidence. A finding stands until a later
+evidence. The same holds for a comment from the owner, a member or a
+collaborator that is not a usable record (edited, or failing validation): its
+received findings, read leniently, are still evidence. If such a trusted
+comment cannot be read well enough to know whether it holds findings
+(corrupt JSON, a newer schema version), clearance is refused until it is
+deleted or reposted. Comments from anyone else are never evidence, so an
+outsider cannot block a PR. After a merge-base change or retarget, every
+finding in the PR's history stands again for the new frame, so the next
+round's snapshot and prompts carry them all; that list is bounded by the
+PR's own findings, and examining them in the new context is the point. A finding stands until a later
 round examines it: a round that is not void, at the current head or an
 ancestor of it, opened after the finding was posted, whose open record lists
 that finding in its `standing` snapshot, and in which at least one dispatched
