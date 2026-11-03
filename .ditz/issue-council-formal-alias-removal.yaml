@@ -1,0 +1,28 @@
+id: council-formal-alias-removal
+title: Remove the council-review formal compatibility alias after one host rollout
+desc: 'PR #40 keeps `/council-review formal <sha> [base]` as a compatibility alias.
+  Boundary (orgs has no release tags): the alias is accepted through the host rollout
+  that first deploys PR rounds (orgs #40 merged plus the coordinated dotfiles global-wording
+  deploy), and is removed by the next council-review change deployed to hosts. Removal:
+  delete the Compatibility alias section and the alias argument from skills/council-review/SKILL.md,
+  the alias paragraph in references/pr-rounds.md, the legacy-formal route, --legacy-sha/--legacy-base,
+  check_legacy and the legacy-formal-alias note from scripts/council_pr.py with their
+  fixtures and mutation entry; keep the internal no-PR gate for spec/governing workflows
+  (it never needed the alias). Keep schema v1 readers accepting already-posted legacy-formal
+  records so the measurement window still parses. Completion evidence: merged PR removing
+  the alias, fixture suite green, quick_validate, and the tally''s alias_uses figure
+  at removal time cited in the PR. Owner: Orgs CTO (assigns the lane); dotfiles owner
+  deploys with matching global wording.'
+type: task
+component: council-review
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T07:10:45-00:00
+references: []
+log_events:
+- time: 2026-11-03T07:10:45-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
