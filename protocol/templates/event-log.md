@@ -63,9 +63,11 @@ unjustified · one line why.
 scribe — external seats have no repo access. `review-clean` closes a review
 at fixpoint for the present seats, citing the seat-outcome events it rests
 on and the frozen SHA covered by the full review and subsequent fix deltas.
-A required EMPTY seat blocks full convergence; any CEO-authorized landing
-exception records issuer, revision, seat, scope, expiry and backfill issue.
-It never changes EMPTY into a received no-finding verdict.
+An unavailable seat stays EMPTY while present seats can converge. If an
+explicitly stricter governing policy requires that seat for landing, record
+the policy and its authority, a backfill review, and any scoped exception's
+issuer, revision, seat, scope and expiry. An exception never changes EMPTY
+into a received no-finding verdict.
 
 The per-PR findings file (`protocol/templates/review-findings.md`) is a
 **projection** of this ledger: every row cites its `review-finding` /

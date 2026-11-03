@@ -11,7 +11,7 @@ fit together.
 ```
 [spec] ─▶ [decompose] ─▶ ( [implement]×N ∥ [standup] ∥ [crystal] )
        ─▶ [council-review] ─▶ [review] ─▶ [integrate] ─▶ [retro]
-                             ▲
+                                    ▲
      [huddle] — the escalation floor, always available via doctrine
    · every step appends to [ledger]   · every role prompt is built by [pack]
 ```

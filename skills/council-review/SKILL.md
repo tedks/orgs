@@ -1,6 +1,6 @@
 ---
 name: council-review
-description: Provider-aware council for exploratory code review or a formal immutable-revision merge/spec gate. One native seat per host provider, foreign seats via ask-agent; formal gates use fresh judgment packs and fix-delta convergence.
+description: Provider-aware council for exploratory code review or a formal immutable-revision merge/spec gate. The host's own provider seat is native, foreign seats use ask-agent; formal gates use fresh judgment packs and fix-delta convergence.
 ---
 
 # council-review
@@ -16,6 +16,7 @@ was a PR.
 
 ```
 /council-review [target]
+/council-review formal <pushed-sha> [base-sha]
 ```
 
 ## Arguments
@@ -26,6 +27,10 @@ was a PR.
   - `PR #<number>` or `#<number>` — review a pull request
   - `<file-path>` — review a specific file
   - *(no argument)* — review all uncommitted changes (`git diff HEAD`)
+- `formal <pushed-sha> [base-sha]`: declare a merge or spec gate at that
+  immutable revision. Supply the comparison base when it is not the default
+  branch's merge base. The governing workflow may declare the same gate while
+  providing these SHAs in its review brief.
 
 ## Provider-aware seating
 
@@ -331,6 +336,10 @@ decomposition, including the boundary diagram; boundary tests do not yet
 exist and are not required. A spec is always substantive and must receive a
 council round.
 
+An org sprint's full review ladder includes this cross-provider gate; it is
+not optional decoration. The change's owner may run its council with fresh
+review seats and hand the record to the coordinator for audit.
+
 For an **org sprint**, call `orgs-pack` for each seat's fresh *judgment pack*:
 the frozen diff, whole spec, published contracts, acceptance criteria and
 available boundary tests for a code package; or the spec, contracts and
@@ -353,9 +362,11 @@ not a verdict. Never backfill it with a same-provider agent. The present
 seats may continue to convergence under the standing rule. If a *governing
 policy explicitly declares* a seat required for this particular gate,
 identify that policy and its authority, record the missing seat, and escalate
-the resulting landing decision to that authority; do not invent a blanket
-approval gate or call an exception CLEAN. Scarce quota may justify a recorded
-seat order instead of parallel launch without changing the verdict standard.
+the resulting landing decision to that authority. File the backfill review
+that policy requires. A scoped exception records issuer, revision, missing
+seat, scope and expiry; it never turns EMPTY into CLEAN. Do not invent a
+blanket approval gate. A declared review policy may order seats when quota is
+scarce; record that scheduling change without changing the verdict standard.
 
 Keep each reviewer fresh of the *author's* context. Across fix rounds, keep a
 responding seat warm with its **own** prior-round context: use `ask-agent
@@ -372,16 +383,26 @@ disposition. Fix every Critical/Important. Fix a nit, performance suggestion
 or scope-creep finding, or file a follow-up with rationale; do not silently
 drop it. A genuine operator scope or product ruling goes to the named
 authority rather than being decided by a reviewer or implementer. In an org
-sprint, append `review-finding` events through `orgs-ledger`;
-`review-findings.md` is only their projection. Record each round's SHA, seats,
-findings, dispositions and exceptions in the change's review record or PR.
+sprint, the accountable lead records the review-round transitions from
+`protocol/STATES.md` through `orgs-ledger`: OPENED at the frozen SHA and
+scope, one `review-seat-outcome` per seat (received findings, received
+no-finding, or EMPTY with reason), per-finding disposition, then `review-clean`
+citing the outcome events when the present seats converge. Append
+`review-finding` events for findings; `review-findings.md` is only their
+projection. Record each round's SHA, seats, findings, dispositions and
+exceptions in the change's review record or PR as a readable summary.
 The org `orgs-review` skill remains the accountable lead's separate
 one-rung-up review after council; `orgs-ledger` is event logging, not another
 review.
 
-Commit and push fixes to a new frozen SHA. Re-council **only** the exact
-`last-reviewed-sha..new-sha` delta, with the prior seat's findings in its own
-warm context; do not re-litigate the whole PR. Repeat until every **present**
+Commit and push fixes to a new frozen SHA. Each warm seat re-councils **only**
+its exact `last-reviewed-sha..new-sha` delta, with its prior findings in its
+own context; do not re-litigate settled material. A seat with no received
+full round must first review the full `base..new-sha` change before its
+verdict counts.
+If a finding's original seat goes EMPTY before re-verifying its fix, record
+that limit and have a present seat examine the fix; never attribute the new
+verdict to the missing finder. Repeat until every **present**
 seat returns a received round with zero new Critical/Important findings and
 every earlier finding is dispositioned. That is CLEAN for the present seats;
 list missing seats separately, never as CLEAN. If no fix was needed, the

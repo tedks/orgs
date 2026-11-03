@@ -38,8 +38,9 @@ one supervised operation and report completion or a material blocker once;
 repeated "waiting" messages are not progress. Reuse a test environment only
 under an agreed lease and with rerunnable fixtures that reset their own state.
 A "pre-existing" failure needs comparison with the same base in a controlled
-environment; stale dependencies are not a waiver. The review ladder (`council-review`, then the lead's
-`orgs-review`) runs against that frozen sha.
+environment; stale dependencies are not a waiver. The review ladder (the
+formal `council-review` gate, then the lead's `orgs-review`) runs against that
+frozen SHA.
 
 ## When you hit friction
 

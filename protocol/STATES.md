@@ -25,7 +25,7 @@ tests exactly this).
 | IN_PROGRESS | REVIEW | worker | PR open; self-review done; acceptance items mapped to source/head-specific evidence and untested cases |
 | REVIEW | REWORK | reviewing lead | findings ledger entries (severity + evidence) |
 | REWORK | REVIEW | worker | fix delta referenced; only the delta re-reviewed |
-| REVIEW | ACCEPTED | accountable lead | council CLEAN and approved/CLEAN one-rung-up `lead-review` (fresh context), both covering the exact accepted SHA via full review plus any fix deltas; findings all dispositioned; applicable local gates at that SHA; any CEO-authorized missing-seat exception names that SHA (never labeled full convergence) |
+| REVIEW | ACCEPTED | accountable lead | council CLEAN for present seats and approved/CLEAN one-rung-up `lead-review` (fresh context), both covering the exact accepted SHA via full review plus any fix deltas; missing seats recorded EMPTY, findings all dispositioned, applicable local gates at that SHA; an explicitly stricter governing seat policy applies only within its declared scope, with any authorized exception naming the SHA (never labeled CLEAN for the empty seat) |
 | ACCEPTED | INTEGRATED | integration owner | executive audit at final head when required by the authority envelope; merged normally; applicable local and contract gates recorded at tested union/merged head; scoped exceptions cited |
 | any | ABANDONED | accountable lead | reason logged; salvageable branch preserved |
 
@@ -98,11 +98,11 @@ the lead's `review-seat-outcome` events are the record.
 
 | From | To | Who (records) | Evidence |
 |---|---|---|---|
-| — | OPENED | accountable lead | names a frozen revision (sha / PR head) and a quiescent tree; scope: full PR (round 1) or fix delta (round N) |
+| — | OPENED | accountable lead | names a frozen pushed revision (SHA / PR head) and a quiescent tree; scope: full PR (round 1 and any seat's first received round) or exact fix delta (warm seats in round N) |
 | OPENED | FINDINGS | lead, from council seat outputs (fresh or warm-chained; warm seats identity-verified per round) | one `review-seat-outcome` per seat: received findings (severity, claim, evidence), received `no-finding`, or `EMPTY` with reason (not a verdict) |
 | FINDINGS | DISPOSITIONED | accountable lead | per finding: fixed / filed with rationale / rejected with reason — never silently dropped |
-| DISPOSITIONED | OPENED | lead | opens the next round; it reviews the fix delta only |
-| any round | CLEAN | lead | `review-clean` citing every seat's outcome event: zero new Critical/Important; fixpoint reached for present seats at the named frozen SHA (full review plus fix deltas); required EMPTY seats block full convergence and acceptance unless CEO grants a scoped exception naming that SHA, seat, scope and expiry (not CLEAN for the empty seat) |
+| DISPOSITIONED | OPENED | lead | opens the next round; warm seats review only the exact fix delta, while a newly available seat first receives the full change |
+| any round | CLEAN | lead | `review-clean` citing every seat's outcome event: zero new Critical/Important; fixpoint reached for present seats at the named frozen SHA (full review plus fix deltas); unavailable seats stay EMPTY and do not count as CLEAN; only an explicitly stricter governing seat policy adds a landing condition, with any scoped exception naming issuer, SHA, seat, scope and expiry |
 
 ## Sprint
 
