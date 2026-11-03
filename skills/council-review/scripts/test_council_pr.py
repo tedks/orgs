@@ -915,16 +915,41 @@ class RoundTwoRegressions(unittest.TestCase):
                             empty(full("google"), "timeout")]))
         return h
 
-    def test_edited_trusted_record_findings_stay_evidence(self):
-        # Without the listing (P10's snapshot was empty) the finding blocks...
-        h = self.edited_finding_history(snapshot=False)
+    def test_edited_trusted_record_is_unknown_evidence(self):
+        # P10: an edited findings comment blocks whatever later rounds list...
+        for snapshot in (False, True):
+            result = self.edited_finding_history(snapshot=snapshot).clearance(resolved(head=H2))
+            self.assertFalse(result["clean"])
+            self.assertTrue(any("unknown" in r for r in result["reasons"]), result["reasons"])
+
+    def test_record_edited_to_clean_still_blocks(self):
+        # Round 6: the edit itself may have removed the findings.
+        h = History()
+        o1 = h.post(opened("a", H2, [full(n) for n in ("anthropic", "openai")]))
+        now_clean = outcome(o1, [received(full("anthropic")), received(full("openai"))])
+        h.post(now_clean, edited=True)
+        o2 = h.post(opened("b", H2, [full(n) for n in ("anthropic", "openai")]))
+        h.post(outcome(o2, [received(full("anthropic")), received(full("openai"))]))
+        self.assertFalse(h.clearance(resolved(head=H2))["clean"])
+
+    def test_quoting_the_marker_in_discussion_is_not_a_record(self):
+        # Anthropic P11: a review comment quoting the helper's source.
+        h = History()
+        first_round(h)
+        h.post(None, body='Nit N4: `MARK_OPEN = "<!-- council-review-round"` at line 31 -->')
+        h.post(None, body="> <!-- council-review-round\n> quoted from the record above")
+        self.assertTrue(h.clearance(resolved(head=H1))["clean"])
+        self.assertEqual(h.rounds()[1], [])  # nothing ignored, nothing unreadable
+
+    def test_unedited_invalid_trusted_record_is_read_leniently(self):
+        h = History()
+        o1 = h.post(opened("a", H2, [full(n) for n in ("anthropic", "openai")]))
+        bad = outcome(o1, [received(full("anthropic"), important=1), received(full("openai"))])
+        bad["extra"] = "invalid field"  # fails validation, but is exactly what was posted
+        h.post(None, body=cp.encode_block(bad))
         result = h.clearance(resolved(head=H2))
         self.assertFalse(result["clean"])
         self.assertEqual(result["seats"]["anthropic"], "findings")
-        standing = cp.plan(resolved(head=H2), h.rounds()[0], "anthropic", is_ancestor)["standing_findings"]
-        self.assertEqual(pairs(standing), [{"round": rid("a", H2), "seat": "anthropic"}])
-        # ...and a round whose snapshot lists it, with a received review, examines it.
-        self.assertTrue(self.edited_finding_history(snapshot=True).clearance(resolved(head=H2))["clean"])
 
     def test_untrusted_comment_findings_are_not_evidence(self):
         h = History()
@@ -939,7 +964,9 @@ class RoundTwoRegressions(unittest.TestCase):
         h.post(None, body=cp.MARK_OPEN + "\n{broken\n" + cp.MARK_CLOSE)
         result = h.clearance(resolved(head=H1))
         self.assertFalse(result["clean"])
-        self.assertTrue(any("cannot be read" in r for r in result["reasons"]))
+        self.assertTrue(any("unknown" in r for r in result["reasons"]))
+        got = cp.plan(resolved(head=H1), h.rounds()[0], "anthropic", is_ancestor)
+        self.assertEqual(got["blocking_records"], [h.comments[-1]["id"]])  # before any seat is spent
         h2 = History()
         o = first_round(h2)
         future = dict(outcome(o, [received(full("anthropic"))]), version=2)
@@ -1380,6 +1407,7 @@ MUTATIONS = {
     "unexamined_findings": lambda rounds, head, base, target_ref, is_ancestor: [],
     "finding_evidence": lambda rnd: {} if rnd["conflict"] else rnd["finding_posts"],
     "harvest_findings": lambda rec, repo, pr: [],
+    "trusted_evidence": lambda comment, rec, repo, pr: cp.harvest_findings(rec, repo, pr),
     # Pair-only identity: every outcome of one seat in one round is the same finding.
     "finding_key": lambda round_id, seat, digest: {"round": round_id, "seat": seat,
                                                    "outcome": "0" * 12},
@@ -1420,13 +1448,28 @@ def unexamined_current_frame_only(rounds, head, base, target_ref, is_ancestor):
     return stand
 
 
+def extract_anywhere(body):
+    """The pre-round-6 extract: the marker anywhere in a comment is a record."""
+    start = body.find(cp.MARK_OPEN)
+    if start < 0:
+        return None, None
+    end = body.find(cp.MARK_CLOSE, start + len(cp.MARK_OPEN))
+    if end < 0:
+        return None, "unterminated record block"
+    try:
+        return json.loads(body[start + len(cp.MARK_OPEN):end]), None
+    except ValueError as exc:
+        return None, f"invalid JSON ({exc})"
+
+
 def mutation_check():
     survived = []
     first_open_order = ("latest_round_at_head", lambda rounds, head, base, target_ref: max(
         (r for r in rounds if (head, base, target_ref) in r["frames"]),
         key=lambda r: r["order"], default=None))
     mutants = list(MUTATIONS.items()) + [("consume_pending", consume_by_shape), first_open_order,
-                                         ("unexamined_findings", unexamined_current_frame_only)]
+                                         ("unexamined_findings", unexamined_current_frame_only),
+                                         ("extract", extract_anywhere)]
     for name, mutant in mutants:
         original = getattr(cp, name)
         setattr(cp, name, mutant)

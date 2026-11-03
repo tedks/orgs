@@ -114,18 +114,27 @@ def encode_block(record):
     return f"{MARK_OPEN}\n{text}\n{MARK_CLOSE}"
 
 
+RECORD_START = re.compile(r"(?m)^" + re.escape(MARK_OPEN) + r"\n(?=\{)")
+
+
 def extract(body):
-    """Return (record, error). (None, None) when the body has no record."""
-    start = body.find(MARK_OPEN)
-    if start < 0:
+    """Return (record, error). (None, None) when the body has no record.
+
+    A record is only the exact block encode_block writes: a line that is the
+    marker, a JSON object starting on the next line, and a line beginning
+    with the closing `-->`. Any other mention of the marker (quoted in a
+    review, say) is ordinary discussion.
+    """
+    starts = [m.end() for m in RECORD_START.finditer(body)]
+    if not starts:
         return None, None
-    if body.find(MARK_OPEN, start + 1) >= 0:
+    if len(starts) > 1:
         return None, "more than one record block"
-    end = body.find(MARK_CLOSE, start + len(MARK_OPEN))
+    end = body.find("\n" + MARK_CLOSE, starts[0])
     if end < 0:
         return None, "unterminated record block"
     try:
-        return json.loads(body[start + len(MARK_OPEN):end]), None
+        return json.loads(body[starts[0]:end]), None
     except ValueError as exc:
         return None, f"invalid JSON ({exc})"
 
@@ -324,7 +333,7 @@ def load_records(comments, repo, pr):
             # Untrusted comments never become evidence, so outsiders cannot
             # block a PR.
             if comment.get("author_association") in TRUSTED_ASSOCIATIONS:
-                found = harvest_findings(rec, repo, pr)
+                found = trusted_evidence(comment, rec, repo, pr)
                 if found is None:
                     entry["unreadable"] = True
                 elif found:
@@ -336,6 +345,21 @@ def load_records(comments, repo, pr):
                        "created_at": comment["created_at"], "record": rec})
     usable.sort(key=_order)
     return usable, ignored
+
+
+def trusted_evidence(comment, rec, repo, pr):
+    """Findings evidence in a trusted comment that is not a usable record.
+
+    An edited comment's original contents are unknowable (it may have been
+    edited from findings to clean), so it is unknown evidence: None, which
+    blocks clearance until the comment is deleted or reposted. An unedited
+    one is read leniently.
+    """
+    if comment.get("updated_at") != comment.get("created_at"):
+        names_other_pr = (isinstance(rec, dict) and rec.get("repo") is not None
+                          and (rec.get("repo"), rec.get("pr")) != (repo, pr))
+        return [] if names_other_pr else None
+    return harvest_findings(rec, repo, pr)
 
 
 def harvest_findings(rec, repo, pr):
@@ -653,8 +677,11 @@ def plan(resolved, rounds, host, is_ancestor):
     outstanding = latest is not None and bool(
         latest["conflict"] or latest["outcome_at"] is None or latest["unresolved"]
         or standing)
+    # Records whose findings are unknown block clearance whatever this round
+    # does; surface them before any seat is spent.
+    blocking = [r["unreadable"] for r in rounds if r.get("unreadable")]
     return {"seats": seats, "covered": covered, "standing_findings": standing,
-            "open_round": bool(seats) or outstanding}
+            "blocking_records": blocking, "open_round": bool(seats) or outstanding}
 
 
 def invocation_notes(route, local_ahead):
@@ -832,8 +859,8 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
             seats[name] = unlisted_status(rounds, name, head, base, target_ref, is_ancestor)
     unreadable = [r["unreadable"] for r in rounds if r.get("unreadable")]
     if unreadable:
-        reasons.append("trusted round-record comments that cannot be read (their findings are "
-                       f"unknown): {unreadable}; delete or repost them")
+        reasons.append("trusted round-record comments whose findings are unknown (edited, or "
+                       f"unreadable): {unreadable}; delete or repost them")
     for finding in unexamined_findings(rounds, head, base, target_ref, is_ancestor):
         seats[finding["seat"]] = "findings"  # one rule, whatever the seat's latest state
     findings = sorted(n for n, v in seats.items() if v == "findings")
