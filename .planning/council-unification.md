@@ -1,0 +1,63 @@
+# Consolidate council review into one discoverable skill
+
+This ExecPlan is a living document maintained under `.planning/PLANS.md`. It is public-safe: session identities, timing and private evidence belong in the Lead's external status record.
+
+## Purpose / Big Picture
+
+An agent should find one `council-review` skill for both an ordinary exploratory code review and an org's formal merge or spec gate. The skill should say when a review is advisory and when its verdict counts toward acceptance. A repo without org protocol artifacts should still be able to review a worktree, staged diff, branch, PR or file. A protocol sprint should get pinned revisions, clean convergence, and a durable finding record through that same skill. `orgs-review` remains the accountable lead's separate one-rung review.
+
+## Progress
+
+- [x] Read the assigned worktree instructions, doctrine, binding, both existing council skills, plan format and active callers; record assumptions before source edits.
+- [x] Consolidate the formal workflow into `skills/council-review/SKILL.md`, retaining its exploratory targets.
+- [x] Update active callers and remove the duplicate discovery link; current instruction references have been audited. Historical design and bench descriptions remain records of their original protocol varieties.
+- [ ] Validate the skill, links, focused references and required local gates at the final source head.
+- [ ] Push a draft PR, run a fresh Lead-tier provider council on its frozen head, converge any fixes and record exact evidence.
+- [ ] Report the pushed, reviewed head to the CTO for audit; do not merge.
+
+## Surprises & Discoveries
+
+- The org wrapper says a missing required seat needs CEO exception, while the standing rule says an unavailable foreign seat stays empty and present seats can converge. The merged skill will only apply a stricter threshold when a governing policy explicitly declares one.
+- `skills/review` is already a separate one-rung accountable-lead procedure. `skills/ledger` means the sprint event log; no current caller requires renaming either.
+
+## Decision Log
+
+- Decision: Keep `council-review` as the sole discoverable council name and remove the `council` source/link after callers move. Rationale: Ted and the CTO chose this entry point, and an alias would preserve the duplicate discovery problem. Date/Author: 2026-11-02, Lead.
+- Decision: Mark current worktree/staged/branch/PR/file requests advisory by default; a declared merge or spec gate must name a committed, pushed SHA. Rationale: exploratory behavior must survive without passing off a moving target as a formal clearance. Date/Author: 2026-11-02, Lead.
+- Decision: Require org packing and ledger events when the review participates in an org sprint, while leaving ordinary repositories free of org artifacts. Rationale: one reusable skill must work in both contexts. Date/Author: 2026-11-02, Lead.
+
+## Outcomes & Retrospective
+
+Pending. At completion, record the exact reviewed head, gates, remaining cross-repo installer transition and CTO merge ownership.
+
+## Context and Orientation
+
+The source checkout is the `council-unification` worktree of the orgs repository. `skills/council-review/SKILL.md` currently supplies reusable review targets, provider-relative seats and a single-round prompt. `skills/council/SKILL.md` currently supplies the org gate: freeze, judgment pack, finding disposition, ledger record and fix-delta convergence. `.claude/skills/council` and `.claude/skills/council-review` are the local discovery links; `.agents/skills` points to `.claude/skills`. The active sprint graph is `skills/sprint/SKILL.md`, summarized in `skills/README.md` and `protocol/RUNBOOK.md`. `skills/spec`, `skills/implement` and `skills/review` invoke the council. A “seat” is one model provider's reviewer; “CLEAN” means a received verdict with no new Critical or Important finding for the reviewed bytes. A “judgment pack” is review material assembled without the author's transcript.
+
+## Plan of Work
+
+First amend `skills/council-review/SKILL.md` to route advisory targets and formal gates, preserving the existing seat matrix, Lead model pins, foreign `ask-agent` transport and parallel launch. Formal rounds will use the existing target collection as source material but pin every seat to a pushed SHA and, in org context, assemble the pack through `orgs-pack`; the fixpoint loop will log and dispose findings through `orgs-ledger`. Then replace active `orgs-council` invocations with `council-review`, clarify that `orgs-review` and `orgs-ledger` are different acts, and remove the duplicate source and its local discovery symlink. Keep historical design, bench and log descriptions as records of their time.
+
+## Concrete Steps
+
+Run from `/home/tedks/Projects/orgs/council-unification`. Read the full old skill files before editing. Check `git diff --check` and `git diff --stat` after each coherent edit. Stage only this worktree's files. Commit the skill consolidation separately from caller/link cleanup, then push only the feature branch after checking `gh repo view --json visibility`. Open a draft PR with the cross-repo installer sequencing stated. Freeze the PR head and give every review seat the same material. After any fix, commit, push and send only the last-reviewed SHA to new SHA delta for the convergence round. Rerun affected gates at the final SHA.
+
+## Validation and Acceptance
+
+Run the skill creator's `quick_validate.py skills/council-review`, then verify all local discovery links resolve and search active source for `orgs-council` or `skills/council` paths. The expected result is no current caller of the removed source. Inspect retained historical mentions to ensure they are records, not instructions. Run `nix develop --command` for project tooling and `nix flake check`, the source config/leak tests, the tmux transport test and sync installer test required by `AGENTS.md`. Since no runtime code is intended to change, cached packaged checks are acceptable, but a failed gate must be reported and investigated. The fresh council must return received verdicts for present seats on the pinned head; missing foreign seats remain recorded as empty. The final PR comment names the reviewed SHA and local gate commands/results.
+
+## Idempotence and Recovery
+
+The source edits are normal git changes. If an edit fails midway, inspect `git diff` before reapplying it. Never replace a reviewer verdict with silence. If a seat fails, record it as empty and continue with present seats under the standing rule; a documented stricter governing policy would be surfaced to its named authority. The CTO owns dotfiles and merge sequencing: this branch must not remove an installed source on hosts before the installer allowlist is demoted. No other worktree is changed.
+
+## Artifacts and Notes
+
+The plan, final source diff and PR are public. Operational identities, session receipts, timing and private evidence remain outside the repository. The issue `skills-council-vs-council-review-dedupe` is already in progress; its tracker status is not an ownership lease.
+
+## Interfaces and Dependencies
+
+`council-review` is the user-facing invocation. `ask-agent` supplies foreign provider seats, a native subagent supplies the host provider seat, `orgs-pack` builds org judgment packs, and `orgs-ledger` writes org finding events. `orgs-review` remains a later accountable-lead verdict. The dotfiles installer allowlist is a cross-repository dependency owned by the dotfiles CTO; it must stop requiring the removed council source before this source change is merged.
+
+Plan revision note: initial plan written before source edits to make the cross-skill contract and verification sequence explicit.
+
+Plan revision note: after the first edit, marked the canonical skill and caller migration complete; validation, review and final evidence remain open.
