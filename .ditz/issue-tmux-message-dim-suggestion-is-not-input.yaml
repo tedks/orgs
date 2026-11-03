@@ -16,8 +16,8 @@ type: bugfix
 component: default
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-03T00:24:47-00:00
 references: []
 log_events:
@@ -67,3 +67,11 @@ log_events:
     Council fix delta CLEAN from Codex gpt-6-sol and Claude Opus; Google seat empty
     (quota). Optional single-row mutation nit tracked in tmux-message-claude-single-row-mutation.
     Merge remains with Orgs CTO.'
+- time: 2026-11-03T01:11:09-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Accepted and normally merged in orgs PR #38 at 5b389becd3df6707414a84da381152810ce9da9f.
+    Existing faint-style behavior now has an exact guard mutation; isolated mutation
+    imports repaired. Exact head and merged head pass 144 tests and all 8 mutations;
+    Codex/Claude fix-delta CLEAN, Google quota-empty. Optional single-row mutation
+    nit tracked separately. Final-head nix flake check passed.'
