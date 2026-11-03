@@ -52,6 +52,11 @@ log_events:
   who: Ted Smith
   what: blocks council-invocation-measurement
   comment: ""
+- time: 2026-11-03T07:10:46-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Lead: implementation on PR #40 (draft) at 2f0f9c3; follow-ups filed: council-formal-alias-removal,
+    council-invocation-measurement. Council pending.'
 blocks:
 - council-formal-alias-removal
 - council-invocation-measurement
