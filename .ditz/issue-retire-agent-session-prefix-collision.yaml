@@ -1,0 +1,31 @@
+id: retire-agent-session-prefix-collision
+title: 'retire-agent: "legacy session shard exists" fires on an 8-character session-id
+  prefix shared by two different sessions'
+desc: '2026-11-02: retiring the orgs consolidation lead (Codex session 01a18a45-e2fc-73c2-9713-2bc6c8a4c562,
+  pane %872, event 533b3920ae074686b74a242f96313aac) stopped with "legacy session
+  shard exists; reconcile deliberately" because waiting/2026-10-29-01a18a45-tier-drift-land.md
+  exists for a DIFFERENT session (01a18a45-9ba9-7a63-beb5-faa5ccdaf35f). Codex session
+  ids share their first eight characters when started in the same window of time (today''s
+  lanes: 01a18a45-e2fc and 01a18a45-9ba9; 01a188f4-6c64/-b279/-f8cd). The legacy-shard
+  check and the shard filename convention both key on the 8-character prefix. Fix:
+  key the legacy check on the full session id recorded inside the shard (header field),
+  not the filename prefix; make the published filename use at least 12 characters
+  of the id (or date + full id); add a test with two sessions sharing a prefix. The
+  CTO published the staged shard by hand as waiting/2026-11-02-01a18a45e2fc-orgs-consolidation-lead.md
+  and exited the lane; the event state file remains at .git/retirements/533b3920ae074686b74a242f96313aac.json.
+  Also: the first run returned "offer ambiguous" although the offer was delivered
+  and acted on (receipt-timeout class), and the second run demanded --resume; document
+  the resume path in the skill''s README.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T00:29:44-00:00
+references: []
+log_events:
+- time: 2026-11-03T00:29:44-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
