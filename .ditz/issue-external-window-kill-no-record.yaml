@@ -34,3 +34,14 @@ log_events:
     the way top dies on Ctrl-C. Codex TUI quits on a second Ctrl-C within its window.
     Add to doctrine/binding: humans clear an agent composer with Esc or Backspace,
     never Ctrl-C; and a pane-exit hook to record kills.'
+- time: 2026-11-03T00:50:26-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Lead; live=queued.
+
+    Next/disposition: Audit root-session identity and exit attribution requirements.
+    Source/protocol repairs belong here; any host hook rollout belongs to dotfiles.
+    No live process or tmux setting changes during triage.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
