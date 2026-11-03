@@ -11,8 +11,8 @@ An agent should find one `council-review` skill for both an ordinary exploratory
 - [x] Read the assigned worktree instructions, doctrine, binding, both existing council skills, plan format and active callers; record assumptions before source edits.
 - [x] Consolidate the formal workflow into `skills/council-review/SKILL.md`, retaining its exploratory targets.
 - [x] Update active callers and remove the duplicate discovery link; current instruction references have been audited. Historical design and bench descriptions remain records of their original protocol varieties.
-- [ ] Validate the skill, links, focused references and required local gates at the final source head. Initial validator, links, reference audit, Nix flake and four required scripts passed on the first pushed head; rerun after review fixes.
-- [ ] Push a draft PR, run a fresh Lead-tier provider council on its frozen head, converge any fixes and record exact evidence. PR #39 is draft; first-round findings led to a fix commit. Its delta review found one remaining active state-table contradiction, which needs a new frozen head.
+- [ ] Validate the skill, links, focused references and required local gates at the final source head. They passed at the substantive source head; rerun after this plan-only correction.
+- [ ] Push a draft PR, run a fresh Lead-tier provider council on its frozen head, converge any fixes and record exact evidence. PR #39 is draft and present seats converged at the substantive source head; review this plan-only delta before final receipt.
 - [ ] Report the pushed, reviewed head to the CTO for audit; do not merge.
 
 ## Surprises & Discoveries
@@ -33,11 +33,11 @@ An agent should find one `council-review` skill for both an ordinary exploratory
 
 ## Outcomes & Retrospective
 
-Pending. At completion, record the exact reviewed head, gates, remaining cross-repo installer transition and CTO merge ownership.
+The canonical skill and active callers are consolidated. Present council seats converged on the substantive source change, and the local gates passed at that head. A final plan-only correction and its delta review/gates remain before the Lead's READY report. Dotfiles #230 satisfied the installer compatibility condition; global wording is staged in dotfiles #231 for post-orgs merge/deploy. The orgs CTO owns final-head audit and merge.
 
 ## Context and Orientation
 
-The source checkout is the `council-unification` worktree of the orgs repository. `skills/council-review/SKILL.md` currently supplies reusable review targets, provider-relative seats and a single-round prompt. `skills/council/SKILL.md` currently supplies the org gate: freeze, judgment pack, finding disposition, ledger record and fix-delta convergence. `.claude/skills/council` and `.claude/skills/council-review` are the local discovery links; `.agents/skills` points to `.claude/skills`. The active sprint graph is `skills/sprint/SKILL.md`, summarized in `skills/README.md` and `protocol/RUNBOOK.md`. `skills/spec`, `skills/implement` and `skills/review` invoke the council. A “seat” is one model provider's reviewer; “CLEAN” means a received verdict with no new Critical or Important finding for the reviewed bytes. A “judgment pack” is review material assembled without the author's transcript.
+The source checkout is the `council-unification` worktree of the orgs repository. At the starting revision, `skills/council-review/SKILL.md` supplied reusable exploratory targets and provider-relative seats, while `skills/council/SKILL.md` supplied the org gate: freeze, judgment pack, finding disposition, ledger record and fix-delta convergence. The two source paths each had a local discovery link. This change combines their procedures in `skills/council-review/SKILL.md` and removes `skills/council` and its link; `.agents/skills` still points to `.claude/skills`. The active sprint graph is `skills/sprint/SKILL.md`, summarized in `skills/README.md` and `protocol/RUNBOOK.md`. `skills/spec`, `skills/implement` and `skills/review` invoke the council. A “seat” is one model provider's reviewer; “CLEAN” means a received verdict with no new Critical or Important finding for the reviewed bytes. A “judgment pack” is review material assembled without the author's transcript.
 
 ## Plan of Work
 
@@ -53,7 +53,7 @@ Run the skill creator's `quick_validate.py skills/council-review`, then verify a
 
 ## Idempotence and Recovery
 
-The source edits are normal git changes. If an edit fails midway, inspect `git diff` before reapplying it. Never replace a reviewer verdict with silence. If a seat fails, record it as empty and continue with present seats under the standing rule; a documented stricter governing policy would be surfaced to its named authority. The CTO owns dotfiles and merge sequencing: this branch must not remove an installed source on hosts before the installer allowlist is demoted. No other worktree is changed.
+The source edits are normal git changes. If an edit fails midway, inspect `git diff` before reapplying it. Never replace a reviewer verdict with silence. If a seat fails, record it as empty and continue with present seats under the standing rule; a documented stricter governing policy would be surfaced to its named authority. The CTO owns dotfiles and merge sequencing. Its #230 installer change is deployed, so the compatibility condition is satisfied; #231 global wording follows the orgs merge. No other worktree is changed here.
 
 ## Artifacts and Notes
 
@@ -61,7 +61,7 @@ The plan, final source diff and PR are public. Operational identities, session r
 
 ## Interfaces and Dependencies
 
-`council-review` is the user-facing invocation. `ask-agent` supplies foreign provider seats, a native subagent supplies the host provider seat, `orgs-pack` builds org judgment packs, and `orgs-ledger` writes org finding events. `orgs-review` remains a later accountable-lead verdict. The dotfiles installer allowlist is a cross-repository dependency owned by the dotfiles CTO; it must stop requiring the removed council source before this source change is merged.
+`council-review` is the user-facing invocation. `ask-agent` supplies foreign provider seats, a native subagent supplies the host provider seat, `orgs-pack` builds org judgment packs, and `orgs-ledger` writes org review-round events. `orgs-review` remains a later accountable-lead verdict. The dotfiles CTO owns the installer allowlist and global merge-gate wording; #230 has satisfied the source compatibility requirement and #231 follows this merge.
 
 Plan revision note: initial plan written before source edits to make the cross-skill contract and verification sequence explicit.
 
@@ -70,3 +70,5 @@ Plan revision note: after the first edit, marked the canonical skill and caller 
 Plan revision note: after first-round council findings, added explicit formal invocation, late-seat handling, full org review-round ledger events and aligned active state/template policy. The first-round SHA remains recorded; only the fix delta will be reviewed by warm seats.
 
 Plan revision note: after the first fix-delta round, qualified the remaining package transition row for first-time seats and clarified the original base SHA and accountable lead's scribe role. Removed quota outcome details from this public plan; operational receipts remain in the external status record.
+
+Plan revision note: corrected Context and Orientation to describe the starting state after the old source was removed, and recorded the current Lead outcome and dotfiles sequencing before the final plan-only delta review.
