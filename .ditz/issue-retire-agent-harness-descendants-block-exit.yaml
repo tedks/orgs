@@ -1,0 +1,36 @@
+id: retire-agent-harness-descendants-block-exit
+title: 'retire-agent: harness-owned descendants of the pinned Codex PID (MCP servers,
+  code-mode host, node REPL) are reported as lane resources and block exit with "resources
+  require release receipts or named transfer owners"'
+desc: '2026-11-02, reland worker (Codex Luna, pane %989, session 01a19ecb-6168-7981-ad6e-f3795235ed72,
+  event 6494e809184b43a7b9bce8b005d0f7b2): the lane correctly refused to stop processes
+  it did not own, listed the harness''s own children under the pinned Codex PID (python
+  MCP servers, codex-code-mode-host, CUA node_repl and node workers) as "pending"
+  resources, and retire.py --resume then returned "resources require release receipts
+  or named transfer owners", so the exit never ran. These processes are the harness''s
+  and end with it; the CTO published the staged shard by hand (waiting/2026-11-02-01a19ecb6168-orgs-reland-worker.json),
+  exited the lane, and verified the descendants ended with the parent.
+
+
+  Fix: classify any process that is a descendant of the pinned harness PID and matches
+  the known harness helper set (MCP server processes registered in the harness config,
+  codex-code-mode-host, node_repl/CUA workers, the harness''s own shells with no detached
+  children) as harness-owned with receipt "ends with the harness process"; verify
+  after exit that the tree is gone and record that as the release receipt; block only
+  on processes outside the harness tree or detached (setsid/nohup, systemd units,
+  tmux servers, containers). Add a fixture from this event''s shard. Also normalise
+  the published shard: the tool stages JSON but waiting/ holds Markdown; publication
+  should render the Markdown form so a hand-published JSON file is never needed.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-03T01:13:57-00:00
+references: []
+log_events:
+- time: 2026-11-03T01:13:57-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
