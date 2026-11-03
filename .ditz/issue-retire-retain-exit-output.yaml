@@ -49,3 +49,14 @@ log_events:
     private event records retain attribution/evidence; no product code or review gate
     changed. Repair remains queued; this comment does not authorize weakening verification
     or globally changing tmux settings.
+- time: 2026-11-03T00:50:38-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO triage 2026-11-02: owner=Orgs CTO; tier=Lead; live=priority queue.
+
+    Next/disposition: Establish narrowly owned output retention before irreversible
+    exit input or fail before send. Preserve process-plus-native-notice proof; old
+    missing terminal evidence remains pending, never synthesized.
+
+    Triage records accountability and next action; it does not itself start an implementation
+    lane or change an existing pause.'
