@@ -509,8 +509,12 @@ class LegacyAliasAndMeasurement(unittest.TestCase):
             corrections = [{"shape": "formal-sha", "reason": "supplied-sha-mismatch"}] if i == 3 else []
             notes = ["legacy-formal-alias"] if i == 5 else []
             rec = opened(f"r{i}", H1, [full("anthropic")], notes=notes, corrections=corrections, pr=pr)
-            rows.append(("o/r", {"id": f"r{i}", "open": rec, "opened_at": f"2026-11-1{i // 10}T00:{i % 10:02d}Z"}))
+            rows.append(("o/r", {"id": f"r{i}", "open": rec, "outcome_at": "x",
+                                 "opened_at": f"2026-11-1{i // 10}T00:{i % 10:02d}Z"}))
         rows.append(("o/r", rows[0][1]))  # the same round seen twice
+        abandoned = opened("crashed", H1, [full("anthropic")], pr=8)
+        rows.append(("o/r", {"id": "crashed", "open": abandoned, "outcome_at": None,
+                             "opened_at": "2026-11-09T00:00Z"}))  # earliest, but never ran
         result = cp.tally(list(reversed(rows)))
         self.assertEqual(result["rounds"], 10)
         self.assertEqual([r["round_id"] for r in result["rows"]], [f"r{i}" for i in range(10)])
@@ -698,6 +702,14 @@ class EndToEnd(unittest.TestCase):
         self.assertNotIn("SECRETVALUE", body)
         (self.tmp / "body.md").write_text(body)
         self.cli("post", "--body-file", str(self.tmp / "body.md"))
+        code, tallied = self.cli("tally", "o/r#7")
+        self.assertEqual(json.loads(tallied)["rounds"], 0)  # no outcome yet: not a council
+        outcomes = self.tmp / "outcomes.json"
+        outcomes.write_text(json.dumps([{"seat": s["seat"], "status": "empty",
+                                         "reason": "timeout"} for s in plan["open_record"]["seats"]]))
+        body = self.cli("render", "--open-record", str(rec_path), "--outcomes", str(outcomes))[1]
+        (self.tmp / "body.md").write_text(body)
+        self.assertEqual(self.cli("post", "--body-file", str(self.tmp / "body.md"))[0], 0)
         code, tallied = self.cli("tally", "o/r#7")
         self.assertEqual(code, 0)
         self.assertNotIn("SECRETVALUE", tallied)

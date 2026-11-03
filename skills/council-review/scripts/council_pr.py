@@ -545,8 +545,8 @@ def tally(open_rounds, limit=10):
     """open_rounds: [(repo, rnd)]. Count the first `limit` rounds across PRs."""
     seen, rows = set(), []
     for repo, rnd in sorted(open_rounds, key=lambda x: (x[1]["opened_at"], x[0], x[1]["id"])):
-        if (repo, rnd["id"]) in seen:
-            continue
+        if (repo, rnd["id"]) in seen or not rnd.get("outcome_at"):
+            continue  # a retry seen twice, or an abandoned open-only round
         seen.add((repo, rnd["id"]))
         inv = rnd["open"]["invocation"]
         rows.append({"opened_at": rnd["opened_at"], "repo": repo, "pr": rnd["open"]["pr"],
