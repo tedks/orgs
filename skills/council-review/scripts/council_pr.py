@@ -76,7 +76,7 @@ COHORTS = {"production", "evaluation"}
 
 COMMON_KEYS = {"schema", "version", "phase", "repo", "pr", "round_id", "head", "base",
                "target_ref", "target_oid", "seats"}
-RECORD_KEYS = {"open": COMMON_KEYS | {"invocation", "covered"},
+RECORD_KEYS = {"open": COMMON_KEYS | {"invocation", "covered", "standing"},
                "outcome": COMMON_KEYS | {"unresolved_findings"}}
 SEAT_KEYS = {"seat", "mechanism", "model", "scope", "from", "continuity", "status"}
 STATUS_KEYS = {"dispatched": SEAT_KEYS, "received": SEAT_KEYS | {"verdict", "counts"},
@@ -210,6 +210,13 @@ def validate(rec, repo, pr):
         names.add(entry["seat"])
     if not names:
         return "an open record must dispatch or cover at least one seat"
+    standing = rec.get("standing")
+    if not isinstance(standing, list) or not all(
+            isinstance(f, dict) and set(f) == {"round", "seat"}
+            and isinstance(f["round"], str) and ROUND_ID.match(f["round"])
+            and isinstance(f["seat"], str) and SEAT_NAME.match(f["seat"]) for f in standing) \
+            or len({(f["round"], f["seat"]) for f in standing}) != len(standing):
+        return "bad standing list"
     inv = rec.get("invocation")
     if not isinstance(inv, dict) or set(inv) != {"shape", "route", "notes", "corrections",
                                                  "unknown", "cohort"} \
@@ -453,39 +460,41 @@ def latest_round_at_head(rounds, head, base, target_ref):
     return max(at_head, key=lambda r: r["frames"][frame_key], default=None)
 
 
-def unexamined_findings(rounds, head, base, target_ref):
-    """The one rule for findings: which seats' findings still stand.
+def unexamined_findings(rounds, head, base, target_ref, is_ancestor):
+    """The one rule for findings: which findings still stand.
 
-    A finding stands from the first posting of its received outcome until its
-    own seat later posts a received clean outcome, or another seat posts a
-    received review in a round at this head whose open record was posted
-    after the finding (that round's prompts carry the standing findings and
-    their dispositions). EMPTY outcomes, covered entries and silence examine
-    nothing. Late findings, a finder gone EMPTY, and covered-only rounds are
-    all cases of this rule.
+    A finding is one seat's received findings outcome in one round, named
+    {round, seat}. It stands until a later round examines it: a round that is
+    not void, at a head that is the current head or an ancestor of it, opened
+    after the finding was posted, whose open record lists that finding in its
+    `standing` snapshot (the snapshot its prompts were built from), and in
+    which at least one dispatched seat returned a received review. No seat is
+    exempt, the finder included: a late arrival, work on an older head, a
+    finding posted after the snapshot, EMPTY outcomes, covered entries and
+    silence examine nothing.
     """
-    frame_key = (head, base, target_ref)
-    latest = {}
+    found = []
     for rnd in rounds:
         if rnd["conflict"] or not same_frame(rnd, base, target_ref):
             continue
         for name, outcome in rnd["seats"].items():
-            if outcome["status"] != "received":
-                continue
-            posted = rnd["seat_posted"][name]
-            if name not in latest or posted > latest[name][0]:
-                latest[name] = (posted, outcome["verdict"])
-    stand = set()
-    for name, (posted, verdict) in latest.items():
-        if verdict != "findings":
-            continue
-        examined = any(
-            not r["conflict"] and frame_key in r["frames"] and r["frames"][frame_key] > posted
-            and any(n != name and o["status"] == "received" for n, o in r["seats"].items())
-            for r in rounds)
-        if not examined:
-            stand.add(name)
-    return stand
+            if outcome["status"] == "received" and outcome["verdict"] == "findings":
+                found.append((rnd, name))
+    stand = []
+    for rnd, name in found:
+        key = {"round": rnd["id"], "seat": name}
+        posted = rnd["seat_posted"][name]
+        if not any(examines(r, key, posted, head, base, target_ref, is_ancestor) for r in rounds):
+            stand.append(key)
+    return sorted(stand, key=lambda k: (k["round"], k["seat"]))
+
+
+def examines(rnd, key, posted, head, base, target_ref, is_ancestor):
+    """Whether `rnd` is a received examination of the finding `key`."""
+    return (not rnd["conflict"] and same_frame(rnd, base, target_ref)
+            and is_ancestor(rnd["open"]["head"], head) and rnd["order"] > posted
+            and key in rnd["open"]["standing"]
+            and any(o["status"] == "received" for o in rnd["seats"].values()))
 
 
 def plan(resolved, rounds, host, is_ancestor):
@@ -512,7 +521,7 @@ def plan(resolved, rounds, host, is_ancestor):
     # Standing findings need a received examination: covered seats review
     # the dispositions instead of being carried as covered, and every prompt
     # in the round carries the standing findings (see unexamined_findings).
-    standing = sorted(unexamined_findings(rounds, head, base, target_ref))
+    standing = unexamined_findings(rounds, head, base, target_ref, is_ancestor)
     if standing:
         for c in covered:
             seats.append({"seat": c["seat"], "mechanism": "native" if c["seat"] == host else "ask-agent",
@@ -613,6 +622,7 @@ def open_record(resolved, seat_plan, invocation, round_id):
         "target_ref": resolved["target_ref"], "target_oid": resolved["target_oid"],
         "invocation": invocation,
         "covered": [{"seat": c["seat"], "through": c["through"]} for c in seat_plan["covered"]],
+        "standing": [dict(f) for f in seat_plan["standing_findings"]],
         "seats": [{"seat": s["seat"], "mechanism": s["mechanism"], "model": s["model"],
                    "scope": s["scope"], "from": s["from"], "continuity": s["continuity"],
                    "status": "dispatched"} for s in seat_plan["seats"]],
@@ -704,8 +714,8 @@ def clearance(resolved, rounds, is_ancestor, expect_head):
     for name in names:
         if name not in seats:
             seats[name] = unlisted_status(rounds, name, head, base, target_ref, is_ancestor)
-    for name in unexamined_findings(rounds, head, base, target_ref):
-        seats[name] = "findings"  # one rule, whatever the seat's state in the latest round
+    for finding in unexamined_findings(rounds, head, base, target_ref, is_ancestor):
+        seats[finding["seat"]] = "findings"  # one rule, whatever the seat's latest state
     findings = sorted(n for n, v in seats.items() if v == "findings")
     if findings:
         reasons.append("standing Critical/Important findings no seat has examined since, from: "
@@ -777,6 +787,10 @@ def render(rec):
                          f"{s['scope']} {span} ({s['continuity']}) |")
         for c in rec["covered"]:
             lines.append(f"| {c['seat']} | — | — | covered through head (clean earlier) |")
+        if rec["standing"]:
+            lines.append("")
+            lines.append("Standing findings this round examines: " + ", ".join(
+                f"{f['seat']} in `{f['round']}`" for f in rec["standing"]) + ".")
     else:
         lines.append(f"**council-review-round v{VERSION}: round `{rec['round_id']}` outcomes**")
         lines.append("")
