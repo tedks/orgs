@@ -310,7 +310,8 @@ class ConfigTests(unittest.TestCase):
                                         'display-message', '-p', '#{socket_path}'],
                                        env=server_env, text=True, capture_output=True, timeout=3)
         self.assertEqual(socket_result.returncode, 0, socket_result.stderr)
-        resolved_default = Path(socket_result.stdout.strip()).resolve()
+        queried_default = socket_result.stdout.strip()
+        resolved_default = Path(queried_default).resolve()
         self.assertTrue(resolved_default.is_relative_to(self.root.resolve()))
         self.assertEqual(resolved_default, Path(default_path).resolve())
         stale_env = server_env | {'TMUX': str(self.root / 'dead-explicit.sock') + ',123,0'}
@@ -327,7 +328,35 @@ class ConfigTests(unittest.TestCase):
             with self.subTest(implementation=command[0]):
                 result = subprocess.run(command, env=stale_env, text=True, capture_output=True, timeout=4)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.splitlines(), ['tmux', '-L', 'default', default_path])
+                self.assertEqual(result.stdout.splitlines(), ['tmux', '-L', 'default', queried_default])
+
+    def test_tmux_probe_does_not_consume_caller_stdin(self):
+        socket_path = str(self.root / 'stdin-probe.sock')
+        sock = socket.socket(socket.AF_UNIX)
+        sock.bind(socket_path)
+        self.addCleanup(sock.close)
+        bin_dir = self.root / 'bin'
+        bin_dir.mkdir()
+        tmux_stub = bin_dir / 'tmux'
+        tmux_stub.write_text('#!' + sys.executable + '\nimport sys\nsys.stdin.read()\n')
+        tmux_stub.chmod(0o700)
+        env = self.env | {'PATH': str(bin_dir) + ':' + self.env['PATH'],
+                          'TMUX': socket_path + ',123,0'}
+        helper = ROOT / 'skills/spawn-agent/scripts/tmux-ctx.sh'
+        shell = ['bash', '-c', 'source "$1"; printf "%s\\n" "${TMUX_CMD[@]}";'
+                 ' IFS= read -r payload; printf "input=%s\\n" "$payload"',
+                 'test', str(helper)]
+        python = [sys.executable, '-c',
+                  'import sys;sys.path.insert(0,' + repr(str(LOADER.parent)) + ');'
+                  'from agent_skills_config import tmux_command;'
+                  'print("\\n".join(tmux_command()));print("input="+sys.stdin.readline().strip())']
+        expected = ['tmux', '-S', socket_path, 'input=caller-payload']
+        for command in (shell, python):
+            with self.subTest(implementation=command[0]):
+                result = subprocess.run(command, env=env, input='caller-payload\n',
+                                        text=True, capture_output=True, timeout=3)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), expected)
 
     def test_delivery_resolution_pins_server_across_config_change(self):
         script = ROOT / 'skills/spawn-agent/scripts/tmux-message.py'

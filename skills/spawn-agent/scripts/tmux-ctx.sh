@@ -20,18 +20,19 @@ _AGENT_SKILLS_TMUX_SOCKET=$(agent_skills_get tmux.socket) || return $?
 _tmux_socket_responds() {
     local socket_path="$1"
     [[ -S "$socket_path" ]] || return 1
-    python3 - "$socket_path" <<'PY'
+    python3 -c '
 import subprocess
 import sys
 
 try:
     result = subprocess.run(
-        ['tmux', '-S', sys.argv[1], 'display-message', '-p', '#{socket_path}'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1, check=False)
+        ["tmux", "-S", sys.argv[1], "display-message", "-p", "#{socket_path}"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        timeout=1, check=False)
 except (OSError, subprocess.TimeoutExpired):
     raise SystemExit(1)
 raise SystemExit(result.returncode != 0)
-PY
+' "$socket_path"
 }
 
 _resolve_tmux_cmd() {

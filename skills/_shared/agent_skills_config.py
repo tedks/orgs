@@ -125,7 +125,7 @@ def tmux_command(config=None):
             try:
                 probe = subprocess.run(
                     ['tmux', '-S', active, 'display-message', '-p', '#{socket_path}'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     timeout=1, check=False)
                 if probe.returncode == 0:
                     return ['tmux', '-S', active]
