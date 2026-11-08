@@ -1,0 +1,23 @@
+id: retire-codex-indented-footer-native-witness
+title: Assess native witness for indented Codex footer completion
+desc: 'PR #42 Anthropic council N4: existing observe logic permits a single indented
+  Codex UI-shaped footer after an exact event marker without the additional native
+  latest-completed-turn witness required for a bullet-shaped footer. Agent prose shaped
+  exactly like a clock may be indistinguishable from UI metadata. This behavior predates
+  the 12-hour clock extension; existing exact event, identity, single-footer and downstream
+  exit guards remain. Reproduce with synthetic native records and determine the smallest
+  safe strengthening without breaking measured footer cases. No live retirement replay;
+  retain private data outside public records.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-08T04:34:11-00:00
+references: []
+log_events:
+- time: 2026-11-08T04:34:11-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
