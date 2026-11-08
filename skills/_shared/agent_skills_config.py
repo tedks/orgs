@@ -120,7 +120,7 @@ def tmux_command(config=None):
                 return ['tmux', '-S', active]
         except OSError:
             pass
-        raise ValueError('active TMUX socket unavailable; supply an explicit socket override')
+        raise ValueError('active TMUX socket unavailable; supply SPAWN_TMUX_SOCKET or SPAWN_TMUX_LABEL')
     if os.environ.get('AGENT_SKILLS_TMUX_SOCKET'):
         socket = config['tmux']['socket']
         return ['tmux', '-S' if '/' in socket else '-L', socket]

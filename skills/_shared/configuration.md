@@ -50,7 +50,9 @@ a command name or an absolute path, never a cwd-relative path. Bare tmux labels
 such as `~label` remain literal labels. No `$VARIABLE` expansion
 occurs. Empty strings are allowed only for remote, roles, tmux and GitHub owner.
 
-For tmux selection, nonempty per-call `SPAWN_TMUX_SOCKET` and
+For non-tmux settings, explicit command options take precedence over legacy
+`RETIRE_*` / `SPAWN_*` variables, which take precedence over shared
+configuration. For tmux selection, nonempty per-call `SPAWN_TMUX_SOCKET` and
 `SPAWN_TMUX_LABEL` pins take precedence over every other source. Otherwise, a
 valid active `$TMUX` server takes precedence over the generic
 `AGENT_SKILLS_TMUX_SOCKET` override. Outside tmux, that generic override takes

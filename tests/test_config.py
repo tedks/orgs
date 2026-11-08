@@ -172,6 +172,17 @@ class ConfigTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(result.stdout.splitlines(), expected)
 
+        for label, extra, expected in [
+                ('empty generic override selects default', {'AGENT_SKILLS_TMUX_SOCKET': ''}, ['tmux']),
+                ('missing config selects default', {}, ['tmux'])]:
+            if label == 'missing config selects default':
+                self.config.unlink()
+            for command in (shell, python):
+                with self.subTest(label=label, implementation=command[0]):
+                    result = subprocess.run(command, env=self.env | extra, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), expected)
+
         for command in (shell, python):
             with self.subTest(implementation=command[0], invalid_active_with_generic=True):
                 result = subprocess.run(command, env=self.env | invalid_tmux |
@@ -179,6 +190,7 @@ class ConfigTests(unittest.TestCase):
                                          text=True, capture_output=True)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('active TMUX socket unavailable', result.stderr)
+                self.assertIn('SPAWN_TMUX_SOCKET or SPAWN_TMUX_LABEL', result.stderr)
                 self.assertEqual(result.stdout, '')
 
     def test_delivery_resolution_pins_server_across_config_change(self):

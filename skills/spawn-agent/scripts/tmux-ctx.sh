@@ -37,7 +37,7 @@ _resolve_tmux_cmd() {
             TMUX_CMD=(tmux -S "$socket_path")
             return
         fi
-        echo 'active TMUX socket unavailable; supply an explicit socket override' >&2
+        echo 'active TMUX socket unavailable; supply SPAWN_TMUX_SOCKET or SPAWN_TMUX_LABEL' >&2
         return 2
     fi
 
