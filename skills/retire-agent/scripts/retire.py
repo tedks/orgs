@@ -502,7 +502,7 @@ class Retirement:
         agent = self.state['identity']['process']['agent']
         codex_footer_row = re.compile(
             r'(?:  |• )(?:Worked for (?:[1-9][0-9]*h )?(?:[1-9][0-9]*m )?[0-5]?[0-9]s [·•] )?'
-            r'(?:[01][0-9]|2[0-3]):[0-5][0-9]')
+            r'(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]|(?:0?[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM))')
         candidates = [i for i, row in enumerate(rows) if re.match(r'^[●•] ', row)]
         if not candidates:
             return None
@@ -524,7 +524,7 @@ class Retirement:
         tail = [row for row in rows[position + 1:]
                 if row.strip() and not (len(row.strip()) >= 3 and set(row.strip()) == {'─'})]
         # Codex renders this measured UI duration/time line after a final reply
-        # ("Worked for 1m 21s · 12:23" or "• Worked for 19s • 19:35", with
+        # ("Worked for 2m 59s • 11:30 PM" or "• Worked for 19s • 19:35", with
         # hours for long turns, or the bare time for sub-minute turns).
         # It is not agent prose; permit one exact
         # footer only for pinned Codex.

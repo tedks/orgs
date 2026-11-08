@@ -18,9 +18,11 @@ must show that marker as the final assistant block; trailing continuation text
 or a later assistant response keeps completion pending. Trailing UI whitespace
 is ignored. Blank rows and the
 pure horizontal Claude composer separator are permitted suffix rows. A pinned
-Codex target may also render one measured UI footer `  Worked for 1m 21s · 12:23`,
-`  Worked for 19s • 19:35`, or `• Worked for 19s • 19:35` (the duration and 24-hour time vary). Only that anchored minute/second/time
-layout is recognized; additional prose, duplicate footers, other status text,
+Codex target may also render one measured UI footer `  Worked for 2m 59s • 11:30 PM`,
+`  Worked for 1m 21s · 12:23`, or `• Worked for 19s • 19:35`.
+The anchored clock accepts valid 24-hour `00:00`–`23:59` or 12-hour
+`1:00`–`12:59 AM/PM` (with an optional leading zero for hours 1–9).
+Additional prose, duplicate footers, other status text,
 and that footer on a Claude target still keep completion pending. A bullet-prefixed
 Codex footer is accepted only when the pinned rollout's latest completed turn
 has the exact DONE or DECLINED marker as `last_agent_message`; a later started
