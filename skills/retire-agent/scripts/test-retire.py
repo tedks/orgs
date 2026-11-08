@@ -362,7 +362,7 @@ def terminal(directory, mode):
                                 elif mode in ('claude-real-reply-row-late', 'claude-real-reply-row-status-late', 'codex-real-reply-row-late'):
                                     due = time.monotonic() + 1
                                 else:
-                                    reply_bullet = '•' if mode in ('codex-real-reply-row', 'codex-real-reply-row-invalid-shard', 'decline-codex-real-reply-row', 'codex-spoofed-footer-reply',
+                                    reply_bullet = '•' if mode.startswith('codex-12h-footer') or mode in ('codex-real-reply-row', 'codex-real-reply-row-invalid-shard', 'decline-codex-real-reply-row', 'codex-spoofed-footer-reply',
                                                                    'codex-bullet-footer-later-turn',
                                                                    'codex-bullet-footer-malformed-rollout') else '●'
                                     history += reply_bullet + ' RETIRE-' + disposition + '-' + event + '\r\n'
@@ -370,10 +370,11 @@ def terminal(directory, mode):
                                         history += '✻ Baked for 37s · done 6:25 PM\r\n'
                                         if mode == 'claude-real-reply-row-status':
                                             history += '  globalVersion: 2.1.288 · latestVersion: 2.1.289 ✘ Auto-update failed: no write permission to npm prefix · Run claude doctor\r\n'
-                                    if mode in ('codex-real-reply-row', 'codex-real-reply-row-invalid-shard', 'decline-codex-real-reply-row', 'codex-spoofed-footer-reply',
+                                    if mode.startswith('codex-12h-footer') or mode in ('codex-real-reply-row', 'codex-real-reply-row-invalid-shard', 'decline-codex-real-reply-row', 'codex-spoofed-footer-reply',
                                                 'codex-bullet-footer-later-turn',
                                                 'codex-bullet-footer-malformed-rollout'):
-                                        history += '• Worked for 19s • 19:35\r\n'
+                                        if not mode.startswith('codex-12h-footer'):
+                                            history += '• Worked for 19s • 19:35\r\n'
                                         record_codex_completion(
                                             'Worked for 19s • 19:35' if mode == 'codex-spoofed-footer-reply'
                                             else 'RETIRE-' + disposition + '-' + event,
@@ -398,6 +399,26 @@ def terminal(directory, mode):
                                             history += '  Recovery still needs correction.\r\n'
                                         elif mode.endswith('same-row-prose'):
                                             history = history[:-2] + ' Recovery still needs correction.\r\n'
+                                    if mode.startswith('codex-12h-footer'):
+                                        clock = '11:30 PM'
+                                        if mode.endswith('-am'):
+                                            clock = '1:00 AM'
+                                        elif mode.endswith('-last-minute'):
+                                            clock = '12:59 PM'
+                                        elif mode.endswith('zero-hour'):
+                                            clock = '00:30 PM'
+                                        elif mode.endswith('high-hour'):
+                                            clock = '13:30 PM'
+                                        elif mode.endswith('high-minute'):
+                                            clock = '11:60 PM'
+                                        elif mode.endswith('bad-meridiem'):
+                                            clock = '11:30 XM'
+                                        footer = '  Worked for 2m 59s • ' + clock
+                                        history += '\r\n' + footer + '\r\n'
+                                        if mode.endswith('same-row-prose'):
+                                            history = history[:-2] + ' Recovery still needs correction.\r\n'
+                                        elif mode.endswith('duplicate'):
+                                            history += footer + '\r\n'
                                     if 'claude-footer' in mode:
                                         timing = '✻ Baked for 19s · done 1:27 PM'
                                         if mode.endswith('minute'):
@@ -2740,6 +2761,43 @@ class Tests(unittest.TestCase):
         self.actor('done-codex-footer-hours')
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_codex_12h_ui_footer_allows_marker_completion(self):
+        self.actor('codex-12h-footer')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.observed()['exit_enters'], 1)
+
+    def test_codex_12h_ui_footer_accepts_am(self):
+        self.actor('codex-12h-footer-am')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_codex_12h_ui_footer_accepts_last_minute(self):
+        self.actor('codex-12h-footer-last-minute')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_codex_12h_ui_footer_rejects_zero_hour(self):
+        self.assert_completion_block_pending('codex-12h-footer-zero-hour')
+
+    def test_codex_12h_ui_footer_rejects_high_hour(self):
+        self.assert_completion_block_pending('codex-12h-footer-high-hour')
+
+    def test_codex_12h_ui_footer_rejects_high_minute(self):
+        self.assert_completion_block_pending('codex-12h-footer-high-minute')
+
+    def test_codex_12h_ui_footer_rejects_bad_meridiem(self):
+        self.assert_completion_block_pending('codex-12h-footer-bad-meridiem')
+
+    def test_codex_12h_ui_footer_rejects_same_row_prose(self):
+        self.assert_completion_block_pending('codex-12h-footer-same-row-prose')
+
+    def test_codex_12h_ui_footer_rejects_duplicate_footer(self):
+        self.assert_completion_block_pending('codex-12h-footer-duplicate')
+
+    def test_codex_12h_ui_footer_rejects_later_response(self):
+        self.assert_completion_block_pending('codex-12h-footer-later-assistant')
 
     def test_codex_ui_bullet_footer_allows_marker_completion(self):
         self.actor('done-codex-footer-bullet')
