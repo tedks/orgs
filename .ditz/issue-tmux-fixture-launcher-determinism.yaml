@@ -1,0 +1,23 @@
+id: tmux-fixture-launcher-determinism
+title: Review deterministic tmux fixture launching across byobu and bare tmux hosts
+desc: 'PR #43 round4 Anthropic N1 notes that preferring byobu when installed gives
+  fixture launches different wrapper behavior across hosts. Current fixture explicitly
+  selects an owned private socket, supplies /dev/null config, and uses a temporary
+  HOME; queries and teardown use plain tmux at the owned path. The optional byobu
+  preference respects the operator''s server-launch convention while a bare tmux fallback
+  avoids a hard test dependency. Consider a consistent fixture launch contract that
+  preserves that preference and portable test execution. Deferred as nonblocking test-environment
+  policy, not a production resolver issue.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-08T05:18:34-00:00
+references: []
+log_events:
+- time: 2026-11-08T05:18:34-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
