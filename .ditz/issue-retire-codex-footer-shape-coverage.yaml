@@ -1,0 +1,23 @@
+id: retire-codex-footer-shape-coverage
+title: Complete Codex footer shape and meridiem mutation coverage
+desc: 'PR #42 council nits (Anthropic N2/N3; Google N1/N2/N3): add focused coverage
+  for the 12-hour bullet footer through the native witness path, the existing bare-clock
+  and padded-hour combinations, meridiem/spacing and upper-hour mutations, and explicit
+  single-exit assertions for AM and last-minute positives. Current bounded change
+  fixes the measured indented 11:30 PM footer with three killed mutations and retains
+  existing 24-hour/native/exit guard tests. Defer broader cross-product fixture coverage
+  so the measured repair can deploy without expanding its production logic. Clarify
+  in docs that allowed clock and existing prefix forms combine if adding these fixtures.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-08T04:34:11-00:00
+references: []
+log_events:
+- time: 2026-11-08T04:34:11-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
