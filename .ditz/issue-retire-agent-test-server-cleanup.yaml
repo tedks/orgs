@@ -23,3 +23,13 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-08T05:31:37-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Additional evidence from PR #42 validation: the full retirement suite
+    plus mutations used an isolated TMUX_TMPDIR. Closeout found 307 residual owned
+    socket paths; each server was verified absent before those exact paths were removed.
+    No live leaked server was observed in this run. Distinguish dead socket-file residue
+    from surviving servers when investigating the earlier shared-directory report.
+    Teardown should account for both server exit and owned socket cleanup on success/failure;
+    no shared-directory cleanup was performed by this source-fix mission.'
