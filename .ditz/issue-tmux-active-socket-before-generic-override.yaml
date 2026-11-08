@@ -23,3 +23,11 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-08T04:54:03-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'ORGS-SOCKET-NOTE-2 changes acceptance before merge: trust active TMUX
+    only if a bounded tmux display-message probe confirms a responding server; missing/dead/unresponsive
+    sockets fall through to generic/config/default. Explicit per-call pins still win.
+    This supersedes the earlier invalid-active fail-closed behavior. PR43 held for
+    test-first repair and renewed convergence review.'
