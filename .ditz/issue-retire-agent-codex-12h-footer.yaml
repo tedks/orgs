@@ -1,0 +1,23 @@
+id: retire-agent-codex-12h-footer
+title: Recognize native Codex 12-hour completion footers during retirement
+desc: "Measured native Codex final footer `Worked for 2m 59s \u2022 11:30 PM` leaves
+  observation-only retirement pending because completion recognition accepts only
+  24-hour time. Fix the shared parser and add synthetic positive and negative fixtures,
+  preserving exact event DONE/DECLINED, latest assistant turn, native session identity,
+  and all exit guards. Demonstrate fixtures fail before the fix, then run regression
+  and mutation checks. No live retirement replay or bypass, no private event contents
+  in public records. Orgs owns source publication; dotfiles owns deployment and Chaos
+  owns its retirement continuations."
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-08T04:24:26-00:00
+references: []
+log_events:
+- time: 2026-11-08T04:24:26-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
