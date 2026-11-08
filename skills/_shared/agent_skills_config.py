@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import sys
 import stat
+import subprocess
 import tomllib
 
 KEYS = {
@@ -107,26 +108,38 @@ def load_config():
 
 
 def tmux_command(config=None):
-    """Select a pinned, active, generic, configured, or default tmux server."""
+    """Select a pin, responding active server, generic override, config, or default."""
     config = load_config() if config is None else config
     if os.environ.get('SPAWN_TMUX_SOCKET'):
         return ['tmux', '-S', os.environ['SPAWN_TMUX_SOCKET']]
     if os.environ.get('SPAWN_TMUX_LABEL'):
         return ['tmux', '-L', os.environ['SPAWN_TMUX_LABEL']]
+    rejected_active = False
     if os.environ.get('TMUX'):
         active = os.environ['TMUX'].split(',')[0]
         try:
-            if stat.S_ISSOCK(Path(active).stat().st_mode):
-                return ['tmux', '-S', active]
+            is_socket = stat.S_ISSOCK(Path(active).stat().st_mode)
         except OSError:
-            pass
-        raise ValueError('active TMUX socket unavailable; supply SPAWN_TMUX_SOCKET or SPAWN_TMUX_LABEL')
+            is_socket = False
+        if is_socket:
+            try:
+                probe = subprocess.run(
+                    ['tmux', '-N', '-S', active, 'display-message', '-p', '#{socket_path}'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=1, check=False)
+                if probe.returncode == 0:
+                    return ['tmux', '-S', active]
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        rejected_active = True
     if os.environ.get('AGENT_SKILLS_TMUX_SOCKET'):
         socket = config['tmux']['socket']
         return ['tmux', '-S' if '/' in socket else '-L', socket]
     socket = config['tmux']['socket']
     if socket:
         return ['tmux', '-S' if '/' in socket else '-L', socket]
+    if rejected_active:
+        return ['tmux', '-L', 'default']
     return ['tmux']
 
 

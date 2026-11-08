@@ -54,12 +54,14 @@ For non-tmux settings, explicit command options take precedence over legacy
 `RETIRE_*` / `SPAWN_*` variables, which take precedence over shared
 configuration. For tmux selection, nonempty per-call `SPAWN_TMUX_SOCKET` and
 `SPAWN_TMUX_LABEL` pins take precedence over every other source. Otherwise, a
-valid active `$TMUX` server takes precedence over the generic
-`AGENT_SKILLS_TMUX_SOCKET` override. Outside tmux, that generic override takes
-precedence over the file's `tmux.socket`, followed by the default server. A
-nonempty `$TMUX` naming an unavailable socket fails closed; only a per-call
-pin explicitly selects a different socket in that case. Pinned targets in an
-ongoing delivery or retirement continue to use their recorded socket.
+`$TMUX` server takes precedence over the generic `AGENT_SKILLS_TMUX_SOCKET`
+override only when its socket exists and answers a one-second, non-starting
+`display-message -p '#{socket_path}'` probe. A stale or unresponsive active
+socket falls through to the generic override, then the file's `tmux.socket`,
+then the default server. When a rejected `$TMUX` reaches the default, the
+resolver explicitly selects the default label so tmux does not retry the stale
+inherited socket. A per-call pin skips the active-server probe. Pinned targets
+in an ongoing delivery or retirement continue to use their recorded socket.
 Setting configuration never grants permission to create a repository, publish
 a shard, or operate on a host.
 
