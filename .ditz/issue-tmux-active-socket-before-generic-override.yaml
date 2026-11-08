@@ -1,0 +1,21 @@
+id: tmux-active-socket-before-generic-override
+title: Prefer the active tmux socket over generic configuration overrides
+desc: 'Ted''s socket rule via dotfiles CTO: explicit SPAWN_TMUX_SOCKET / SPAWN_TMUX_LABEL
+  per-call pins first, then a valid active TMUX socket, then generic AGENT_SKILLS_TMUX_SOCKET,
+  file config, and default. Change both Python tmux_command and shell tmux-ctx resolvers
+  with tests-first parity coverage. A nonempty unavailable active socket must continue
+  to fail closed unless a per-call pin explicitly overrides it. Do not include broad
+  pane migration or host deployment. Dotfiles counterpart will use the same order.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-08T04:27:23-00:00
+references: []
+log_events:
+- time: 2026-11-08T04:27:23-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
