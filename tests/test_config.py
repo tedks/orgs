@@ -117,11 +117,69 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout.splitlines(), ['tmux', '-S', socket_path])
             result = subprocess.run(command, env=env | {'AGENT_SKILLS_TMUX_SOCKET': 'explicit'}, text=True, capture_output=True)
-            self.assertEqual(result.stdout.splitlines(), ['tmux', '-L', 'explicit'])
+            self.assertEqual(result.stdout.splitlines(), ['tmux', '-S', socket_path])
             result = subprocess.run(command, env=self.env | {'TMUX': '/missing/socket,123,0'}, text=True, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('active TMUX socket unavailable', result.stderr)
             self.assertEqual(result.stdout, '')
+
+    def test_tmux_socket_precedence_matrix(self):
+        """Per-call pins, active context, generic overrides, config, then default."""
+        self.config.write_text('[tmux]\nsocket = "configured-label"\n')
+        helper = ROOT / 'skills/spawn-agent/scripts/tmux-ctx.sh'
+        shell = ['bash', '-c', 'set -e; source "$1"; printf "%s\\n" "${TMUX_CMD[@]}"',
+                 'test', str(helper)]
+        python = [sys.executable, '-c',
+                  'import sys;sys.path.insert(0,' + repr(str(LOADER.parent)) + ');'
+                  'from agent_skills_config import tmux_command;print("\\n".join(tmux_command()))']
+        # This is a live Unix-domain socket fixture, so $TMUX validity is tested
+        # by the same filesystem socket check used in production.
+        sock = socket.socket(socket.AF_UNIX)
+        self.addCleanup(sock.close)
+        active_path = str(self.root / 'active-precedence.sock')
+        sock.bind(active_path)
+        invalid_tmux = {'TMUX': '/missing/socket,123,0'}
+        cases = [
+            ('configured fallback', {}, ['tmux', '-L', 'configured-label']),
+            ('empty per-call pins are absent', {'SPAWN_TMUX_SOCKET': '', 'SPAWN_TMUX_LABEL': '',
+                                                'TMUX': ''},
+             ['tmux', '-L', 'configured-label']),
+            ('generic label', {'AGENT_SKILLS_TMUX_SOCKET': 'generic-label'},
+             ['tmux', '-L', 'generic-label']),
+            ('generic path', {'AGENT_SKILLS_TMUX_SOCKET': '/tmp/generic.sock'},
+             ['tmux', '-S', '/tmp/generic.sock']),
+            ('active beats generic label', {'TMUX': active_path + ',123,0',
+                                           'AGENT_SKILLS_TMUX_SOCKET': 'generic-label'},
+             ['tmux', '-S', active_path]),
+            ('active beats generic path', {'TMUX': active_path + ',123,0',
+                                          'AGENT_SKILLS_TMUX_SOCKET': '/tmp/generic.sock'},
+             ['tmux', '-S', active_path]),
+            ('per-call label beats active and generic', {'TMUX': active_path + ',123,0',
+                       'AGENT_SKILLS_TMUX_SOCKET': '/tmp/generic.sock', 'SPAWN_TMUX_LABEL': 'pinned-label'},
+             ['tmux', '-L', 'pinned-label']),
+            ('per-call socket beats active and generic', {'TMUX': active_path + ',123,0',
+                       'AGENT_SKILLS_TMUX_SOCKET': 'generic-label', 'SPAWN_TMUX_SOCKET': '/tmp/pinned.sock'},
+             ['tmux', '-S', '/tmp/pinned.sock']),
+            ('per-call label overrides invalid active TMUX', invalid_tmux | {'SPAWN_TMUX_LABEL': 'pinned-label'},
+             ['tmux', '-L', 'pinned-label']),
+            ('per-call socket overrides invalid active TMUX', invalid_tmux | {'SPAWN_TMUX_SOCKET': '/tmp/pinned.sock'},
+             ['tmux', '-S', '/tmp/pinned.sock']),
+        ]
+        for label, extra, expected in cases:
+            for command in (shell, python):
+                with self.subTest(label=label, implementation=command[0]):
+                    result = subprocess.run(command, env=self.env | extra, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), expected)
+
+        for command in (shell, python):
+            with self.subTest(implementation=command[0], invalid_active_with_generic=True):
+                result = subprocess.run(command, env=self.env | invalid_tmux |
+                                         {'AGENT_SKILLS_TMUX_SOCKET': 'generic-label'},
+                                         text=True, capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('active TMUX socket unavailable', result.stderr)
+                self.assertEqual(result.stdout, '')
 
     def test_delivery_resolution_pins_server_across_config_change(self):
         script = ROOT / 'skills/spawn-agent/scripts/tmux-message.py'

@@ -107,15 +107,12 @@ def load_config():
 
 
 def tmux_command(config=None):
-    """Explicit overrides > valid current tmux > configured fallback > default."""
+    """Select a pinned, active, generic, configured, or default tmux server."""
     config = load_config() if config is None else config
     if os.environ.get('SPAWN_TMUX_SOCKET'):
         return ['tmux', '-S', os.environ['SPAWN_TMUX_SOCKET']]
     if os.environ.get('SPAWN_TMUX_LABEL'):
         return ['tmux', '-L', os.environ['SPAWN_TMUX_LABEL']]
-    socket = config['tmux']['socket']
-    if os.environ.get('AGENT_SKILLS_TMUX_SOCKET'):
-        return ['tmux', '-S' if '/' in socket else '-L', socket]
     if os.environ.get('TMUX'):
         active = os.environ['TMUX'].split(',')[0]
         try:
@@ -124,6 +121,10 @@ def tmux_command(config=None):
         except OSError:
             pass
         raise ValueError('active TMUX socket unavailable; supply an explicit socket override')
+    if os.environ.get('AGENT_SKILLS_TMUX_SOCKET'):
+        socket = config['tmux']['socket']
+        return ['tmux', '-S' if '/' in socket else '-L', socket]
+    socket = config['tmux']['socket']
     if socket:
         return ['tmux', '-S' if '/' in socket else '-L', socket]
     return ['tmux']

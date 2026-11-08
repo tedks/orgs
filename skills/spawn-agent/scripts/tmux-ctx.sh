@@ -13,7 +13,7 @@
 #   SPAWN_TMUX_SOCKET=/tmp/example-tmux/server  (full path)
 #   SPAWN_TMUX_LABEL=example                   (-L name)
 #
-# Priority: explicit env > valid $TMUX > shared config fallback > default socket
+# Priority: per-call pin > valid $TMUX > generic override > config > default
 source "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../../_shared/config.sh"
 _AGENT_SKILLS_TMUX_SOCKET=$(agent_skills_get tmux.socket) || return $?
 
@@ -30,16 +30,6 @@ _resolve_tmux_cmd() {
         return
     fi
 
-    # Explicit common override selects a label or socket path.
-    if [[ -n "${AGENT_SKILLS_TMUX_SOCKET:-}" ]]; then
-        if [[ "$_AGENT_SKILLS_TMUX_SOCKET" == */* ]]; then
-            TMUX_CMD=(tmux -S "$_AGENT_SKILLS_TMUX_SOCKET")
-        else
-            TMUX_CMD=(tmux -L "$_AGENT_SKILLS_TMUX_SOCKET")
-        fi
-        return
-    fi
-
     # Auto-detect from $TMUX env var (format: /path/to/socket,pid,pane)
     if [[ -n "${TMUX:-}" ]]; then
         local socket_path="${TMUX%%,*}"
@@ -51,7 +41,8 @@ _resolve_tmux_cmd() {
         return 2
     fi
 
-    # File configuration is a fallback outside an active tmux server.
+    # The generic environment override is part of the resolved shared config;
+    # it is considered only after an active server.
     if [[ -n "$_AGENT_SKILLS_TMUX_SOCKET" ]]; then
         if [[ "$_AGENT_SKILLS_TMUX_SOCKET" == */* ]]; then
             TMUX_CMD=(tmux -S "$_AGENT_SKILLS_TMUX_SOCKET")

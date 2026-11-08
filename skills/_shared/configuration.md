@@ -50,15 +50,16 @@ a command name or an absolute path, never a cwd-relative path. Bare tmux labels
 such as `~label` remain literal labels. No `$VARIABLE` expansion
 occurs. Empty strings are allowed only for remote, roles, tmux and GitHub owner.
 
-Explicit command options take precedence over legacy `RETIRE_*` / `SPAWN_*`
-variables, which take precedence over shared configuration. Without an explicit environment
-socket override, a valid active `$TMUX` server takes precedence over the file
-configuration; the configured socket is a fallback outside tmux. If neither is
-available, the default server is used. A nonempty `$TMUX` naming an unavailable
-socket fails closed; explicitly select a different socket to override it.
-Pinned targets in an ongoing delivery or retirement continue to use their
-recorded socket. Setting configuration never grants permission to create a
-repository, publish a shard, or operate on a host.
+For tmux selection, nonempty per-call `SPAWN_TMUX_SOCKET` and
+`SPAWN_TMUX_LABEL` pins take precedence over every other source. Otherwise, a
+valid active `$TMUX` server takes precedence over the generic
+`AGENT_SKILLS_TMUX_SOCKET` override. Outside tmux, that generic override takes
+precedence over the file's `tmux.socket`, followed by the default server. A
+nonempty `$TMUX` naming an unavailable socket fails closed; only a per-call
+pin explicitly selects a different socket in that case. Pinned targets in an
+ongoing delivery or retirement continue to use their recorded socket.
+Setting configuration never grants permission to create a repository, publish
+a shard, or operate on a host.
 
 Read or validate configuration from an installed tree:
 
