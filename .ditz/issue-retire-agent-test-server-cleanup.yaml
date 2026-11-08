@@ -1,0 +1,25 @@
+id: retire-agent-test-server-cleanup
+title: Ensure retirement tests stop owned tmux servers on success and failure
+desc: "Dotfiles CTO reports approximately 250 stale retire-test-* sockets under the
+  local tmux socket directory after a retirement suite run on 2026-11-05 23:35\u201323:44.
+  Treat socket artifacts and running server processes separately: the report does
+  not establish that every socket has a live server. Audit per-test server ownership
+  and cleanup on success, assertion failure, exception and interrupted execution.
+  Ensure suites terminate only servers they created and release their owned socket
+  artifacts; add a regression proving resource cleanup. Any cleanup of existing artifacts
+  must enumerate exact entries and verify against current sessions/lane records before
+  deletion. Do not kill a shared tmux server or glob-delete shared temporary storage.
+  Separate from the bounded 12-hour footer parser fix."
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-08T04:24:27-00:00
+references: []
+log_events:
+- time: 2026-11-08T04:24:27-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
