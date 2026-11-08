@@ -1,0 +1,22 @@
+id: tmux-config-snapshot-override-branch
+title: Simplify redundant tmux generic-override branch with supplied config snapshots
+desc: 'PR #43 council (Anthropic N2, Google N1) found preexisting redundant AGENT_SKILLS_TMUX_SOCKET
+  branch in skills/_shared/agent_skills_config.py tmux_command. load_config already
+  folds overrides into tmux.socket. A caller-supplied config snapshot with empty socket
+  and a nonempty ambient override can produce tmux -L ''''. Follow up with tests for
+  supplied snapshots and remove the redundant branch if equivalent; retain eager validation
+  and shell/Python parity. Deferred from bounded active-socket precedence repair because
+  this is existing config-snapshot behavior, not introduced by its ordering change.'
+type: bugfix
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-08T04:36:52-00:00
+references: []
+log_events:
+- time: 2026-11-08T04:36:52-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
