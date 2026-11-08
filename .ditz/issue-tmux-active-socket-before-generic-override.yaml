@@ -10,8 +10,8 @@ type: bugfix
 component: default
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-08T04:27:23-00:00
 references: []
 log_events:
@@ -31,3 +31,11 @@ log_events:
     sockets fall through to generic/config/default. Explicit per-call pins still win.
     This supersedes the earlier invalid-active fail-closed behavior. PR43 held for
     test-first repair and renewed convergence review.'
+- time: 2026-11-08T05:33:16-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: 'Merged PR #43 as 3e180b3c927876ade1782b0dc34211b1bbac21c8 at accepted
+    head8844699. Explicit pins > responding active TMUX > generic/config/default,
+    portable bounded probe, dead/stalled fallback and explicit default, stdin isolation.
+    Config25 and exact-head repo/Nix gates PASS; OpenAI/Claude convergence CLEAN,
+    Google quota EMPTY. Dotfiles owns deployment.'
