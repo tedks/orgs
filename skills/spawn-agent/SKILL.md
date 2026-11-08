@@ -15,8 +15,10 @@ waiting for their turn to finish.
 
 1. Run `scripts/tmux-info.sh` from this skill to confirm the socket and targets.
    Read the [shared configuration](../_shared/configuration.md) for tmux and Codex defaults.
-   Scripts prefer a valid active `$TMUX` over file configuration; override with `SPAWN_TMUX_LABEL` or `SPAWN_TMUX_SOCKET`
-   when operating from outside the intended server.
+   Scripts prefer `$TMUX` only when its socket exists and the server answers a
+   short probe; an unresponsive server falls through to the generic override
+   and shared configuration. Per-call `SPAWN_TMUX_LABEL` or
+   `SPAWN_TMUX_SOCKET` pins take precedence over the active server.
 2. Use `scripts/agent-spawn.sh SESSION:WINDOW AGENT DIRECTORY [PROMPT]`.
    `AGENT` is `claude`, `codex`, or `agy`. For larger prompts pass
    `--prompt-file FILE`; the launcher preserves caller files.

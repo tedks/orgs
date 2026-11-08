@@ -4,10 +4,14 @@ import importlib.util
 import json
 import os
 from pathlib import Path
-import subprocess
 import socket
+import shutil
+import stat
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -35,6 +39,64 @@ class ConfigTests(unittest.TestCase):
         result = self.cli(extra=extra)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
+
+    def path_without_gnu_timeout(self):
+        bin_dir = self.root / 'path-without-timeout'
+        bin_dir.mkdir()
+        for name in ('bash', 'dirname', 'python3', 'readlink', 'tmux'):
+            executable = shutil.which(name)
+            self.assertIsNotNone(executable, f'{name} is required for the timeout-free PATH fixture')
+            os.symlink(executable, bin_dir / name)
+        self.assertIsNone(shutil.which('timeout', path=str(bin_dir)))
+        return str(bin_dir)
+
+    def start_private_tmux(self, socket_path):
+        private_path = Path(socket_path).resolve()
+        self.assertTrue(private_path.is_relative_to(self.root.resolve()))
+        binary = shutil.which('byobu-tmux') or shutil.which('tmux')
+        self.assertIsNotNone(binary, 'tmux is required for socket-selection fixtures')
+        env = self.env | {'TMUX_TMPDIR': str(self.root)}
+        server = [binary, '-S', socket_path, '-f', '/dev/null', 'new-session', '-d', '-s', 'fixture']
+
+        def stop():
+            subprocess.run(['tmux', '-S', socket_path, 'kill-server'], env=env,
+                           text=True, capture_output=True, timeout=3)
+
+        self.addCleanup(stop)
+        result = subprocess.run(server, env=env, text=True, capture_output=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return env
+
+    def start_nonresponsive_socket(self, socket_path):
+        listener = socket.socket(socket.AF_UNIX)
+        listener.bind(socket_path)
+        listener.listen(5)
+        listener.settimeout(0.1)
+        stop = threading.Event()
+        connections = []
+
+        def hold_connections():
+            while not stop.is_set():
+                try:
+                    connection, _ = listener.accept()
+                except TimeoutError:
+                    continue
+                except OSError:
+                    return
+                connections.append(connection)
+
+        worker = threading.Thread(target=hold_connections, daemon=True)
+        worker.start()
+
+        def cleanup():
+            stop.set()
+            listener.close()
+            worker.join(timeout=2)
+            for connection in connections:
+                connection.close()
+
+        self.addCleanup(cleanup)
+        return connections
 
     def test_missing_file_generic_defaults(self):
         data = self.load()
@@ -102,26 +164,199 @@ class ConfigTests(unittest.TestCase):
 
     def test_active_tmux_socket_wins_over_seeded_config(self):
         self.config.write_text('[tmux]\nsocket = "configured"\n')
-        sock = socket.socket(socket.AF_UNIX)
-        self.addCleanup(sock.close)
         socket_path = str(self.root / 'active.sock')
-        sock.bind(socket_path)
-        env = self.env | {'TMUX': socket_path + ',123,0'}
+        server_env = self.start_private_tmux(socket_path)
+        env = server_env | {'TMUX': socket_path + ',123,0'}
         shell = ['bash', '-c', 'set -e; source "$1"; printf "%s\\n" "${TMUX_CMD[@]}"',
                  'test', str(ROOT / 'skills/spawn-agent/scripts/tmux-ctx.sh')]
         python = [sys.executable, '-c',
                   'import sys;sys.path.insert(0,' + repr(str(LOADER.parent)) + ');'
                   'from agent_skills_config import tmux_command;print("\\n".join(tmux_command()))']
+        no_timeout_env = env | {'PATH': self.path_without_gnu_timeout()}
         for command in (shell, python):
             result = subprocess.run(command, env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout.splitlines(), ['tmux', '-S', socket_path])
             result = subprocess.run(command, env=env | {'AGENT_SKILLS_TMUX_SOCKET': 'explicit'}, text=True, capture_output=True)
-            self.assertEqual(result.stdout.splitlines(), ['tmux', '-L', 'explicit'])
+            self.assertEqual(result.stdout.splitlines(), ['tmux', '-S', socket_path])
             result = subprocess.run(command, env=self.env | {'TMUX': '/missing/socket,123,0'}, text=True, capture_output=True)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('active TMUX socket unavailable', result.stderr)
-            self.assertEqual(result.stdout, '')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), ['tmux', '-L', 'configured'])
+            result = subprocess.run(command, env=self.env | {'TMUX': '/missing/socket,123,0',
+                                                              'AGENT_SKILLS_TMUX_SOCKET': 'explicit'},
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), ['tmux', '-L', 'explicit'])
+            result = subprocess.run(command, env=no_timeout_env, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), ['tmux', '-S', socket_path])
+
+    def test_tmux_socket_precedence_matrix(self):
+        """Per-call pins, active context, generic overrides, config, then default."""
+        self.config.write_text('[tmux]\nsocket = "configured-label"\n')
+        helper = ROOT / 'skills/spawn-agent/scripts/tmux-ctx.sh'
+        shell = ['bash', '-c', 'set -e; source "$1"; printf "%s\\n" "${TMUX_CMD[@]}"',
+                 'test', str(helper)]
+        python = [sys.executable, '-c',
+                  'import sys;sys.path.insert(0,' + repr(str(LOADER.parent)) + ');'
+                  'from agent_skills_config import tmux_command;print("\\n".join(tmux_command()))']
+        active_path = str(self.root / 'active-precedence.sock')
+        server_env = self.start_private_tmux(active_path)
+        invalid_tmux = {'TMUX': '/missing/socket,123,0'}
+        cases = [
+            ('configured fallback', {}, ['tmux', '-L', 'configured-label']),
+            ('empty per-call pins are absent', {'SPAWN_TMUX_SOCKET': '', 'SPAWN_TMUX_LABEL': '',
+                                                'TMUX': ''},
+             ['tmux', '-L', 'configured-label']),
+            ('generic label', {'AGENT_SKILLS_TMUX_SOCKET': 'generic-label'},
+             ['tmux', '-L', 'generic-label']),
+            ('generic path', {'AGENT_SKILLS_TMUX_SOCKET': '/tmp/generic.sock'},
+             ['tmux', '-S', '/tmp/generic.sock']),
+            ('active beats generic label', {'TMUX': active_path + ',123,0',
+                                           'AGENT_SKILLS_TMUX_SOCKET': 'generic-label'},
+             ['tmux', '-S', active_path]),
+            ('active beats generic path', {'TMUX': active_path + ',123,0',
+                                          'AGENT_SKILLS_TMUX_SOCKET': '/tmp/generic.sock'},
+             ['tmux', '-S', active_path]),
+            ('per-call label beats active and generic', {'TMUX': active_path + ',123,0',
+                       'AGENT_SKILLS_TMUX_SOCKET': '/tmp/generic.sock', 'SPAWN_TMUX_LABEL': 'pinned-label'},
+             ['tmux', '-L', 'pinned-label']),
+            ('per-call socket beats active and generic', {'TMUX': active_path + ',123,0',
+                       'AGENT_SKILLS_TMUX_SOCKET': 'generic-label', 'SPAWN_TMUX_SOCKET': '/tmp/pinned.sock'},
+             ['tmux', '-S', '/tmp/pinned.sock']),
+            ('per-call label overrides invalid active TMUX', invalid_tmux | {'SPAWN_TMUX_LABEL': 'pinned-label'},
+             ['tmux', '-L', 'pinned-label']),
+            ('per-call socket overrides invalid active TMUX', invalid_tmux | {'SPAWN_TMUX_SOCKET': '/tmp/pinned.sock'},
+             ['tmux', '-S', '/tmp/pinned.sock']),
+        ]
+        for label, extra, expected in cases:
+            for command in (shell, python):
+                with self.subTest(label=label, implementation=command[0]):
+                    result = subprocess.run(command, env=server_env | extra, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), expected)
+
+        for label, extra, expected in [
+                ('empty generic override selects default', {'AGENT_SKILLS_TMUX_SOCKET': ''}, ['tmux']),
+                ('missing config selects default', {}, ['tmux'])]:
+            if label == 'missing config selects default':
+                self.config.unlink()
+            for command in (shell, python):
+                with self.subTest(label=label, implementation=command[0]):
+                    result = subprocess.run(command, env=server_env | extra, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), expected)
+
+        for generic, expected in [('generic-label', ['tmux', '-L', 'generic-label']),
+                                  ('/tmp/generic.sock', ['tmux', '-S', '/tmp/generic.sock'])]:
+            for command in (shell, python):
+                with self.subTest(implementation=command[0], invalid_active_with_generic=generic):
+                    result = subprocess.run(command, env=self.env | invalid_tmux |
+                                             {'AGENT_SKILLS_TMUX_SOCKET': generic},
+                                             text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), expected)
+
+    def test_dead_and_nonresponsive_tmux_sockets_fall_through(self):
+        self.config.write_text('[tmux]\nsocket = "configured-label"\n')
+        helper = ROOT / 'skills/spawn-agent/scripts/tmux-ctx.sh'
+        shell = ['bash', '-c', 'set -e; source "$1"; printf "%s\\n" "${TMUX_CMD[@]}"',
+                 'test', str(helper)]
+        python = [sys.executable, '-c',
+                  'import sys;sys.path.insert(0,' + repr(str(LOADER.parent)) + ');'
+                  'from agent_skills_config import tmux_command;print("\\n".join(tmux_command()))']
+        fallback = ['tmux', '-L', 'fallback-label']
+
+        dead_path = str(self.root / 'dead.sock')
+        dead = socket.socket(socket.AF_UNIX)
+        dead.bind(dead_path)
+        dead.close()
+        self.assertTrue(stat.S_ISSOCK(Path(dead_path).stat().st_mode))
+
+        stalled_path = str(self.root / 'stalled.sock')
+        connections = self.start_nonresponsive_socket(stalled_path)
+        for label, active_path in [('dead socket inode', dead_path), ('nonresponsive socket', stalled_path)]:
+            env = self.env | {'TMUX': active_path + ',123,0',
+                              'AGENT_SKILLS_TMUX_SOCKET': 'fallback-label'}
+            for command in (shell, python):
+                with self.subTest(label=label, implementation=command[0]):
+                    started = time.monotonic()
+                    result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=4)
+                    self.assertLess(time.monotonic() - started, 3)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), fallback)
+
+        before = len(connections)
+        for key, value, expected in [
+                ('SPAWN_TMUX_LABEL', 'pinned-label', ['tmux', '-L', 'pinned-label']),
+                ('SPAWN_TMUX_SOCKET', '/tmp/pinned.sock', ['tmux', '-S', '/tmp/pinned.sock'])]:
+            for command in (shell, python):
+                with self.subTest(pin=key, implementation=command[0]):
+                    result = subprocess.run(command, env=self.env | {'TMUX': stalled_path + ',123,0', key: value},
+                                            text=True, capture_output=True, timeout=3)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), expected)
+                    time.sleep(0.05)
+                    self.assertEqual(len(connections), before)
+        self.assertEqual(len(connections), before)
+        self.assertTrue(Path(dead_path).exists())
+
+    def test_rejected_tmux_reaches_isolated_default_server(self):
+        socket_dir = self.root / f'tmux-{os.getuid()}'
+        socket_dir.mkdir(mode=0o700)
+        default_path = str(socket_dir / 'default')
+        server_env = self.start_private_tmux(default_path)
+        socket_result = subprocess.run(['tmux', '-L', 'default',
+                                        'display-message', '-p', '#{socket_path}'],
+                                       env=server_env, text=True, capture_output=True, timeout=3)
+        self.assertEqual(socket_result.returncode, 0, socket_result.stderr)
+        queried_default = socket_result.stdout.strip()
+        resolved_default = Path(queried_default).resolve()
+        self.assertTrue(resolved_default.is_relative_to(self.root.resolve()))
+        self.assertEqual(resolved_default, Path(default_path).resolve())
+        stale_env = server_env | {'TMUX': str(self.root / 'dead-explicit.sock') + ',123,0'}
+        helper = ROOT / 'skills/spawn-agent/scripts/tmux-ctx.sh'
+        shell = ['bash', '-c', 'set -e; source "$1"; printf "%s\\n" "${TMUX_CMD[@]}";'
+                 ' "${TMUX_CMD[@]}" display-message -p "#{socket_path}"',
+                 'test', str(helper)]
+        python = [sys.executable, '-c',
+                  'import subprocess,sys;sys.path.insert(0,' + repr(str(LOADER.parent)) + ');'
+                  'from agent_skills_config import tmux_command;cmd=tmux_command();'
+                  'print("\\n".join(cmd));p=subprocess.run(cmd+["display-message","-p","#{socket_path}"],'
+                  'check=True,text=True,capture_output=True);print(p.stdout.strip())']
+        for command in (shell, python):
+            with self.subTest(implementation=command[0]):
+                result = subprocess.run(command, env=stale_env, text=True, capture_output=True, timeout=4)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), ['tmux', '-L', 'default', queried_default])
+
+    def test_tmux_probe_does_not_consume_caller_stdin(self):
+        socket_path = str(self.root / 'stdin-probe.sock')
+        sock = socket.socket(socket.AF_UNIX)
+        sock.bind(socket_path)
+        self.addCleanup(sock.close)
+        bin_dir = self.root / 'bin'
+        bin_dir.mkdir()
+        tmux_stub = bin_dir / 'tmux'
+        tmux_stub.write_text('#!' + sys.executable + '\nimport sys\nsys.stdin.read()\n')
+        tmux_stub.chmod(0o700)
+        env = self.env | {'PATH': str(bin_dir) + ':' + self.env['PATH'],
+                          'TMUX': socket_path + ',123,0'}
+        helper = ROOT / 'skills/spawn-agent/scripts/tmux-ctx.sh'
+        shell = ['bash', '-c', 'source "$1"; printf "%s\\n" "${TMUX_CMD[@]}";'
+                 ' IFS= read -r payload; printf "input=%s\\n" "$payload"',
+                 'test', str(helper)]
+        python = [sys.executable, '-c',
+                  'import sys;sys.path.insert(0,' + repr(str(LOADER.parent)) + ');'
+                  'from agent_skills_config import tmux_command;'
+                  'print("\\n".join(tmux_command()));print("input="+sys.stdin.readline().strip())']
+        expected = ['tmux', '-S', socket_path, 'input=caller-payload']
+        for command in (shell, python):
+            with self.subTest(implementation=command[0]):
+                result = subprocess.run(command, env=env, input='caller-payload\n',
+                                        text=True, capture_output=True, timeout=3)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), expected)
 
     def test_delivery_resolution_pins_server_across_config_change(self):
         script = ROOT / 'skills/spawn-agent/scripts/tmux-message.py'
@@ -188,16 +423,18 @@ class ConfigTests(unittest.TestCase):
             self.assertIn('Override: ' + key + '=' + value, result.stdout)
             self.assertIn('Selected command: tmux ' + selector, result.stdout)
 
-    def test_tmux_selection_error_reports_unavailable_context(self):
+    def test_tmux_selection_falls_back_for_unavailable_context(self):
         spec = importlib.util.spec_from_file_location('context_error_delivery', ROOT / 'skills/spawn-agent/scripts/tmux-message.py')
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
         self.addCleanup(sys.modules.pop, spec.name, None)
         spec.loader.exec_module(module)
         with patch.dict(os.environ, self.env | {'TMUX': '/missing/controller.sock,123,0'}, clear=True), patch.object(module.subprocess, 'run') as run:
-            with self.assertRaisesRegex(module.DeliveryError, 'tmux-context-unavailable'):
-                module.Tmux('%7')
-            run.assert_not_called()
+            run.return_value.stdout = '101:%7\n'
+            delivery = module.Tmux('%7')
+            self.assertEqual(delivery.base, ['tmux', '-L', 'default'])
+            self.assertEqual(run.call_args.kwargs['env']['SPAWN_TMUX_LABEL'], 'default')
+            self.assertNotIn('TMUX', run.call_args.kwargs['env'])
 
     def test_retirement_config_and_legacy_repo(self):
         script = ROOT / 'skills/retire-agent/scripts/retire.py'
@@ -355,8 +592,8 @@ class ConfigTests(unittest.TestCase):
                             if hasattr(retirement, 'event_lock'):
                                 retirement.event_lock.close()
         with patch.dict(os.environ, env, clear=True):
-            with self.assertRaisesRegex(ValueError, 'active TMUX socket unavailable'):
-                module.Retirement(SimpleNamespace(resume=None))
+            retirement = module.Retirement(SimpleNamespace(resume=None))
+            self.assertEqual(retirement.tmux, ['tmux', '-L', 'default'])
 
     def test_hygiene_remote_source_stays_standalone(self):
         # Exercise --remote using source only: no checkout or import path remotely.

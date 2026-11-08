@@ -13,11 +13,31 @@
 #   SPAWN_TMUX_SOCKET=/tmp/example-tmux/server  (full path)
 #   SPAWN_TMUX_LABEL=example                   (-L name)
 #
-# Priority: explicit env > valid $TMUX > shared config fallback > default socket
+# Priority: per-call pin > responding $TMUX > generic override > config > default
 source "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../../_shared/config.sh"
 _AGENT_SKILLS_TMUX_SOCKET=$(agent_skills_get tmux.socket) || return $?
 
+_tmux_socket_responds() {
+    local socket_path="$1"
+    [[ -S "$socket_path" ]] || return 1
+    python3 -c '
+import subprocess
+import sys
+
+try:
+    result = subprocess.run(
+        ["tmux", "-S", sys.argv[1], "display-message", "-p", "#{socket_path}"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        timeout=1, check=False)
+except (OSError, subprocess.TimeoutExpired):
+    raise SystemExit(1)
+raise SystemExit(result.returncode != 0)
+' "$socket_path"
+}
+
 _resolve_tmux_cmd() {
+    local active_rejected=0
+
     # Explicit socket path takes highest priority
     if [[ -n "${SPAWN_TMUX_SOCKET:-}" ]]; then
         TMUX_CMD=(tmux -S "$SPAWN_TMUX_SOCKET")
@@ -30,8 +50,19 @@ _resolve_tmux_cmd() {
         return
     fi
 
-    # Explicit common override selects a label or socket path.
-    if [[ -n "${AGENT_SKILLS_TMUX_SOCKET:-}" ]]; then
+    # Auto-detect from $TMUX env var (format: /path/to/socket,pid,pane)
+    if [[ -n "${TMUX:-}" ]]; then
+        local socket_path="${TMUX%%,*}"
+        if _tmux_socket_responds "$socket_path"; then
+            TMUX_CMD=(tmux -S "$socket_path")
+            return
+        fi
+        active_rejected=1
+    fi
+
+    # The generic environment override is part of the resolved shared config;
+    # it is considered only after an active server.
+    if [[ -n "$_AGENT_SKILLS_TMUX_SOCKET" ]]; then
         if [[ "$_AGENT_SKILLS_TMUX_SOCKET" == */* ]]; then
             TMUX_CMD=(tmux -S "$_AGENT_SKILLS_TMUX_SOCKET")
         else
@@ -40,24 +71,10 @@ _resolve_tmux_cmd() {
         return
     fi
 
-    # Auto-detect from $TMUX env var (format: /path/to/socket,pid,pane)
-    if [[ -n "${TMUX:-}" ]]; then
-        local socket_path="${TMUX%%,*}"
-        if [[ -S "$socket_path" ]]; then
-            TMUX_CMD=(tmux -S "$socket_path")
-            return
-        fi
-        echo 'active TMUX socket unavailable; supply an explicit socket override' >&2
-        return 2
-    fi
-
-    # File configuration is a fallback outside an active tmux server.
-    if [[ -n "$_AGENT_SKILLS_TMUX_SOCKET" ]]; then
-        if [[ "$_AGENT_SKILLS_TMUX_SOCKET" == */* ]]; then
-            TMUX_CMD=(tmux -S "$_AGENT_SKILLS_TMUX_SOCKET")
-        else
-            TMUX_CMD=(tmux -L "$_AGENT_SKILLS_TMUX_SOCKET")
-        fi
+    # A rejected $TMUX would still affect bare tmux in Python callers, so use
+    # the same explicit default server selector in both implementations.
+    if (( active_rejected )); then
+        TMUX_CMD=(tmux -L default)
         return
     fi
 
