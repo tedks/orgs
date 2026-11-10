@@ -1,0 +1,35 @@
+id: orgs-survey-readonly-boundary-ruling
+title: Should read-only and private no-diff work use a lighter boundary ritual?
+desc: 'Observation: reviewers and bounded research lanes reported duplicated state
+  writes and no-diff source pushes; a reviewer in another owner''s worktree could
+  not safely follow a generic push instruction. Details remain private.
+
+  Options:
+
+  1. Permit one private status/acceptance artifact and tracker disposition for no-diff
+  work, without a source commit or PR; retain exact-head evidence and receipts where
+  applicable.
+
+  2. Require the full commit/push/PR ritual for every lane.
+
+  3. Leave exceptions to each project.
+
+  Recommendation: option 1 with an explicit no-source-diff check and ownership boundary.
+
+  Who decides: Ted, because this changes common doctrine/global instructions.
+
+  What it blocks: generic role-specific boundary wording. Current private research
+  can still record its actual disposition.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:58:48-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:58:48-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
