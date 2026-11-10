@@ -13,7 +13,9 @@ Crystal warns a sprint lead when two concurrently owned branches cannot be integ
 - [x] (2026-11-10) Extend `tools/crystal/test-crystal.sh` with negative cases and mutation checks.
 - [x] (2026-11-10) Align `skills/crystal/SKILL.md` and `tools/crystal/README.md` with actual behavior and operator delivery.
 - [x] (2026-11-10) Run first exact-head gates and push draft PR #45 at `a3e3cde`.
-- [ ] Repair first council findings, rerun exact-head gates and a clean convergence round, then mark PR ready and record outcome.
+- [x] (2026-11-10) Repair first council findings and obtain a clean convergence round at `9962b76`.
+- [x] (2026-11-10) Merge platform graph master, run the combined Bazel and Nix gates, and obtain a fresh clean changed-base council round at `c73ed95`.
+- [x] (2026-11-10) Record the remaining non-blocking polish in `crystal-timeout-report-polish` and align the operator docs with the landed Bazel target. The live PR record carries later exact-head review and ready receipts.
 
 ## Surprises & Discoveries
 
@@ -22,6 +24,8 @@ Crystal warns a sprint lead when two concurrently owned branches cannot be integ
 - The checker tests only merged trees. A red branch alone can therefore be misreported as a semantic conflict.
 - The new fixture suite passed under `nix develop`; three private mutation copies, which restored historical selection, disabled the baseline guard, and disabled the stale-head guard respectively, each made the suite fail. The mutations did not touch the source checkout.
 - First council round found that a timed-out merged test had been called semantic, and an unrelated red baseline obscured a real pair conflict in the summary. The first timeout fixture condition did not actually trigger; two explicit branch marker files made the combined-only timeout case deterministic. The revised fixture passes.
+- Five more private mutation copies disabled timeout classification, the mixed summary, full SHA stamps, pinned pair SHAs, and tree archive fidelity. Each made the fixture suite fail. Combined with the earlier three, eight guards have negative evidence.
+- Platform PR #44 landed a Bazel target at `//tools/crystal:crystal_test` without changing the script entrypoints. The merged Crystal branch passed that target and `nix flake check`; `git pull --rebase` replayed platform commits, so a normal merge restored current master ancestry and the combined gates were rerun before push.
 
 ## Decision Log
 
@@ -34,7 +38,7 @@ Crystal warns a sprint lead when two concurrently owned branches cannot be integ
 
 ## Outcomes & Retrospective
 
-Draft PR #45 was pushed at `a3e3cde` after local gates. First formal council round recorded two Important findings and an empty Google seat due to quota. Repairs are under test; a new exact-head gate and formal convergence round remain.
+PR #45 carries the active-branch checker, baseline proof, stale-head report, and operator walkthrough. The first formal council round found two Important issues. Both were fixed, mutation-checked, and cleared in a second round. After platform PR #44 landed, a fresh changed-base round at `c73ed95` found zero Critical/Important; the Google seat remained empty because of quota. The merged tree passed the published Crystal Bazel target, Nix flake check, the standalone fixture suite, and applicable repository tests. Non-blocking polish is filed in `crystal-timeout-report-polish`. The PR's live round records and exact head determine its final review state; CTO acceptance and merge remain outside this package.
 
 ## Context and Orientation
 
@@ -48,7 +52,7 @@ In `test-crystal.sh`, retain the existing textual, semantic, compatible, base-on
 
 ## Concrete Steps
 
-From `/home/tedks/Projects/orgs/crystal-refresh-20261110`, edit only the files named above. Run `nix develop --command bash tools/crystal/test-crystal.sh` and expect the final `PASS` line. Run `bash -n tools/crystal/crystal-check.sh tools/crystal/test-crystal.sh` and expect exit 0. The fixture test runs only against disposable repositories; never pass live product branches without owned revisions and test authority.
+From the assigned Crystal worktree, edit only the five files named above. Run `nix develop --command bash tools/crystal/test-crystal.sh` and expect the final `PASS` line. With the landed platform graph, also run `nix develop --command bazel --batch test //tools/crystal:crystal_test --nocache_test_results --test_output=errors` and expect 1/1 passed. Run `nix flake check` and `bash -n tools/crystal/crystal-check.sh tools/crystal/test-crystal.sh`; both should exit 0. The fixture tests use disposable repositories; never pass live product branches without owned revisions and test authority.
 
 ## Validation and Acceptance
 
@@ -64,8 +68,9 @@ Baseline at `3e180b3`: `tools/crystal/test-crystal.sh` printed `PASS: crystal di
 
 ## Interfaces and Dependencies
 
-Keep `tools/crystal/crystal-check.sh` and `tools/crystal/test-crystal.sh` executable at their existing paths for the separate Bazel graph onboarding lane. The checker needs Bash 4, Git with `merge-tree --write-tree`, tar, and optionally GNU `timeout`; the project provides its tested environment through Nix. This change adds no build graph files or runtime data assets.
+Keep `tools/crystal/crystal-check.sh` and `tools/crystal/test-crystal.sh` executable at their existing paths. Platform PR #44 owns `tools/crystal/BUILD.bazel`; this change adds no graph files or runtime data assets. The checker needs Bash 4, Git with `merge-tree --write-tree`, tar, and optionally GNU `timeout`; the project provides its tested environment through Nix.
 
 Plan revision 2026-11-10: created from source audit to bound the implementation and preserve published entrypoints.
 Plan revision 2026-11-10: marked implemented steps after the fixture suite and three negative mutation checks passed; formal gates and review remain.
 Plan revision 2026-11-10: recorded first formal council findings and the bounded timeout, mixed-summary, and archive-fidelity repairs.
+Plan revision 2026-11-10: recorded merged platform graph, exact combined gates, changed-base council result, and the non-blocking follow-up issue; live PR records govern subsequent head changes.

@@ -22,4 +22,4 @@ Requires Bash 4 or later, Git 2.38 or later, and tar. GNU `timeout` is used when
 
 ## Fixture tests
 
-Run `nix develop --command bash tools/crystal/test-crystal.sh` from the orgs checkout. It creates disposable Git repositories and checks textual, semantic, clean, baseline-red, no-argument, stale-head, and isolation behavior. The script entrypoints remain stable for the separate build-graph targets.
+Run `nix develop --command bash tools/crystal/test-crystal.sh` from the orgs checkout, or `nix develop --command bazel --batch test //tools/crystal:crystal_test --nocache_test_results --test_output=errors` through the published Bazel target. The fixture creates disposable Git repositories and checks textual, semantic, clean, baseline-red, mixed error/conflict, timeout, export-subst fidelity, no-argument, stale-head, and isolation behavior. Both entrypoints use the same fixture script.
