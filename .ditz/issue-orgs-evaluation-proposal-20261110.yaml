@@ -9,8 +9,8 @@ type: task
 component: bench
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-10T08:32:20-00:00
 references: []
 log_events:
@@ -22,3 +22,8 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-10T08:38:15-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: Private evaluation proposal completed; no benchmark execution or source
+    changes in this issue.
