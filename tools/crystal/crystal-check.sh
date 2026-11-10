@@ -3,11 +3,9 @@
 #
 # Textual conflicts are detected with `git merge-tree --write-tree`, which
 # computes the merge without touching the index, any worktree, or any ref.
-# Semantic conflicts (a clean merge whose tests fail) are detected by
-# checking the merged tree out as PLAIN FILES (via a throwaway index +
-# `git checkout-index`, no .git in the scratch dir) and running the
-# boundary-test command there with git's environment variables and OLDPWD
-# unset.
+# Semantic conflicts (two green inputs whose clean merge fails the tests)
+# are detected by extracting each pinned tree as PLAIN FILES with git archive
+# (no .git in the scratch dir) and running the same boundary-test command.
 #
 # Isolation is best-effort against ACCIDENTS, not a security sandbox against
 # hostile code. It defeats the common accidental mutation — a test that runs
@@ -38,7 +36,7 @@ usage() {
     cat >&2 <<'EOF'
 usage: crystal-check.sh [--base <branch>] [--test-cmd <cmd>] [--timeout <sec>] [branch ...]
 
-Checks each named branch against the base, and every pair of named
+Checks each explicitly named branch against the base, and every pair of named
 branches against each other, for textual merge conflicts — and, when
 --test-cmd is given, for semantic conflicts: a clean merge whose test
 command fails. The command runs via `bash -c` with the merged tree
@@ -48,7 +46,8 @@ Only local branch names are accepted (not tags, SHAs, or HEAD); each is
 pinned to a commit once, up front, so a concurrent ref update cannot make
 the report and the tested tree disagree.
 
-Default branches: every local branch except the base (deduplicated).
+No named branches: clean no-op. Select current active branches explicitly;
+the local branch list may include historical worktrees.
 Default base: master, else main.
 Default timeout: 120s per test command (0 disables; needs coreutils
 `timeout`, else the test runs unbounded and a note is printed once).
@@ -92,12 +91,6 @@ if [ -z "$base" ]; then
 fi
 git show-ref --verify -q "refs/heads/$base" || die "base is not a local branch: $base"
 
-if [ ${#branches[@]} -eq 0 ]; then
-    while IFS= read -r b; do
-        [ "$b" = "$base" ] || branches+=("$b")
-    done < <(git for-each-ref --format='%(refname:short)' refs/heads)
-fi
-
 # Validate (local branches only), drop the base, and deduplicate while
 # preserving order — so an explicit `base` or a repeated name cannot produce
 # self-merges or doubled stanzas.
@@ -124,9 +117,9 @@ done
 # is vacuously clean, not an error.
 if [ ${#branches[@]} -eq 0 ]; then
     echo "# Crystal report — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "base: ${base}@$(git rev-parse --short "${sha[$base]}")"
+    echo "base: ${base}@${sha[$base]}"
     echo
-    echo "summary: all clean (no non-base branches)"
+    echo "summary: all clean (no active branches selected)"
     exit 0
 fi
 
@@ -152,6 +145,7 @@ trap cleanup EXIT
 found_conflict=0
 had_error=0
 wt_seq=0
+declare -A baseline_ok=()
 
 # Git's own environment variables, unset before running a test so an
 # inherited GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE cannot point it back at the
@@ -182,6 +176,21 @@ run_test() {
     ) >/dev/null 2>&1
 }
 
+# test_tree <commit-or-tree> — extract a separate plain-file copy for each
+# baseline/pair. Return 0 for green, 1 for red tests, 2 for extraction error.
+test_tree() {
+    local tree=$1 wt rc
+    wt_seq=$((wt_seq + 1)); wt="$scratch_root/wt-$wt_seq"
+    mkdir "$wt" || return 2
+    if ! git archive --format=tar "$tree" | tar -x -C "$wt"; then
+        rm -rf "$wt"
+        return 2
+    fi
+    if run_test "$wt"; then rc=0; else rc=1; fi
+    rm -rf "$wt" || return 2
+    return "$rc"
+}
+
 # join_conflicts — read conflicted paths on stdin, emit ", "-joined (paste
 # -d cycles single chars, so it is not usable for a two-char separator).
 join_conflicts() {
@@ -195,8 +204,8 @@ join_conflicts() {
 # check_pair X Y — one report stanza; may set found_conflict/had_error.
 check_pair() {
     local x=$1 y=$2 xs=${sha[$1]} ys=${sha[$2]}
-    local mt_out mt_status=0 tree conflicts wt
-    echo "## ${x}@$(git rev-parse --short "$xs") × ${y}@$(git rev-parse --short "$ys")"
+    local mt_out mt_status=0 tree conflicts test_status=0
+    echo "## ${x}@${xs} × ${y}@${ys}"
 
     # stdout only: git guarantees the tree OID at the head of STDOUT, so a
     # warning on stderr can never be mistaken for it.
@@ -205,19 +214,16 @@ check_pair() {
         echo "merge: clean"
         tree=${mt_out%%$'\n'*}
         if [ -n "$test_cmd" ]; then
-            wt_seq=$((wt_seq + 1)); wt="$scratch_root/wt-$wt_seq"; mkdir "$wt"
-            # Extract the merged tree as plain files with `git archive`.
-            # Settled v0 choice (do not flip back to checkout-index): archive
-            # emits stored blobs and runs NO clean/smudge filter code, so a
-            # repo-configured filter (e.g. LFS) cannot execute side effects
-            # or hit the network from a speculative background check. The
-            # cost is that archive honors export-ignore/export-subst, so a
-            # repo relying on those for its buildable tree is out of scope
-            # for v0 semantic checks — the safer failure of the two.
-            git archive --format=tar "$tree" | tar -x -C "$wt"
-            if run_test "$wt"; then echo "tests: pass"
-            else echo "tests: FAIL"; found_conflict=1; fi
-            rm -rf "$wt"
+            if [ "${baseline_ok[$x]:-0}" -ne 1 ] || [ "${baseline_ok[$y]:-0}" -ne 1 ]; then
+                echo "tests: skipped (input baseline not green)"
+            else
+                test_tree "$tree" || test_status=$?
+                case "$test_status" in
+                    0) echo "tests: pass" ;;
+                    1) echo "tests: FAIL (semantic conflict)"; found_conflict=1 ;;
+                    2) echo "tests: ERROR (tree extraction)"; had_error=1 ;;
+                esac
+            fi
         else
             echo "tests: skipped (no --test-cmd)"
         fi
@@ -237,8 +243,21 @@ check_pair() {
 }
 
 echo "# Crystal report — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "base: ${base}@$(git rev-parse --short "${sha[$base]}")"
+echo "base: ${base}@${sha[$base]}"
 echo
+
+if [ -n "$test_cmd" ]; then
+    for b in "$base" "${branches[@]}"; do
+        baseline_status=0
+        test_tree "${sha[$b]}" || baseline_status=$?
+        case "$baseline_status" in
+            0) echo "baseline: ${b}@${sha[$b]} PASS"; baseline_ok[$b]=1 ;;
+            1) echo "baseline: ${b}@${sha[$b]} FAIL"; had_error=1 ;;
+            2) echo "baseline: ${b}@${sha[$b]} ERROR (tree extraction)"; had_error=1 ;;
+        esac
+    done
+    echo
+fi
 
 for b in "${branches[@]}"; do
     check_pair "$base" "$b"
@@ -248,6 +267,16 @@ for ((i = 0; i < n; i++)); do
     for ((j = i + 1; j < n; j++)); do
         check_pair "${branches[$i]}" "${branches[$j]}"
     done
+done
+
+# A pinned result stays internally consistent when a ref moves, but an
+# operator must not act on it as if it described the current branch heads.
+for b in "$base" "${branches[@]}"; do
+    current=$(git rev-parse --verify -q "refs/heads/$b^{commit}" 2>/dev/null) || current="<missing>"
+    if [ "$current" != "${sha[$b]}" ]; then
+        echo "stale: ${b} moved from ${sha[$b]} to $current"
+        had_error=1
+    fi
 done
 
 if   [ "$had_error" -eq 1 ];      then echo "summary: errors — see above"; exit 2

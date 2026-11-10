@@ -9,6 +9,9 @@
 #   3. compatible pair    (clean merge, test command passes)
 #   4. base-only repo     (no non-base branch → vacuously clean, exit 0)
 #   5. sandbox isolation  (a side-effecting test cannot mutate the real repo)
+#   6. no-argument no-op despite historical local branches
+#   7. red input baseline is an error, never a semantic conflict
+#   8. a moved input ref makes the pinned report stale
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -73,6 +76,8 @@ git commit -qam sem-b
 # ok-a: unrelated change — compatible with sem-b.
 git checkout -qb ok-a master
 printf 'unrelated\n' > other.txt && git add other.txt && git commit -qm ok-a
+git checkout -qb red-alone master
+printf 'X=9\n' > lib.sh && git commit -qam red-alone
 git checkout -q master
 
 # 1. textual conflict detected, exit 1, names the file
@@ -156,4 +161,38 @@ after6=$(branch_names)
 before=$before6
 after=$after6"
 
-echo "PASS: crystal distinguishes textual/semantic/clean, handles base-only, and sandboxes tests (env, OLDPWD, upward-discovery)"
+# No branches means no active pair, even though this fixture has several
+# historical refs. This fails if the old all-local-branches default returns.
+noop_status=0
+noop_out=$("$crystal" --base master --test-cmd 'bash main.sh' 2>&1) || noop_status=$?
+[ "$noop_status" -eq 0 ] || fail "no-argument check should be a clean no-op:
+$noop_out"
+grep -q 'no active branches selected' <<<"$noop_out" || fail "no-argument report lacks no-op disposition:
+$noop_out"
+grep -q '^## ' <<<"$noop_out" && fail "no-argument check selected historical branches:
+$noop_out"
+
+# red-alone fails its own test. Its clean merge with sem-b must not be
+# labelled a semantic conflict; the same command has no valid green baseline.
+run_crystal red-alone sem-b
+[ "$status" -eq 2 ] || fail "red baseline: expected exit 2, got $status:
+$out"
+grep -q 'baseline: red-alone@.* FAIL' <<<"$out" || fail "red baseline not reported:
+$out"
+red_stanza=$(stanza 'red-alone@.* × sem-b@')
+grep -q 'merge: clean' <<<"$red_stanza" || fail "red baseline pair should merge cleanly:
+$out"
+grep -q 'tests: skipped (input baseline not green)' <<<"$red_stanza" || fail "red baseline pair was classified as a semantic conflict:
+$out"
+
+# A fixture-only test command moves ok-a while Crystal is checking its
+# pinned commit. The report stays internally consistent but must say stale.
+printf -v stale_cmd 'git -C %q update-ref refs/heads/ok-a %q; true' "$tmp" "$(git rev-parse sem-a)"
+stale_status=0
+stale_out=$("$crystal" --base master --test-cmd "$stale_cmd" ok-a 2>&1) || stale_status=$?
+[ "$stale_status" -eq 2 ] || fail "moved head: expected exit 2, got $stale_status:
+$stale_out"
+grep -q '^stale: ok-a moved from ' <<<"$stale_out" || fail "moved head not marked stale:
+$stale_out"
+
+echo "PASS: crystal distinguishes textual/semantic/clean, proves green baselines, ignores historical refs, detects stale heads, and isolates tests"
