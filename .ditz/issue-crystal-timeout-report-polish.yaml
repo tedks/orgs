@@ -1,0 +1,21 @@
+id: crystal-timeout-report-polish
+title: Crystal timeout diagnostics and report wording polish
+desc: 'Follow-up from PR #45 council nits. Distinguish a boundary test''s own exit
+  124/125/137 from GNU timeout where practical, or document the conservative ERROR
+  classification precisely; show an explicit SKIP when the timeout fixture cannot
+  run; and clarify that a moved base invalidates every pair containing that ref. These
+  are non-blocking polish items deferred to keep the active-branch and baseline repair
+  small. Do not weaken the conservative exit-2 classification without a failing fixture.'
+type: task
+component: crystal
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:53:54-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:53:54-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
