@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:private"])
+
+test_suite(
+    name = "portable_tools_test",
+    tests = [
+        "//tools/crystal:crystal_test",
+        "//tools/standup:standup_test",
+    ],
+)
