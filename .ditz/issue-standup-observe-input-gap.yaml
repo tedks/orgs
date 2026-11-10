@@ -1,0 +1,32 @@
+id: standup-observe-input-gap
+title: Align standup observe digest with its documented inputs
+desc: 'The standup skill says observe inputs include status entries, event ledger
+  since last standup, git log and open PRs. The executable tools/standup/standup.sh
+  observe currently enumerates bus agents, counts pending messages, finds a git commit
+  whose message mentions the agent id, and prints one status/<agent>.md file. It does
+  not read the event ledger or open PRs. A chair relying only on this output can miss
+  cross-lane duplication or a changed review state. Its commit-age flag is only a
+  candidate stall; docs/bench/CONTAMINATION-VECTORS.md documents an earlier false
+  stall from non-unique agent ids.
+
+
+  Smallest followup: choose and document the actual contract. Either narrow the skill''s
+  claim and require the chair to supply existing ledger/PR evidence separately, or
+  add bounded read-only inputs with tests showing a relevant event/PR appears and
+  irrelevant/no-commit activity does not trigger a false halt. Do not add a new critic
+  agent or approval gate as part of this issue. Decision owner: Orgs CTO for execution;
+  Ted only if changing the intended standup product behavior. This is not a prerequisite
+  for a manual, shadow-only necessity pilot using a supplied snapshot.'
+type: bugfix
+component: standup
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:38:10-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:38:10-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
