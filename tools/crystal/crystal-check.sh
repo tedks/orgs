@@ -25,9 +25,8 @@
 #     Boundary-test commands must not daemonize.
 #
 # Requires: bash >= 4 (associative arrays); git >= 2.38 (both checked); a
-# coreutils `timeout` for --timeout. The test command should be green on each
-# branch individually — a branch red on its own makes every pairing FAIL,
-# which is noise.
+# coreutils `timeout` for --timeout. Red input baselines make dependent pair
+# tests inconclusive; they are reported as errors, not semantic conflicts.
 set -Eeuo pipefail
 
 [ "${BASH_VERSINFO[0]:-0}" -ge 4 ] || { echo "crystal: bash >= 4 required" >&2; exit 2; }
@@ -39,7 +38,8 @@ usage: crystal-check.sh [--base <branch>] [--test-cmd <cmd>] [--timeout <sec>] [
 Checks each explicitly named branch against the base, and every pair of named
 branches against each other, for textual merge conflicts — and, when
 --test-cmd is given, for semantic conflicts: a clean merge whose test
-command fails. The command runs via `bash -c` with the merged tree
+command fails after both input commits pass it alone. The command runs via
+`bash -c` with the merged tree
 extracted as plain files (no .git) as its working directory.
 
 Only local branch names are accepted (not tags, SHAs, or HEAD); each is
@@ -52,8 +52,9 @@ Default base: master, else main.
 Default timeout: 120s per test command (0 disables; needs coreutils
 `timeout`, else the test runs unbounded and a note is printed once).
 
-Exit: 0 no conflicts · 1 at least one conflict (textual or semantic) ·
-2 usage or environment error.
+Exit: 0 selected checks clean · 1 conflict without other error ·
+2 usage, environment, red baseline, test timeout, or stale ref. Exit 2 can
+coexist with actionable conflict stanzas; read the whole report.
 EOF
     exit 2
 }
@@ -119,7 +120,7 @@ if [ ${#branches[@]} -eq 0 ]; then
     echo "# Crystal report — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "base: ${base}@${sha[$base]}"
     echo
-    echo "summary: all clean (no active branches selected)"
+    echo "summary: all clean (no non-base branches selected)"
     exit 0
 fi
 
@@ -176,8 +177,9 @@ run_test() {
     ) >/dev/null 2>&1
 }
 
-# test_tree <commit-or-tree> — extract a separate plain-file copy for each
-# baseline/pair. Return 0 for green, 1 for red tests, 2 for extraction error.
+# test_tree <tree> — extract a separate plain-file copy for each
+# baseline/pair. Return 0 for green, 1 for red tests, 2 for extraction error,
+# 3 for an inconclusive timeout/infrastructure exit from GNU timeout.
 test_tree() {
     local tree=$1 wt rc
     wt_seq=$((wt_seq + 1)); wt="$scratch_root/wt-$wt_seq"
@@ -186,9 +188,12 @@ test_tree() {
         rm -rf "$wt"
         return 2
     fi
-    if run_test "$wt"; then rc=0; else rc=1; fi
+    if run_test "$wt"; then rc=0; else rc=$?; fi
     rm -rf "$wt" || return 2
-    return "$rc"
+    if [ "$have_timeout" -eq 1 ]; then
+        case "$rc" in 124|125|137) return 3 ;; esac
+    fi
+    if [ "$rc" -eq 0 ]; then return 0; else return 1; fi
 }
 
 # join_conflicts — read conflicted paths on stdin, emit ", "-joined (paste
@@ -222,6 +227,7 @@ check_pair() {
                     0) echo "tests: pass" ;;
                     1) echo "tests: FAIL (semantic conflict)"; found_conflict=1 ;;
                     2) echo "tests: ERROR (tree extraction)"; had_error=1 ;;
+                    3) echo "tests: ERROR (test timeout/infrastructure)"; had_error=1 ;;
                 esac
             fi
         else
@@ -249,11 +255,14 @@ echo
 if [ -n "$test_cmd" ]; then
     for b in "$base" "${branches[@]}"; do
         baseline_status=0
-        test_tree "${sha[$b]}" || baseline_status=$?
+        # Archive a tree, as pair checks do: archiving a commit expands
+        # export-subst and can make baseline/pair inputs differ in fidelity.
+        test_tree "${sha[$b]}^{tree}" || baseline_status=$?
         case "$baseline_status" in
             0) echo "baseline: ${b}@${sha[$b]} PASS"; baseline_ok[$b]=1 ;;
             1) echo "baseline: ${b}@${sha[$b]} FAIL"; had_error=1 ;;
             2) echo "baseline: ${b}@${sha[$b]} ERROR (tree extraction)"; had_error=1 ;;
+            3) echo "baseline: ${b}@${sha[$b]} ERROR (test timeout/infrastructure)"; had_error=1 ;;
         esac
     done
     echo
@@ -279,7 +288,9 @@ for b in "$base" "${branches[@]}"; do
     fi
 done
 
-if   [ "$had_error" -eq 1 ];      then echo "summary: errors — see above"; exit 2
+if [ "$had_error" -eq 1 ] && [ "$found_conflict" -eq 1 ]; then
+    echo "summary: errors and conflicts found — see above"; exit 2
+elif [ "$had_error" -eq 1 ]; then echo "summary: errors — see above"; exit 2
 elif [ "$found_conflict" -eq 1 ]; then echo "summary: conflicts found";    exit 1
 else                                   echo "summary: all clean";          exit 0
 fi

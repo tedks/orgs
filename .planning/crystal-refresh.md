@@ -12,7 +12,8 @@ Crystal warns a sprint lead when two concurrently owned branches cannot be integ
 - [x] (2026-11-10) Change selection and baseline reporting in `tools/crystal/crystal-check.sh`.
 - [x] (2026-11-10) Extend `tools/crystal/test-crystal.sh` with negative cases and mutation checks.
 - [x] (2026-11-10) Align `skills/crystal/SKILL.md` and `tools/crystal/README.md` with actual behavior and operator delivery.
-- [ ] Run exact-head gates, council to fixpoint, push a reviewable PR, and record outcome.
+- [x] (2026-11-10) Run first exact-head gates and push draft PR #45 at `a3e3cde`.
+- [ ] Repair first council findings, rerun exact-head gates and a clean convergence round, then mark PR ready and record outcome.
 
 ## Surprises & Discoveries
 
@@ -20,6 +21,7 @@ Crystal warns a sprint lead when two concurrently owned branches cannot be integ
 - With no arguments, the checker selects every non-base local branch. In a long-lived worktree repository that means historical branches and quadratic pair checks, unrelated to active package ownership.
 - The checker tests only merged trees. A red branch alone can therefore be misreported as a semantic conflict.
 - The new fixture suite passed under `nix develop`; three private mutation copies, which restored historical selection, disabled the baseline guard, and disabled the stale-head guard respectively, each made the suite fail. The mutations did not touch the source checkout.
+- First council round found that a timed-out merged test had been called semantic, and an unrelated red baseline obscured a real pair conflict in the summary. The first timeout fixture condition did not actually trigger; two explicit branch marker files made the combined-only timeout case deterministic. The revised fixture passes.
 
 ## Decision Log
 
@@ -27,10 +29,12 @@ Crystal warns a sprint lead when two concurrently owned branches cannot be integ
 - Decision: Run the same boundary test once on each selected pinned revision before pair tests. Mark a baseline failure as an error and skip semantic classification for pairs containing it. Rationale: “semantic conflict” requires individually green sides. Date/Author: 2026-11-10, Crystal lead.
 - Decision: Verify selected branch refs again after the run and mark changed refs stale. Rationale: pinning protects internal consistency, while a moved head invalidates a decision made from the report. Date/Author: 2026-11-10, Crystal lead.
 - Decision: Keep `git archive` plain-file extraction and existing script/test entrypoints. Rationale: the tool is for trusted boundary tests but should not share the real worktree's Git metadata. Date/Author: 2026-11-10, Crystal lead.
+- Decision: Treat GNU timeout statuses 124/125/137 as inconclusive errors and keep exit 2 for mixed error/conflict reports, with a summary that states both. Rationale: a timeout is not an observed test failure, and an unrelated red input must not hide a real conflict. Date/Author: 2026-11-10, Crystal lead.
+- Decision: Archive input trees, not commits, for baseline tests. Rationale: commit archives expand `export-subst` while merged tree archives do not; matching extraction avoids a false comparison. Date/Author: 2026-11-10, Crystal lead.
 
 ## Outcomes & Retrospective
 
-Implementation and operator documentation are complete locally. Exact-head package gates, formal review, and PR handoff remain.
+Draft PR #45 was pushed at `a3e3cde` after local gates. First formal council round recorded two Important findings and an empty Google seat due to quota. Repairs are under test; a new exact-head gate and formal convergence round remain.
 
 ## Context and Orientation
 
@@ -64,3 +68,4 @@ Keep `tools/crystal/crystal-check.sh` and `tools/crystal/test-crystal.sh` execut
 
 Plan revision 2026-11-10: created from source audit to bound the implementation and preserve published entrypoints.
 Plan revision 2026-11-10: marked implemented steps after the fixture suite and three negative mutation checks passed; formal gates and review remain.
+Plan revision 2026-11-10: recorded first formal council findings and the bounded timeout, mixed-summary, and archive-fidelity repairs.
