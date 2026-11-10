@@ -21,3 +21,11 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-10T09:04:37-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Implementation and operator docs are pushed in PR #45, ready for review
+    at 27eeb3dc6867638f59c233db342456ea425eee34. Exact-head Bazel Crystal target,
+    Nix flake check, standalone fixture, shell syntax, and diff check passed. Formal
+    council converged clean for OpenAI and Anthropic; Google was empty due to quota.
+    CTO acceptance and merge remain. Non-blocking polish is tracked in crystal-timeout-report-polish.'
