@@ -1,0 +1,35 @@
+id: orgs-survey-gate-start-freeze-ruling
+title: Should a granted integration gate require an explicit start/freeze receipt?
+desc: 'Observation: survey respondents reported a full gate wasted after an implicit
+  start/freeze assumption and another rerun after the integration tree moved. Details
+  remain private.
+
+  Options:
+
+  1. Require an explicit GATE STARTED <sha> receipt from the slot owner before the
+  integration owner treats the tree as frozen, plus a release receipt.
+
+  2. Treat a grant or pre-grant as the start signal.
+
+  3. Leave freeze signaling project-specific.
+
+  Recommendation: option 1 for projects that share an integration tree or heavy gate;
+  keep single-lane projects free of extra messages.
+
+  Who decides: Ted, for common protocol wording; project CTOs control local slot rules.
+
+  What it blocks: a general freeze/slot contract. No current merge is blocked by this
+  issue.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:58:48-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:58:48-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
