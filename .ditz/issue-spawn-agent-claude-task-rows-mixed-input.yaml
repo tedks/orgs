@@ -1,0 +1,33 @@
+id: spawn-agent-claude-task-rows-mixed-input
+title: 'spawn-agent: Claude background-task rows under the composer trigger false
+  mixed-input-after-paste'
+desc: "Observed 2026-11-10 on framework0 (tmux 3.6a, Claude Code 2.1.319 recipients
+  running background subagents): tmux-message send to a Claude Code pane returned
+  {status: ambiguous, reason: mixed-input-after-paste, enters: 1} five times in one
+  hour, and in every verified case the recipient had received and acted on the message
+  (ran the requested gate, created the requested branch, answered the ruling). The
+  recipient panes show a background-task list (lines such as '\u25CF main' and '\u25EF
+  general-purpose  <task name>') directly under the composer, which changes while
+  the agent works; the post-paste composer comparison appears to read those rows as
+  mixed human input. Pane scrollback on these panes is under 100 rows (the TUI redraws
+  in place), so 'verify the exact message in submitted history' cannot be done after
+  the fact either. Needed: (1) teach the Claude composer frame recognizer to exclude
+  the task-list rows beneath the composer when measuring input; (2) when Enter was
+  already sent and the composer is empty afterwards, report 'submitted' with a note
+  rather than 'ambiguous'; (3) document that Claude panes keep little scrollback so
+  receipt must be observed immediately. Evidence: Harbor CTO ledger tedks/i3-harbor
+  events/v1/cto-fable-20261110.md cto-fable:8 to cto-fable:12; pending files under
+  /tmp/tmux-message-*/message hold the payloads."
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T19:29:47-00:00
+references: []
+log_events:
+- time: 2026-11-10T19:29:47-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
