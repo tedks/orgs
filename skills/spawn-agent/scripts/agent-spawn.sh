@@ -439,7 +439,10 @@ if ! "${TMUX_CMD[@]}" has-session -t "$session" 2>/dev/null; then
     echo "Creating tmux session: $session" >&2
     "${TMUX_CMD[@]}" new-session -d -s "$session"
 fi
-pane_id=$("${TMUX_CMD[@]}" new-window -P -F '#{pane_id}' -t "$session" -n "$window" -c "$directory" "$agent_shell_command")
+# "$session:" (trailing colon) asks tmux for the next free index in that session;
+# a bare session name resolves to its current window on tmux 3.6a and fails
+# with "index N in use" whenever that index is occupied.
+pane_id=$("${TMUX_CMD[@]}" new-window -P -F '#{pane_id}' -t "${session}:" -n "$window" -c "$directory" "$agent_shell_command")
 [[ "$pane_id" =~ ^%[0-9]+$ ]] || { echo "Error: invalid spawned pane identity" >&2; exit 1; }
 _cleanup_compact_file="" # child shell now owns cleanup, including failed delivery
 
