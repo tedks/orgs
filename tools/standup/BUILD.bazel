@@ -1,0 +1,14 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "standup_test",
+    srcs = ["test-standup.sh"],
+    data = [
+        "bus.sh",
+        "guard.sh",
+        "standup.sh",
+    ],
+    tags = ["no-remote"],
+)

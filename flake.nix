@@ -166,5 +166,9 @@
           touch $out
         '';
       };
+
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [ pkgs.bazel_8 pkgs.bash pkgs.coreutils pkgs.gitMinimal ];
+      };
     };
 }
