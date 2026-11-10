@@ -1,0 +1,22 @@
+id: orgs-renewal-20261110-survey
+title: Survey live use of the Orgs protocol across the authorized two-host fleet,
+  record coverage and replies in the assigned private lane record, and recommend ranked
+  improvements. Public tracker retains only the sanitized mission and disposition;
+  no host inventory or interview text.
+desc: Survey live use of the Orgs protocol across the authorized fleet. Evidence and
+  session identities stay in the assigned private lane directory. Deliver a coverage
+  table and ranked recommendations to the Orgs CTO. No source changes or deployment
+  in this mission.
+type: task
+component: research
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:30:03-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:30:03-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
