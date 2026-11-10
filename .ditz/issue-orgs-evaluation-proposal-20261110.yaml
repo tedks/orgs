@@ -1,0 +1,20 @@
+id: orgs-evaluation-proposal-20261110
+title: Design rigorous affordable Orgs evaluation pilot and corpus
+desc: Develop a private, evidence-grounded evaluation proposal for Orgs based on the
+  existing benchmark and protocol. Include falsifiable claims, an affordable pilot
+  and scalable corpus, independent oracles, treatment controls, ablations, statistical
+  plan, and cost/stopping rules. This issue tracks proposal delivery only; benchmark
+  execution or implementation requires a separate decision.
+type: task
+component: bench
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:32:20-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:32:20-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
