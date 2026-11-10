@@ -2,8 +2,14 @@
 
 The optional Bazel graph checks the existing standup and Crystal shell
 contracts on Linux x86-64. Run `nix develop --command bazel test //...` or
-`nix develop --command bazel build //...`; the root graph uses the pinned
-Nix Bash, Git, and coreutils tools. Crystal's Git fixture stays local-only.
+`nix develop --command bazel build //...`. Both Bazel tests run locally and
+use Bash, Git, and coreutils from the Nix shell's `PATH`; the Bazel actions
+do not declare those tools as inputs. `.bazelversion` records the tested
+Bazel 8.4.2 version; the Nix shell selects that binary. The root lockfile is
+read-only during Bazel commands.
+`//:portable_tools_test` is the explicit pair for callers selecting only
+these contracts; the package tests are public so an external workspace can
+select them individually.
 The checked-in `tools/tier-drift` project has its own Bazel module and is
 excluded from root discovery; run its tests from that directory. The Nix
 `flake check` and `harness-control` package remain the authority for the MCP

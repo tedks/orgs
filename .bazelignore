@@ -1,2 +1,4 @@
 # tier-drift is a standalone Bazel module with its own Python lock and tests.
 tools/tier-drift
+result
+skills/synced

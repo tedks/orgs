@@ -1,10 +1,6 @@
-package(default_visibility = ["//visibility:public"])
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
-sh_binary(
-    name = "standup",
-    srcs = ["standup.sh"],
-    data = ["bus.sh", "guard.sh"],
-)
+package(default_visibility = ["//visibility:public"])
 
 sh_test(
     name = "standup_test",
@@ -14,4 +10,5 @@ sh_test(
         "guard.sh",
         "standup.sh",
     ],
+    tags = ["no-remote"],
 )
