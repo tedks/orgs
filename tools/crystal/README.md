@@ -1,71 +1,25 @@
-# Crystal
+# Crystal checker
 
-Speculative merge checking for the org, after Brun, Holmes, Ernst, and
-Notkin's Crystal (ESEC/FSE 2011): most speculative merges are clean, and the
-value is early warning on the rare real conflict — textual, or *semantic*
-(both branches green alone, red together).
+A small command for previewing integration of **explicitly selected** local branches. It detects textual merge conflicts with `git merge-tree --write-tree`. With `--test-cmd`, it tests each pinned input commit alone, then each clean merged tree. A merged test failure is called a semantic conflict only when both inputs passed the same test alone. The approach is inspired by [Brun, Holmes, Ernst, and Notkin's Crystal](https://homes.cs.washington.edu/~mernst/pubs/vc-conflicts-fse2011-tooldemo.pdf).
 
-## Usage
+## Operator walkthrough
 
-```bash
-crystal/crystal-check.sh [--base <branch>] [--test-cmd <cmd>] [branch ...]
-```
+1. Read the sprint's current roster and package statuses. Pick only concurrently active branches owned by this sprint, and a published boundary-test command that works on committed plain files. Confirm authority to inspect those revisions and run that test. Do not point this command at arbitrary live product branches.
+2. From that project's repository, run:
 
-Checks every named branch against the base and every pair against each
-other. Textual detection uses `git merge-tree --write-tree` (git ≥ 2.38) —
-no worktree, no index, no ref is touched. With `--test-cmd`, the clean
-merged tree is extracted as **plain files** (`git archive | tar`, no `.git`
-in the scratch dir) and the command runs there (`bash -c`, cwd = the merged
-files; git env, OLDPWD unset and `GIT_CEILING_DIRECTORIES` set so git cannot
-discover a real repo above the scratch dir); failure is reported as a
-semantic conflict. Only local branch names are accepted,
-each pinned to a commit once up front so a concurrent ref update cannot
-desync the report from the tested tree. Requires bash ≥ 4. Exit codes: `0`
-all clean · `1` conflicts found · `2` error.
+       tools/crystal/crystal-check.sh --base master \
+         --test-cmd 'bash tests/boundary.sh' package-a package-b
 
-Assumptions and residuals worth knowing:
+   The same test runs on `master`, `package-a`, `package-b`, and each clean speculative merge. Replace the example command with the project's actual boundary test. Use `--timeout <seconds>` to change the 120-second foreground limit; `--timeout 0` disables it.
+3. Read the full commit IDs in the report. Exit `0` means selected checks passed. Exit `1` means at least one textual conflict or a clean merged tree failed after green input baselines. Exit `2` means an input baseline failed, extraction/environment failed, or a selected ref moved and the result is stale. A `stale:` line requires a rerun before acting. A no-argument invocation is a clean no-op; it never scans historical local branches.
+4. For a conflict, record the exact pair, test, result, and owner in the sprint ledger; deliver the finding to the accountable lead and both owners. Recheck after either head or the boundary test changes. The skill in `skills/crystal/SKILL.md` gives the cadence and ownership procedure.
 
-- The test command should be green on each branch individually — a branch
-  that fails alone makes every one of its pairings FAIL, which is noise.
-- Isolation is **best-effort against accidents, not a security sandbox.** It
-  defeats the common accidental mutation (a test that runs git in its cwd —
-  a shared-`.git` worktree would let that reach the real object store; this
-  does not) and the inherited-env / `cd -` paths back to the real repo. It
-  does *not* contain a command that uses an absolute path to the real repo
-  or means harm. Point `--test-cmd` only at boundary-test commands you trust
-  — in the org, ones the team authored.
-- A `--test-cmd` that itself requires a git repository is out of scope in v0
-  (it finds no `.git` and reports FAIL — noise, not a semantic conflict).
-- A repo that relies on `export-ignore`/`export-subst` for a buildable tree,
-  or on clean/smudge filters (e.g. Git LFS), is out of scope for v0 semantic
-  checks: extraction is `git archive`, chosen over `checkout-index` because
-  it runs no filter code (the safer failure for a background tool).
-- `--timeout` (default 120s, needs coreutils `timeout`) bounds a wedged
-  foreground command but not a process the test *backgrounds*; boundary-test
-  commands must not daemonize.
+Only **local branch names** are accepted, not SHAs or tags. Repeated names and the base name are ignored. The checker pins each name to a full commit ID once, so a concurrent update cannot make the merge and report refer to different commits. It compares the refs again at the end and flags movement. A ref can move immediately after this final comparison; operators should reconcile heads before acting on an older report.
 
-## Org integration (RUNBOOK §7)
+The test command runs with `bash -c` inside a temporary plain-file extraction of the committed tree (`git archive | tar`), without `.git`. Git environment variables and `OLDPWD` are unset and Git upward discovery is limited. This reduces accidental changes to the real repository; it is **not** a security sandbox against hostile commands, absolute paths, or symlink escapes. Use only trusted commands that do not background processes. A command requiring `.git`, clean/smudge filters, or files excluded by `export-ignore` is outside this check's semantic-test support. `git archive` avoids running repository-configured filter code.
 
-- Run at standup cadence, or continuously: `/loop 30m` invoking this script
-  with the boundary-test command. Exit 1 is the standup trigger.
-- Report stanzas are revision-stamped (`branch@sha × branch@sha`) —
-  speculative results go stale; a decision made on a stanza must be
-  reconciled if either branch moved.
-- Resolution ownership is semantic: contract change → provider migrates
-  callers; invalid assumption → consumer fixes; disputed → record a
-  semantic-deadlock event, the lead adjudicates. Whoever merges second
-  cleans up by default. Conflict debt is visible at standup so it ages
-  loudly.
+Requires Bash 4 or later, Git 2.38 or later, and tar. GNU `timeout` is used when available; otherwise the command warns and runs tests without a time limit. The check creates no Git worktree and updates no ref. It makes `n` base merges and `n(n-1)/2` pair merges for `n` selected branches; keep selection focused on current ownership. Output contains statuses, not the failing test's log, so inspect the affected boundary test separately when diagnosing a red result.
 
-## v0 scope
+## Fixture tests
 
-Invocable script + loop integration only. The commit-hook daemon
-(commit → merge → build → test → report at next agent turn-start) is
-deferred until the pilot shows the loop cadence is insufficient.
-
-## Tests
-
-`crystal/test-crystal.sh` builds a scratch repo with an engineered textual
-conflict, an engineered semantic conflict (clean merge, red tests), and a
-compatible pair, and asserts crystal distinguishes all three — so the test
-can fail, by construction, if detection breaks in either direction.
+Run `nix develop --command bash tools/crystal/test-crystal.sh` from the orgs checkout. It creates disposable Git repositories and checks textual, semantic, clean, baseline-red, no-argument, stale-head, and isolation behavior. The script entrypoints remain stable for the separate build-graph targets.
