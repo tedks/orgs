@@ -1,5 +1,14 @@
 # orgs: A human Boydian software factory
 
+The optional Bazel graph checks the existing standup and Crystal shell
+contracts on Linux x86-64. Run `nix develop --command bazel test //...` or
+`nix develop --command bazel build //...`; the root graph uses the pinned
+Nix Bash, Git, and coreutils tools. Crystal's Git fixture stays local-only.
+The checked-in `tools/tier-drift` project has its own Bazel module and is
+excluded from root discovery; run its tests from that directory. The Nix
+`flake check` and `harness-control` package remain the authority for the MCP
+runtime. These Bazel targets do not install skills or activate a host.
+
 Orgs is a harness-portable set of skills and protocols for running a
 *virtual engineering organization* of AI agents according to Boydian
 doctrine.

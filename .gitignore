@@ -5,3 +5,4 @@ skills/synced/
 .pytest_cache/
 /result
 /result-*
+/bazel-*

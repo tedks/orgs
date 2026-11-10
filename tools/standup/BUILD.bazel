@@ -1,0 +1,17 @@
+package(default_visibility = ["//visibility:public"])
+
+sh_binary(
+    name = "standup",
+    srcs = ["standup.sh"],
+    data = ["bus.sh", "guard.sh"],
+)
+
+sh_test(
+    name = "standup_test",
+    srcs = ["test-standup.sh"],
+    data = [
+        "bus.sh",
+        "guard.sh",
+        "standup.sh",
+    ],
+)

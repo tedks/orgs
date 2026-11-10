@@ -1,0 +1,13 @@
+package(default_visibility = ["//visibility:public"])
+
+sh_binary(
+    name = "crystal_check",
+    srcs = ["crystal-check.sh"],
+)
+
+sh_test(
+    name = "crystal_test",
+    srcs = ["test-crystal.sh"],
+    data = ["crystal-check.sh"],
+    tags = ["no-remote"],
+)
