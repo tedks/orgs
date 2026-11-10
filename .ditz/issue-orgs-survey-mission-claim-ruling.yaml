@@ -1,0 +1,34 @@
+id: orgs-survey-mission-claim-ruling
+title: Should Orgs require a start-of-mission claim visible to concurrent lanes?
+desc: 'Observation: an authorized fleet survey found duplicate implementation by independently
+  active lanes before either knew another owner existed. Details remain private.
+
+  Options:
+
+  1. Require a brief owner/scope/branch claim in an existing shared roster or tracker
+  before implementation, then recheck at first work boundary.
+
+  2. Build an automated cross-host registry.
+
+  3. Keep current discretionary coordination.
+
+  Recommendation: option 1 as the smallest reversible check; measure whether it prevents
+  duplication before considering a registry.
+
+  Who decides: Ted, for a general protocol requirement; project CTOs can use the check
+  locally now.
+
+  What it blocks: changing the common mission-start contract. No live lane is blocked.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:58:48-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:58:48-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
