@@ -1,0 +1,35 @@
+id: critic-advisory-pilot-decision
+title: Decide whether an advisory necessity critic merits a bounded shadow pilot
+desc: 'Current standup and decomposition procedures already ask necessity questions;
+  one-rung lead review and cross-provider council provide separate correctness checks.
+  A design audit recommends first testing a compact omission prompt inside existing
+  standup and lead-review acts, then comparing a fresh-context advisory critic in
+  shadow mode only if the embedded prompt misses verified waste.
+
+
+  Options: (A) no change; (B) embedded necessity prompt only; (C) bounded shadow critic
+  before any permanent role. Recommendation: B, with a small retrospective A/B/C ablation;
+  authorize C only if it finds additional valid work avoided without suppressing safety/contract
+  requirements or consuming the savings in coordination cost. Critic remains advisory
+  and does not alter council clearance, huddle thresholds, or merge authority.
+
+
+  Decision owner: Ted (product/process scope). Blocks: any permanent critic role or
+  production activation, not the current council/standup workflows. Evidence to gather:
+  independently adjudicated cases measuring valid work avoided, false suppression
+  of required work, requirements retained, review/owner cost, and issue/huddle growth.
+  Recent public PR #42 and #43 are examples but too few and too familiar to settle
+  the question.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:35:17-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:35:17-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
