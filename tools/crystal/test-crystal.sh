@@ -9,6 +9,11 @@
 #   3. compatible pair    (clean merge, test command passes)
 #   4. base-only repo     (no non-base branch → vacuously clean, exit 0)
 #   5. sandbox isolation  (a side-effecting test cannot mutate the real repo)
+#   6. no-argument no-op despite historical local branches
+#   7. red input baseline is an error, never a semantic conflict
+#   8. a moved input ref makes the pinned report stale
+#   9. timeout and mixed error/conflict reports stay distinct
+#  10. baseline and pair archives have matching export-subst fidelity
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -59,20 +64,30 @@ printf 'beta\n' > conflict.txt && git commit -qam textual-b
 git checkout -qb sem-a master
 printf 'X=2\n' > lib.sh
 write_main '[ "$X" = 2 ] || exit 1' ':'
+printf 'a\n' > sem-a.marker
 bash main.sh || fail "sem-a must be green alone"
-git commit -qam sem-a
+git add -A && git commit -qm sem-a
 
 # sem-b: fills the BOTTOM slot with a check assuming X=1 — green alone;
 # touches only the bottom region. Merges cleanly with sem-a (distinct
 # regions) but is then red: lib X=2 vs the bottom check's X=1.
 git checkout -qb sem-b master
 write_main '[ "$X" = 1 ] || exit 1' '[ "$X" = 1 ] || exit 1'
+printf 'b\n' > sem-b.marker
 bash main.sh || fail "sem-b must be green alone"
-git commit -qam sem-b
+git add -A && git commit -qm sem-b
 
 # ok-a: unrelated change — compatible with sem-b.
 git checkout -qb ok-a master
 printf 'unrelated\n' > other.txt && git add other.txt && git commit -qm ok-a
+git checkout -qb red-alone master
+printf 'X=9\n' > lib.sh && git commit -qam red-alone
+git checkout -qb red-base master
+printf 'X=9\n' > lib.sh && git commit -qam red-base
+git checkout -qb subst-a master
+printf 'version.txt export-subst\n' > .gitattributes
+printf '%s\n' '$Format:%H$' > version.txt
+git add -A && git commit -qm subst-a
 git checkout -q master
 
 # 1. textual conflict detected, exit 1, names the file
@@ -93,6 +108,9 @@ sem_stanza=$(stanza 'sem-a@.* × sem-b@')
 grep -q 'merge: clean' <<<"$sem_stanza" || fail "semantic pair: merge should be clean:
 $out"
 grep -q 'tests: FAIL' <<<"$sem_stanza" || fail "semantic pair: this pair's tests should FAIL:
+$out"
+grep -Eq '^## sem-a@[0-9a-f]{40} × sem-b@[0-9a-f]{40}$' <<<"$sem_stanza" \
+    || fail "semantic pair: report must pin full commit IDs:
 $out"
 
 # 3. compatible pair: everything clean and passing, exit 0
@@ -156,4 +174,88 @@ after6=$(branch_names)
 before=$before6
 after=$after6"
 
-echo "PASS: crystal distinguishes textual/semantic/clean, handles base-only, and sandboxes tests (env, OLDPWD, upward-discovery)"
+# No branches means no active pair, even though this fixture has several
+# historical refs. This fails if the old all-local-branches default returns.
+noop_status=0
+noop_out=$("$crystal" --base master --test-cmd 'bash main.sh' 2>&1) || noop_status=$?
+[ "$noop_status" -eq 0 ] || fail "no-argument check should be a clean no-op:
+$noop_out"
+grep -q 'no non-base branches selected' <<<"$noop_out" || fail "no-argument report lacks no-op disposition:
+$noop_out"
+grep -q '^## ' <<<"$noop_out" && fail "no-argument check selected historical branches:
+$noop_out"
+
+# red-alone fails its own test. Its clean merge with sem-b must not be
+# labelled a semantic conflict; the same command has no valid green baseline.
+run_crystal red-alone sem-b
+[ "$status" -eq 2 ] || fail "red baseline: expected exit 2, got $status:
+$out"
+grep -q 'baseline: red-alone@.* FAIL' <<<"$out" || fail "red baseline not reported:
+$out"
+red_stanza=$(stanza 'red-alone@.* × sem-b@')
+grep -q 'merge: clean' <<<"$red_stanza" || fail "red baseline pair should merge cleanly:
+$out"
+grep -q 'tests: skipped (input baseline not green)' <<<"$red_stanza" || fail "red baseline pair was classified as a semantic conflict:
+$out"
+
+# A red base makes base pairs inconclusive, even with a green selected branch.
+red_base_status=0
+red_base_out=$("$crystal" --base red-base --test-cmd 'bash main.sh' ok-a 2>&1) || red_base_status=$?
+[ "$red_base_status" -eq 2 ] || fail "red base: expected exit 2, got $red_base_status:
+$red_base_out"
+grep -q 'baseline: red-base@.* FAIL' <<<"$red_base_out" || fail "red base not reported:
+$red_base_out"
+grep -q 'tests: skipped (input baseline not green)' <<<"$red_base_out" || fail "red base pair was tested:
+$red_base_out"
+
+# Archiving a commit expands export-subst, but archiving a tree does not.
+# Baseline and pair must see the same plain-file content. If the baseline
+# accidentally uses a commit archive, it loses the '$' and fails this check.
+subst_cmd="if [ -f version.txt ]; then grep -Fq '$' version.txt; fi"
+subst_status=0
+subst_out=$("$crystal" --base master --test-cmd "$subst_cmd" subst-a 2>&1) || subst_status=$?
+[ "$subst_status" -eq 0 ] || fail "export-subst fidelity: expected exit 0, got $subst_status:
+$subst_out"
+grep -q 'baseline: subst-a@.* PASS' <<<"$subst_out" || fail "export-subst baseline did not pass:
+$subst_out"
+
+# A red input must not hide a separate real semantic conflict. Exit 2 carries
+# both facts, and the operator must read the pair stanzas.
+run_crystal red-alone sem-a sem-b
+[ "$status" -eq 2 ] || fail "mixed errors/conflicts: expected exit 2, got $status:
+$out"
+grep -q 'summary: errors and conflicts found' <<<"$out" || fail "mixed summary hid a conflict:
+$out"
+mixed_stanza=$(stanza 'sem-a@.* × sem-b@')
+grep -q 'tests: FAIL (semantic conflict)' <<<"$mixed_stanza" || fail "mixed report hid semantic pair:
+$out"
+
+# If the same command is green on each input but only the merged tree takes
+# too long, timeout is inconclusive, not a semantic failure.
+if timeout --kill-after=1 1 true >/dev/null 2>&1; then
+    timeout_status=0
+    timeout_cmd='if [ -f sem-a.marker ] && [ -f sem-b.marker ]; then sleep 2; fi; true'
+    timeout_out=$("$crystal" --base master --timeout 1 --test-cmd "$timeout_cmd" sem-a sem-b 2>&1) || timeout_status=$?
+    [ "$timeout_status" -eq 2 ] || fail "merged timeout: expected exit 2, got $timeout_status:
+$timeout_out"
+    timeout_stanza=$(awk '/^## sem-a@.* × sem-b@/{on=1} on{print} on&&/^$/{exit}' <<<"$timeout_out")
+    grep -q 'tests: ERROR (test timeout/infrastructure)' <<<"$timeout_stanza" || fail "merged timeout misclassified:
+$timeout_out"
+fi
+
+# A fixture-only test command moves ok-a while Crystal is checking its
+# pinned commit. The report stays internally consistent but must say stale.
+printf -v stale_cmd 'git -C %q update-ref refs/heads/ok-a %q; true' "$tmp" "$(git rev-parse sem-a)"
+ok_a_before=$(git rev-parse ok-a)
+stale_status=0
+stale_out=$("$crystal" --base master --test-cmd "$stale_cmd" ok-a 2>&1) || stale_status=$?
+[ "$stale_status" -eq 2 ] || fail "moved head: expected exit 2, got $stale_status:
+$stale_out"
+grep -q '^stale: ok-a moved from ' <<<"$stale_out" || fail "moved head not marked stale:
+$stale_out"
+grep -q "baseline: ok-a@$ok_a_before PASS" <<<"$stale_out" || fail "moved head baseline lost its pinned ID:
+$stale_out"
+grep -q " × ok-a@$ok_a_before" <<<"$stale_out" || fail "moved head pair lost its pinned ID:
+$stale_out"
+
+echo "PASS: crystal distinguishes textual/semantic/clean, proves green baselines, ignores historical refs, detects stale heads, and isolates tests"
