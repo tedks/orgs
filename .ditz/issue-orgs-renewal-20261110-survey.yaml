@@ -11,8 +11,8 @@ type: task
 component: research
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-10T08:30:03-00:00
 references: []
 log_events:
@@ -31,3 +31,8 @@ log_events:
     observed agent pane attempted once and nonresponse retained. Four sanitized product
     questions were filed separately; existing Crystal, standup, transport and retirement
     issues were reused. Awaiting Orgs CTO acceptance; no source or host changes.
+- time: 2026-11-10T09:07:38-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: Orgs CTO accepted the completed private census and report; one nonblocking
+    count copy edit applied and rehashed. No source or host changes.
