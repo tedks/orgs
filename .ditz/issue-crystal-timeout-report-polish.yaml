@@ -19,3 +19,16 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-10T09:00:22-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'PR #45 changed-base council nits added to this non-blocking polish item:
+    a scratch cleanup failure is labelled tree extraction error; the mixed error/conflict
+    fixture also has a textual conflict and could isolate semantic-only summary evidence;
+    no-argument output says all clean despite doing no pair work. A bounded search
+    of this repo''s skills/tools/protocol/docs found no no-argument checker caller,
+    so there is no evidenced live break. The current repair keeps exit 2 conservative
+    and the operator guide explicitly requires selecting active branches. These refinements
+    are deferred to avoid expanding the reviewed checker change. The README fixture
+    list, Bazel entrypoint, skill one-branch wording, and living plan were corrected
+    in PR #45.'
