@@ -1,0 +1,36 @@
+id: orgs-survey-council-base-contract-ruling
+title: Reconcile council convergence base semantics after a target branch moves
+desc: 'Observation: the local PR council helper recomputes the live merge-base and
+  rejects a supplied older base in its compatibility alias, while older global convergence
+  instructions still direct callers to retain the original base. Respondents reported
+  confusion and extra rounds. No raw project evidence is public.
+
+  Options:
+
+  1. Keep the live-base/full-review-on-target-move behavior and update global instructions
+  and examples to match; remove the alias on its scheduled rollout.
+
+  2. Preserve original-base warm-delta behavior across target moves, with an independently
+  proven integration-context gate.
+
+  3. Expose two explicit modes with separate clearances.
+
+  Recommendation: option 1 as the current conservative behavior, while measuring its
+  extra review cost.
+
+  Who decides: Ted, as council merge-gate contract owner.
+
+  What it blocks: changing the cross-repo convergence instructions or helper semantics.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-10T08:58:48-00:00
+references: []
+log_events:
+- time: 2026-11-10T08:58:48-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
