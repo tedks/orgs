@@ -29,8 +29,12 @@ has the exact DONE or DECLINED marker as `last_agent_message`; a later started
 turn, partial rollout or changed final message keeps it pending. This witness
 is rechecked before private handoff publication and before exit.
 A pinned Claude target may render one native duration row, optionally followed by
-one padded integer `tokens` status row or the measured Claude 2.1.288
-`globalVersion` / `latestVersion` auto-update status row. A narrow pane may
+one UI status row in a measured form: the Claude 2.1.288 padded integer
+`tokens` row or its `globalVersion` / `latestVersion` auto-update row, or the
+Claude 2.1.322 joined row, which at 80 columns keeps only the count and its
+separator (`110486 tokens·`) and at full width continues with ` · ` and the
+auto-update fields. Intermediate widths are unmeasured; a form seen there stays
+pending until it is measured and added. A narrow pane may
 wrap that exact status into two or three display rows; only contiguous rows
 that reassemble to the measured status are accepted. Because tmux may trim
 one space at a wrap boundary, each boundary is checked both with and without

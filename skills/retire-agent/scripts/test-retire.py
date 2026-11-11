@@ -440,8 +440,10 @@ def terminal(directory, mode):
                                         elif mode.endswith('token-dot-prose'):
                                             tokens = '110486 tokens· Recovery still needs correction.'
                                         # The 2.1.322 rows use the measured 19-column indent. The test pane
-                                        # is 240 columns wide, so each is one physical row; the 2.1.288
-                                        # modes keep the 200-space pad, which exercises the wrap-join path.
+                                        # is 240 columns wide, so every token row here is one physical row
+                                        # (the 2.1.288 modes keep their 200-space pad, 212 columns in all).
+                                        # The wrap-join path is exercised only by the version-row tests
+                                        # that resize the pane (test_claude_reply_row_with_*wrap*).
                                         pad = ' ' * 19 if mode.endswith(('token-dot', 'token-joined', 'token-dot-prose')) else ' ' * 200
                                         history += timing + '\r\n' + pad + tokens + '\r\n'
                                         if mode.endswith('extra-prose'):
