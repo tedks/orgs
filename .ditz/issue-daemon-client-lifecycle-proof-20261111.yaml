@@ -1,12 +1,11 @@
 id: daemon-client-lifecycle-proof-20261111
-title: Support bounded identity, idle, and exit proof for Codex clients attached to
-  a local daemon; preserve the existing unique-rollout-FD path and fail closed when
-  the alternate native status plus exact task mapping is unavailable. Implement the
-  negative and acceptance fixtures in docs/research/diy-hrt-retirement-retro-20261111.md,
-  including ambiguous sender timeouts, private recovery, process end, and shell collection
-  as separate states. Verify on a disposable native CLI before enabling the alternate
-  path. No research or live diy-hrt control is authorized by this issue.
-desc: ""
+title: Support bounded lifecycle proof for daemon-attached Codex clients
+desc: Preserve the existing unique-rollout-FD proof and fail closed when an alternate
+  native status plus exact task mapping is unavailable. Implement the negative and
+  acceptance fixtures in docs/research/diy-hrt-retirement-retro-20261111.md. Keep
+  private recovery, task archival, process end, and shell collection as separate states.
+  Verify on a disposable native CLI before enabling the alternate path. This issue
+  grants no diy-hrt research or live control authority.
 type: bugfix
 component: lifecycle
 release:
@@ -19,4 +18,12 @@ log_events:
 - time: 2026-11-11T21:22:36-00:00
   who: Ted Smith
   what: created
+  comment: ""
+- time: 2026-11-11T21:22:55-00:00
+  who: Ted Smith
+  what: changed title
+  comment: ""
+- time: 2026-11-11T21:22:55-00:00
+  who: Ted Smith
+  what: updated description
   comment: ""
