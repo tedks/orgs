@@ -1,0 +1,20 @@
+id: lifecycle-lane-budget-collection-20261111
+title: Budget and collect lifecycle lanes at task boundaries
+desc: Add a roster lane cap and task-boundary reconciliation of task, client, and
+  shell states. Require successor controllers to inventory/adopt or collect predecessor
+  clients before opening duplicates. Preserve fresh-context and exact-head review
+  gates. See docs/research/diy-hrt-retirement-retro-20261111.md. No live diy-hrt control
+  is authorized.
+type: task
+component: lifecycle
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-11T21:23:02-00:00
+references: []
+log_events:
+- time: 2026-11-11T21:23:02-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
