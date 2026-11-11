@@ -79,6 +79,8 @@ mutations = [
     ('Claude footer full row', "and re.fullmatch(r'✻ ", "and re.search(r'✻ ", 'test_claude_ui_footer_same_row_prose_is_pending'),
     ('Claude token row full suffix', 'any(re.fullmatch(_CLAUDE_TOKENS_ROW, status) for status in claude_statuses)', 'True', 'test_claude_ui_footer_partial_tokens_is_pending'),
     ('Claude token row trailing prose', 're.fullmatch(_CLAUDE_TOKENS_ROW, status)', 're.match(_CLAUDE_TOKENS_ROW, status)', 'test_claude_token_row_with_trailing_prose_is_pending'),
+    ('Claude narrow token separator', "r' +[0-9]+ tokens(?:·| · '", "r' +[0-9]+ tokens(?: · '", 'test_claude_2_1_322_narrow_token_row_allows_completion'),
+    ('Claude joined token row', "_CLAUDE_TOKENS_ROW = r' +[0-9]+ tokens(?:·| · ' + _CLAUDE_AUTO_UPDATE + r')?'", "_CLAUDE_TOKENS_ROW = r' +[0-9]+ tokens(?:·)?'", 'test_claude_2_1_322_joined_status_row_allows_completion'),
     ('loaded object', 'if not isinstance(record, dict):', 'if False:', 'test_malformed_state_and_history_preserved'),
     ('receipt before exit', ["self.publish_locked(['receipts/' + receipt.name], index=True)", "record = receipt_record(self.git('show', remote_head + ':' + self.state['handoff_receipt']))"], ['pass  # Withhold verified receipt publication until after exit.', "record = receipt_record((self.records / self.state['handoff_receipt']).read_text())"], 'test_retire_exit_to_shell_and_path_only_commit'),
     ('shard object', 'if not isinstance(data, dict):', 'if False:', 'test_nonobject_shard_is_controlled_failure'),

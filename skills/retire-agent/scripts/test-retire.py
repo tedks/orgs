@@ -439,9 +439,10 @@ def terminal(directory, mode):
                                                       ' ✘ Auto-update failed: no write permission to npm prefix · Run claude doctor')
                                         elif mode.endswith('token-dot-prose'):
                                             tokens = '110486 tokens· Recovery still needs correction.'
-                                        # The joined 2.1.322 row is already wide; indent it like the
-                                        # measured real row instead of the 200-space pad.
-                                        pad = '  ' if mode.endswith(('token-joined', 'token-dot-prose')) else ' ' * 200
+                                        # The 2.1.322 rows use the measured 19-column indent. The test pane
+                                        # is 240 columns wide, so each is one physical row; the 2.1.288
+                                        # modes keep the 200-space pad, which exercises the wrap-join path.
+                                        pad = ' ' * 19 if mode.endswith(('token-dot', 'token-joined', 'token-dot-prose')) else ' ' * 200
                                         history += timing + '\r\n' + pad + tokens + '\r\n'
                                         if mode.endswith('extra-prose'):
                                             history += '  Recovery still needs correction.\r\n'
