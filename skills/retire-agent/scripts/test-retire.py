@@ -430,7 +430,19 @@ def terminal(directory, mode):
                                         tokens = '50713 tokens'
                                         if mode.endswith('token-partial'):
                                             tokens = '50713 token'
-                                        history += timing + '\r\n' + ' ' * 200 + tokens + '\r\n'
+                                        elif mode.endswith('token-dot'):
+                                            # Claude 2.1.322 at 80 columns: count plus the separator only.
+                                            tokens = '110486 tokens·'
+                                        elif mode.endswith('token-joined'):
+                                            # Claude 2.1.322 at full width: one joined status row.
+                                            tokens = ('305836 tokens · globalVersion: 2.1.322 · latestVersion: 2.1.322'
+                                                      ' ✘ Auto-update failed: no write permission to npm prefix · Run claude doctor')
+                                        elif mode.endswith('token-dot-prose'):
+                                            tokens = '110486 tokens· Recovery still needs correction.'
+                                        # The joined 2.1.322 row is already wide; indent it like the
+                                        # measured real row instead of the 200-space pad.
+                                        pad = '  ' if mode.endswith(('token-joined', 'token-dot-prose')) else ' ' * 200
+                                        history += timing + '\r\n' + pad + tokens + '\r\n'
                                         if mode.endswith('extra-prose'):
                                             history += '  Recovery still needs correction.\r\n'
                                     if mode.endswith('suffix'):
@@ -2837,6 +2849,21 @@ class Tests(unittest.TestCase):
         self.actor('claude-footer-minute')
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_claude_2_1_322_narrow_token_row_allows_completion(self):
+        # Measured 2026-11-11 on Claude Code 2.1.322 at 80 columns: '110486 tokens·'.
+        self.actor('claude-footer-token-dot')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_claude_2_1_322_joined_status_row_allows_completion(self):
+        # Measured 2026-11-11 at full width: tokens and auto-update fields on one row.
+        self.actor('claude-footer-token-joined')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_claude_token_row_with_trailing_prose_is_pending(self):
+        self.assert_completion_block_pending('claude-footer-token-dot-prose')
 
     def test_codex_cannot_use_claude_ui_footer(self):
         self.assert_completion_block_pending('done-claude-footer')
