@@ -1,0 +1,28 @@
+id: lifecycle-judgment-reorientation
+title: Teach invariant-preserving reorientation when a lifecycle procedure stops fitting
+desc: 'Owner: Orgs CTO. Follow-through from PR #47, paired with renewal delegated-judgment
+  and recovery work. Update existing doctrine/brief/recovery-card guidance with worked
+  contrasts: separate a procedure assumption from its invariant, recognize deterministic
+  evidence mismatch, choose a bounded alternate observation or proof within authority,
+  state stop conditions, and reconcile results. A retry requires new evidence/hypothesis/condition;
+  the existing attempt ceiling is a backstop. Distinguish transport uncertainty from
+  independently witnessed action outcomes. CTO owns reorientation and resource collection;
+  repair lead owns implementation; reviewer checks preserved invariants. No new approval
+  queue or mandatory record. Acceptance: walkthroughs cover safe alternative, missing/conflicting
+  identity, active work, human input, paused scope and changed authority; no instruction
+  permits bypassing identity, private handoff, voluntary exit or exit proof. Report
+  adoption separately from later demonstrated effectiveness. Public synthetic examples
+  only; no private payloads.'
+type: task
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-12T20:19:45-00:00
+references: []
+log_events:
+- time: 2026-11-12T20:19:45-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
