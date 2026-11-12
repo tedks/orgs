@@ -117,13 +117,15 @@ Claude can display a queued user row as a flush-left `❯` message followed by
 screen capture alone cannot establish that this row came from Claude rather
 than a transcript copy. The sender therefore leaves this shape ambiguous.
 The empty-composer hint `Press up to edit queued messages` and background-task
-rows alone do not prove receipt. Inspect an ambiguous pane promptly: Claude may
-redraw with little scrollback. Record acceptance manually only with independent
-new submitted or queued evidence, or a subsequent agent response attributable
-to the exact message. The response shows what the agent observed or completed;
-it does not turn the sender's ambiguous result into a verified transport receipt.
-If that evidence is absent, leave delivery unconfirmed and preserve the pending
-payload. Do not send another message just to obtain proof or replay the payload.
+rows alone do not prove receipt. This measured frame can return
+`mixed-input-after-paste` after one Enter. Inspect promptly: Claude may redraw
+with little scrollback. Mark `delivered` only with independent new receipt
+evidence, such as a later submitted `❯` row without the send-now hint or a
+recognized `Messages to be submitted` block. An agent response attributable
+to the exact message supports `acknowledged (transport ambiguous)`, and may
+show task completion, but does not verify the sender's transport result. If
+neither exists, leave delivery unconfirmed and preserve the pending payload.
+Do not send another message just to obtain proof or replay the payload.
 
 The scoped parser suite runs with
 `nix develop --command bazel test //skills/spawn-agent:tmux_message_test`.

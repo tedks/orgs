@@ -1456,6 +1456,8 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
         self.assertEqual((t.pastes, t.enters), (1, 1))
 
     def test_claude_send_now_lookalikes_are_not_receipts(self):
+        # These document the nearby prose and altered-hint shapes; the busy
+        # frame above is the regression that pins one-Enter ambiguity.
         payload = 'SYNTHETIC-QUEUE-ACK full message'
         for history in ('● assistant: ❯ ' + payload + '\n  ctrl+x ctrl+s to send now\n',
                         '❯ other message\n  ctrl+x ctrl+s to send now\n',
