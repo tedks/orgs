@@ -57,6 +57,20 @@ history. A collapsed receipt can match a marker observed in this attempt's
 input; a marker found only in history is insufficient. Ordinary assistant prose
 is not a receipt. `/compact` may instead be confirmed by a new visible
 `Context compacted` completion event. Receipt and task completion remain distinct.
+Claude can show a flush-left `❯` payload row followed by
+`  ctrl+x ctrl+s to send now`, then a busy spinner and live composer. Plain
+screen text cannot distinguish that queue row from a transcript copy with the
+same rows. The sender leaves this shape ambiguous; an empty composer or
+`Press up to edit queued messages` does not strengthen it. The measured frame
+can return `mixed-input-after-paste` after one Enter. Inspect immediately for
+independent new receipt evidence, such as a later submitted `❯` row without
+the send-now hint or a recognized `Messages to be submitted` block; then mark
+`delivered`. A subsequent response attributable to the exact message supports
+`acknowledged (transport ambiguous)` or observed task completion, while the
+sender's transport result stays ambiguous. If neither exists, leave delivery
+unconfirmed and preserve the private pending payload. Claude may retain little
+scrollback. Do not send a new message to manufacture proof or replay an
+ambiguous payload.
 
 The observed Codex `[Pasted Content N chars]` form is supported when it is the
 whole input and N matches the payload's Unicode code-point or UTF-16-unit

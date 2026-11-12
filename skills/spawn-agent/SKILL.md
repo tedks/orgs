@@ -112,6 +112,23 @@ On a changed-footer Codex pane, a bold `›` row followed by a blank row and
 indented text may be an archived unsent composer. It is not a delivery receipt.
 `receipt-timeout` after an attempted paste means the message may have been
 submitted; inspect the pane and do not repaste the pending file.
+Claude can display a queued user row as a flush-left `❯` message followed by
+`ctrl+x ctrl+s to send now`, above a busy spinner and its live composer. A
+screen capture alone cannot establish that this row came from Claude rather
+than a transcript copy. The sender therefore leaves this shape ambiguous.
+The empty-composer hint `Press up to edit queued messages` and background-task
+rows alone do not prove receipt. This measured frame can return
+`mixed-input-after-paste` after one Enter. Inspect promptly: Claude may redraw
+with little scrollback. Mark `delivered` only with independent new receipt
+evidence, such as a later submitted `❯` row without the send-now hint or a
+recognized `Messages to be submitted` block. An agent response attributable
+to the exact message supports `acknowledged (transport ambiguous)`, and may
+show task completion, but does not verify the sender's transport result. If
+neither exists, leave delivery unconfirmed and preserve the pending payload.
+Do not send another message just to obtain proof or replay the payload.
+
+The scoped parser suite runs with
+`nix develop --command bazel test //skills/spawn-agent:tmux_message_test`.
 
 For `needs_review=true`, read the pane and inspect the reported stage. If a new
 receipt is visible, record acceptance. If this attempt's paste is still in the

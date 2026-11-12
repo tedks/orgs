@@ -1434,6 +1434,40 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
         self.assertEqual(deliver(t)['receipt'], 'queued')
         self.assertEqual(t.enters, 1)
 
+    def test_claude_send_now_queue_remains_ambiguous_without_provenance(self):
+        payload = 'SYNTHETIC-QUEUE-ACK full message'
+        t = Terminal(payload=payload)
+        t.harness = 'claude'
+        original = t.frame
+        def frame():
+            if t.accepted_at is None:
+                return original()
+            raw = ('● Bash\n\n❯ ' + payload + '\n'
+                   '  ctrl+x ctrl+s to send now\n\n'
+                   '✶ Improvising…\n──────────────\n'
+                   '❯\u00a0\x1b[2mPress up to edit queued messages\x1b[0m\n'
+                   '──────────────\nuser@host:repo\n'
+                   '⏵⏵ bypass permissions on · ← 1 agent\n\n'
+                   '  ● main\n  ◯ worker idle\n')
+            return m.Frame(raw, 2, 7, raw)
+        t.frame = frame
+        with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'):
+            deliver(t)
+        self.assertEqual((t.pastes, t.enters), (1, 1))
+
+    def test_claude_send_now_lookalikes_are_not_receipts(self):
+        # These document the nearby prose and altered-hint shapes; the busy
+        # frame above is the regression that pins one-Enter ambiguity.
+        payload = 'SYNTHETIC-QUEUE-ACK full message'
+        for history in ('● assistant: ❯ ' + payload + '\n  ctrl+x ctrl+s to send now\n',
+                        '❯ other message\n  ctrl+x ctrl+s to send now\n',
+                        '❯ ' + payload + '\n  unrelated hint\n'):
+            with self.subTest(history=history):
+                f = screen('', history=history, harness='claude')
+                records = m.records(f, m.composer(f))
+                self.assertEqual(records[('queued', m.normalized(payload))], 0)
+                self.assertEqual(records[('submitted', m.normalized(payload))], 0)
+
     def test_measured_codex_stale_append_content_marker_submits(self):
         draft = 'MSG-STABLE-OFFER: no tools for this smoke'
         t = Terminal(payload='x' * 1515, draft=draft)
