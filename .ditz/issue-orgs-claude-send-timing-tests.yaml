@@ -30,3 +30,13 @@ log_events:
 
     Triage records accountability and next action; it does not itself start an implementation
     lane or change an existing pause.'
+- time: 2026-11-12T21:32:02-00:00
+  who: Ted Smith
+  what: commented
+  comment: '2026-11-12 PR #52 scoped check: unchanged legacy `skills/spawn-agent/scripts/test-claude-send.sh`
+    exited 1 under concurrent local work. Four command-clear synthetic cases printed
+    FAIL: command-claude-unknown-timeout, command-claude-clearfail, command-claude-clearsignal,
+    command-claude-harness. The scoped Bazel tmux-message parser suite and tmux-message
+    alias test passed. `git diff --quiet 9d3cf9f..11d7e4e -- skills/spawn-agent/scripts/{claude-send.sh,claude-send-screen.py,test-claude-send.sh,tmux-message.py}`
+    exited 0, confirming these production/interface inputs are unchanged by PR #52.
+    No repeated broad run; retain the deterministic timing-test repair in this issue.'
