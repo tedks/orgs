@@ -1434,7 +1434,7 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
         self.assertEqual(deliver(t)['receipt'], 'queued')
         self.assertEqual(t.enters, 1)
 
-    def test_claude_send_now_queue_receipt_with_task_rows(self):
+    def test_claude_send_now_queue_remains_ambiguous_without_provenance(self):
         payload = 'SYNTHETIC-QUEUE-ACK full message'
         t = Terminal(payload=payload)
         t.harness = 'claude'
@@ -1451,66 +1451,20 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
                    '  ● main\n  ◯ worker idle\n')
             return m.Frame(raw, 2, 7, raw)
         t.frame = frame
-        result = deliver(t)
-        self.assertEqual((result['receipt'], result['enters']), ('queued', 1))
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_send_now_queue_requires_new_exact_native_row(self):
-        payload = 'SYNTHETIC-QUEUE-ACK full message'
-        cases = (
-            '● assistant: ❯ ' + payload + '\n  ctrl+x ctrl+s to send now\n',
-            '  ❯ ' + payload + '\n  ctrl+x ctrl+s to send now\n',
-            '❯ other message\n  ctrl+x ctrl+s to send now\n',
-            '❯ ' + payload + '\n  unrelated hint\n',
-            '❯ ' + payload + '\n\n  ctrl+x ctrl+s to send now\n',
-        )
-        for history in cases:
-            with self.subTest(history=history):
-                f = screen('', prefix=history + '\n✶ Working…\n', harness='claude')
-                receipts = m.records(f, m.composer(f))
-                self.assertEqual(receipts[('queued', m.normalized(payload))], 0)
-                self.assertEqual(receipts[('queued-visible', payload)], 0)
-                if history.startswith('  ❯'):
-                    self.assertEqual(receipts[('submitted', m.normalized(payload))], 0)
-
-    def test_claude_send_now_queue_multiline_payload_without_task_rows(self):
-        payload = 'SYNTHETIC-QUEUE-ACK first line\nsecond line'
-        history = ('❯ SYNTHETIC-QUEUE-ACK first line\n  second line\n'
-                   '  \x1b[2mctrl+x ctrl+s to send now\x1b[0m  \n\n✶ Compacting conversation…\n')
-        f = screen('', prefix=history, harness='claude')
-        self.assertEqual(m.records(f, m.composer(f))[('queued-visible', payload.replace('\n', ''))], 1)
-
-    def test_claude_send_now_queue_rejects_changed_spacing_and_transcript(self):
-        payload = 'approve'
-        for body in ('❯ a p p r o v e\n  ctrl+x ctrl+s to send now\n\n✶ Working…\n',
-                     '❯ approve\n  ctrl+x ctrl+s to send now\n\n● tool output\n'):
-            with self.subTest(body=body):
-                t = Terminal(payload=payload)
-                t.harness = 'claude'
-                original = t.frame
-                def frame():
-                    if t.accepted_at is None:
-                        return original()
-                    return screen('', prefix=body, harness='claude')
-                t.frame = frame
-                with self.assertRaises(m.DeliveryError):
-                    deliver(t)
-                self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_old_claude_send_now_row_and_empty_composer_are_not_new_receipt(self):
-        payload = 'SYNTHETIC-QUEUE-ACK full message'
-        t = Terminal(payload=payload)
-        t.harness = 'claude'
-        t.history = '❯ ' + payload + '\n  ctrl+x ctrl+s to send now\n\n'
-        original = t.frame
-        def frame():
-            if t.accepted_at is None:
-                return original()
-            return screen('', t.history, harness='claude')
-        t.frame = frame
-        with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
+        with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'):
             deliver(t)
         self.assertEqual((t.pastes, t.enters), (1, 1))
+
+    def test_claude_send_now_lookalikes_are_not_receipts(self):
+        payload = 'SYNTHETIC-QUEUE-ACK full message'
+        for history in ('● assistant: ❯ ' + payload + '\n  ctrl+x ctrl+s to send now\n',
+                        '❯ other message\n  ctrl+x ctrl+s to send now\n',
+                        '❯ ' + payload + '\n  unrelated hint\n'):
+            with self.subTest(history=history):
+                f = screen('', history=history, harness='claude')
+                records = m.records(f, m.composer(f))
+                self.assertEqual(records[('queued', m.normalized(payload))], 0)
+                self.assertEqual(records[('submitted', m.normalized(payload))], 0)
 
     def test_measured_codex_stale_append_content_marker_submits(self):
         draft = 'MSG-STABLE-OFFER: no tools for this smoke'
