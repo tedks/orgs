@@ -52,6 +52,17 @@ log_events:
     a blanket rejection for missing resume argv. Read-only native status acquisition
     has its own pinned-target/human-input protections and never authorizes exit before
     identity is established.'
+- time: 2026-11-12T21:30:26-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Bounded controller evidence from current Orgs closeout: four daemon-attached
+    Codex clients lacked writable-rollout bindings, yet fresh native status on unchanged
+    process pins identified exact idle tasks. Agent-authored private handoffs were
+    remotely verified; voluntary guarded exits produced new matching reconnect notices
+    plus original process end; exact idle tasks were archived and empty childless
+    shells collected. Existing retire-agent automation still does not implement this
+    path. Preserve these distinct proofs in any proposed tool support; neither a disconnect
+    notice alone nor a transport timeout establishes task lifecycle.'
 file_refs:
 - path: docs/research/diy-hrt-retirement-retro-20261111.md
   line:
