@@ -1,0 +1,22 @@
+id: spawn-agent-receipt-guide-polish
+title: Polish Claude ambiguous-receipt examples and completion wording
+desc: 'Nonblocking editorial follow-up from PR #52''s final CLEAN council round: (1)
+  `Messages to be submitted` appears to be Codex queue wording; qualify it as a harness-dependent
+  example or replace it in Claude-only guidance. (2) Say an attributable reply may
+  show agent-reported completion, not independently verified task completion. (3)
+  Say `new since this attempt''s Enter` where the guide uses `new` receipt evidence.
+  Current text already keeps delivered distinct from acknowledged and forbids replay;
+  these changes refine clarity without changing the transport contract.'
+type: task
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-12T21:33:31-00:00
+references: []
+log_events:
+- time: 2026-11-12T21:33:31-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
