@@ -57,6 +57,12 @@ history. A collapsed receipt can match a marker observed in this attempt's
 input; a marker found only in history is insufficient. Ordinary assistant prose
 is not a receipt. `/compact` may instead be confirmed by a new visible
 `Context compacted` completion event. Receipt and task completion remain distinct.
+On Claude, a new flush-left `❯` user row with the exact payload and an adjacent
+`  ctrl+x ctrl+s to send now` hint is a queued receipt. The hint is UI and is
+excluded from the payload comparison. A matching old row, an indented quote,
+an empty composer, or `Press up to edit queued messages` alone is insufficient.
+Busy spinners and task rows can redraw around the composer; inspect an ambiguous
+pane immediately because Claude may retain little scrollback.
 
 The observed Codex `[Pasted Content N chars]` form is supported when it is the
 whole input and N matches the payload's Unicode code-point or UTF-16-unit

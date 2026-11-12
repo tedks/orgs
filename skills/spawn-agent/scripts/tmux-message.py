@@ -37,6 +37,7 @@ IMAGE_PLACEHOLDER = re.compile(r"\[Image#[0-9]+\]", re.I)
 FOOTER = re.compile(r"^\s*(?:.*(?:Context \d+%|\d+% context left| · )|tab to queue message|\? for shortcuts|esc to interrupt)", re.I)
 MODAL = re.compile(r"Quick safety check|Yes, I trust this folder|No, exit|Do you trust the contents|Press enter to continue|Would you like to (?:proceed|run)|Do you want to (?:proceed|allow)|Allow once|Esc to cancel", re.I)
 QUEUE = re.compile(r"Messages to be submitted|queued messages?", re.I)
+CLAUDE_SEND_NOW = "  ctrl+x ctrl+s to send now"
 
 
 CLAUDE_RESUME = re.compile(r"Resume this session with:\s*\n\s*claude --resume ([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?=\s|$)", re.I)
@@ -195,10 +196,19 @@ def records(frame, inp, strict_claude_submitted=False, archived_codex_status=Non
         text = queue_match.group(1) if queue_match else match.group(2)
         end = index + 1
         while end < len(lines) and lines[end].startswith("  ") and lines[end].strip():
-            if FOOTER.match(lines[end]) or PROMPT.match(lines[end]) or re.match(r"^\s*↳", lines[end]):
+            if (lines[end] == CLAUDE_SEND_NOW or FOOTER.match(lines[end])
+                    or PROMPT.match(lines[end]) or re.match(r"^\s*↳", lines[end])):
                 break
             text += "\n" + lines[end][2:].rstrip()
             end += 1
+        # Claude paints a queued user row above the live composer with this
+        # adjacent action hint. The hint is UI, not part of the sent payload.
+        # Require the native flush-left user prompt and exact hint; a bare
+        # matching row or an empty composer is insufficient queue evidence.
+        if kind == "submitted" and end < len(lines) and lines[end] == CLAUDE_SEND_NOW:
+            if not line.startswith("❯"):
+                continue
+            kind = "queued"
         following = next((row for row in lines[end:] if row.strip()), "")
         previous = next((row for row in reversed(lines[:index]) if row.strip()), "")
         # Full-screen redraw can archive an UNSENT input box in scrollback.
