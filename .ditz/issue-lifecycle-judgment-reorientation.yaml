@@ -26,3 +26,9 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-12T21:16:56-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Draft PR #51 (26c6725) adds bounded invariant-preserving alternative observation
+    and new-evidence retry guidance to closeout prose. This is partial guidance, not
+    the issue''s worked contrasts or effectiveness demonstration; issue remains open.'
