@@ -196,7 +196,7 @@ def records(frame, inp, strict_claude_submitted=False, archived_codex_status=Non
         text = queue_match.group(1) if queue_match else match.group(2)
         end = index + 1
         while end < len(lines) and lines[end].startswith("  ") and lines[end].strip():
-            if (lines[end] == CLAUDE_SEND_NOW or FOOTER.match(lines[end])
+            if (lines[end].rstrip() == CLAUDE_SEND_NOW or FOOTER.match(lines[end])
                     or PROMPT.match(lines[end]) or re.match(r"^\s*↳", lines[end])):
                 break
             text += "\n" + lines[end][2:].rstrip()
@@ -205,8 +205,16 @@ def records(frame, inp, strict_claude_submitted=False, archived_codex_status=Non
         # adjacent action hint. The hint is UI, not part of the sent payload.
         # Require the native flush-left user prompt and exact hint; a bare
         # matching row or an empty composer is insufficient queue evidence.
-        if kind == "submitted" and end < len(lines) and lines[end] == CLAUDE_SEND_NOW:
+        send_now = kind == "submitted" and end < len(lines) and lines[end].rstrip() == CLAUDE_SEND_NOW
+        if send_now:
             if not line.startswith("❯"):
+                continue
+            # A quoted two-line prompt can appear in output. The measured
+            # native queue row sits on the visible screen directly above the
+            # busy spinner, with the live Claude composer below it.
+            status = next((row for row in lines[end + 1:prefix_len + inp.start] if row.strip()), "")
+            if (inp.harness != "claude" or index < prefix_len
+                    or not status.startswith("✶ ")):
                 continue
             kind = "queued"
         following = next((row for row in lines[end:] if row.strip()), "")
@@ -226,7 +234,12 @@ def records(frame, inp, strict_claude_submitted=False, archived_codex_status=Non
                                     or rule(previous) or following in composer_statuses
                                     or archived_codex_box):
             continue
-        result[(kind, normalized(text))] += 1
+        if send_now:
+            # Keep visible spaces significant. Physical line wraps are not
+            # distinguishable from message newlines in a tmux capture.
+            result[("queued-visible", text.replace("\n", ""))] += 1
+        else:
+            result[(kind, normalized(text))] += 1
     return result
 
 
@@ -691,6 +704,7 @@ class Sender:
         input_disappeared = False
         max_enters = 1 if literal or claude_co_submit else 2
         accepted_forms = {normalized(self.expected)}
+        visible_forms = {self.expected.replace("\n", "")}
         while self.clock() < deadline:
             frame, current = self.sample()
             now = self.clock()
@@ -712,6 +726,10 @@ class Sender:
             for kind in ("submitted", "queued"):
                 if not literal and self.enters and any(receipt[(kind, form)] > baseline[(kind, form)] for form in accepted_forms):
                     return {"status": "delivered", "receipt": kind, "enters": self.enters}
+            if (not literal and self.enters and any(
+                    receipt[("queued-visible", form)] > baseline[("queued-visible", form)]
+                    for form in visible_forms)):
+                return {"status": "delivered", "receipt": "queued", "enters": self.enters}
             if (claude_co_submit and self.enters
                     and claude_combined_receipts(frame, current, self.original_draft, self.payload)
                     > claude_receipt_baseline):
@@ -729,6 +747,7 @@ class Sender:
                     evidence_since = now
                 owned = fp
                 accepted_forms.add(normalized(current.text))
+                visible_forms.add(current.text.replace("\n", ""))
                 due = start + self.o.submit_delay if last_enter is None else last_enter + self.o.retry_wait
                 if (now >= due and now - evidence_since >= self.o.poll_interval
                         and self.enters < max_enters and not input_disappeared):
@@ -739,6 +758,10 @@ class Sender:
                     for kind in ("submitted", "queued"):
                         if not literal and self.enters and any(fresh[(kind, form)] > baseline[(kind, form)] for form in accepted_forms):
                             return {"status": "delivered", "receipt": kind, "enters": self.enters}
+                    if (not literal and self.enters and any(
+                            fresh[("queued-visible", form)] > baseline[("queued-visible", form)]
+                            for form in visible_forms)):
+                        return {"status": "delivered", "receipt": "queued", "enters": self.enters}
                     if live.fingerprint() != owned or not self.input_evidence(live):
                         raise DeliveryError("input-changed-before-enter", 3)
                     self.tmux.keys("Enter")

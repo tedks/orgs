@@ -113,11 +113,15 @@ indented text may be an archived unsent composer. It is not a delivery receipt.
 `receipt-timeout` after an attempted paste means the message may have been
 submitted; inspect the pane and do not repaste the pending file.
 Claude can display a queued user row as a flush-left `❯` message followed by
-`ctrl+x ctrl+s to send now`, above its live composer. The sender counts a new
-exact matching row plus that hint as a queued receipt, including when a busy
-spinner or background-task rows surround the composer. The empty-composer hint
+`ctrl+x ctrl+s to send now`, above a busy spinner and its live composer. The
+sender counts a new matching visible row plus that hint as a queued receipt,
+including when background-task rows appear below the composer. Visible spaces
+must match; physical line breaks may be terminal wrapping. The empty-composer hint
 `Press up to edit queued messages` and task rows alone do not prove receipt.
 Claude may redraw with little scrollback, so inspect an ambiguous pane promptly.
+
+The scoped parser suite runs with
+`nix develop --command bazel test //skills/spawn-agent:tmux_message_test`.
 
 For `needs_review=true`, read the pane and inspect the reported stage. If a new
 receipt is visible, record acceptance. If this attempt's paste is still in the
