@@ -61,6 +61,15 @@ revokes a pause.
 
 When the coordinator's own tokens are the scarce resource, the binding tightens:
 
+Accepted finished work triggers prompt personal thanks and retirement
+initiation in the same controller turn. Retain a lane only for a named
+authorized next mission or review dependency needing its exact context;
+record reason, owner and next event/checkpoint in the existing roster.
+If a retirement command blocks, reconcile its assumption and invariant with
+a bounded alternate observation; do not replay an ambiguous command or
+weaken the identity and input guards. After verified exit, collect owned
+resources and empty childless shells, preserving active work and evidence.
+
 - A worker is a Claude Code session in its own tmux window and git worktree, spawned with the capability selected in the roster and briefed from a file; its resume id is recorded so it can be brought back for its own work. Inside it, bounded tactical subagents use tight briefs and concise acceptance reports. Model tiers and concurrency come from the roster, not this historical example.
 - Messages to the coordinator take fixed forms and nothing else: `LANDED #<n> <sha>`; `<worker> (<window>): BLOCKED: <one line>`; `<worker> (<window>): NEEDS RULING: <one line>`; `<worker> (<window>): COMPACT ME`; `DONE` with the remaining gaps named; the six-line standup reply; a one-line answer. The origin prefix is used only when the message does not already carry its origin.
 - Workers message each other directly for dependencies; nothing routes through the coordinator that needs no judgment.

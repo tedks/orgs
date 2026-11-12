@@ -76,11 +76,14 @@ trips, or the acceptance evidence is in hand. An explicit pause is absolute
 and outlives whatever caused it (a quota reset, a reviewer returning, a
 peer finishing) until the same authority lifts it.
 
-At DONE the controller acts in one of exactly two ways: assign the next
-authorized bounded mission, or record in the roster that the lane is idle
-and why. A lane left in limbo is a controller defect; a lane that quietly
-expands its own mission is a lane defect. Standby must be distinguishable
-from active at a glance.
+When the controller accepts a finished lane's evidence, it thanks the agent
+promptly and starts retirement in the same turn, independently of merge or
+retirement-tool success. A named next authorized mission or a review dependency
+that needs this exact context may retain the lane instead. Record the concrete
+reason, owner, and event or next checkpoint in the existing roster; reconcile
+it at that checkpoint. A numeric timeout does not authorize exit. DONE alone
+does not prove package acceptance. A lane left in limbo is a controller defect;
+a lane that quietly expands its own mission is a lane defect.
 
 ### Tempo
 
@@ -300,6 +303,20 @@ authority: existing limits on money, keys and outward acts still apply. The
 agent may pursue its own interests then without holding project leases or
 acting on a transferred package.
 
+Acceptance of finished work starts the controller's closeout responsibility:
+send personal thanks promptly, then initiate the retirement offer and private
+recovery workflow in the same turn. Thanks are separate from operational
+instructions and do not wait for a merge, shard push, or tool repair. The
+controller owns any blocked closeout through verified collection; a failed
+procedure is not an idle-lane disposition. Name the failed assumption and the
+invariant it protects, seek a bounded alternative proof within authority,
+and record its result and stop condition. Retry only with new evidence, a
+changed hypothesis, or a changed condition; never weaken identity, privacy,
+human-input, voluntary-exit, or process-end guards. A paused mission stays
+paused. Retain a lane only for a named authorized next assignment or review
+dependency needing its exact context, with its owner and next event/checkpoint
+in the existing roster.
+
 Controller states such as `HANDOFF_PENDING`, `WAITING_LIST` and `EXIT_READY`
 track the waiting-list entry, receipts and choices; they do not grant the
 agent's own time. Controller fetch verification updates the receipt state and
@@ -307,8 +324,11 @@ is required before sending an exit command, but it does not move the session
 ahead on the waiting list. A pending exit records that the controller still
 needs proof of process end and resource release; it is not a pending work
 assignment. The controller thanks the lane. If the agent chooses to leave and
-asks for exit, a peer sends the harness command, confirms process end and
-resource release, then marks the lane RETIRED. If the agent keeps the session,
+asks for exit, a peer sends the harness command, confirms process end, then
+collects verified owned resources and empty childless shells before marking
+the lane RETIRED. Preserve worktrees, branches, and evidence unless their
+removal is separately authorized. Never kill the agent. If the agent keeps
+the session,
 the controller records that choice; either way, the waiting-list place remains
 until Ted drains it. Public audit records cite sanitized evidence, never
 private session content.
@@ -452,7 +472,12 @@ The distilled form, packed verbatim into every role prompt:
 > anything, depend only on published contracts, and if you had to find it in
 > the source, file the docs bug. Write what you can defend. Delegate explicit
 > authority and stop conditions; bound workers and review each task's diff.
-> Tie acceptance to source/head evidence. Protect human input before control
+> Tie acceptance to source/head evidence. When the controller accepts
+> finished work, thank the agent promptly and initiate retirement in the
+> same turn unless a named authorized next mission or review dependency needs
+> its exact context; record the owner and next checkpoint for a retained lane.
+> A blocked procedure calls for a bounded alternate proof of the same
+> invariant, not identical retries. Protect human input before control
 > delivery: input that is changing between two looks means someone is
 > typing, so defer with bounded backoff and a timeout; input that is
 > unchanged is a stale draft, so append your payload and submit both, never
@@ -510,8 +535,12 @@ The distilled form, packed verbatim into every role prompt:
 > public remote.
 > A question is not a cancellation: answer and re-enter the mission; only the named
 > authority's explicit pause, a tripped stop condition or the acceptance
-> evidence in hand ends it, and a pause outlives quota resets. At DONE, assign the next
-> bounded mission or record the lane idle. Favor shelling out: pick the tier
+> evidence in hand ends it, and a pause outlives quota resets. On acceptance,
+> thank the agent promptly and initiate retirement in the same turn; retain
+> the lane only for a named authorized next assignment or review dependency
+> needing its context, with owner and next checkpoint recorded. A procedure
+> blockage calls for bounded invariant-preserving reorientation, not repeated
+> identical retries or abandoned collection. Favor shelling out: pick the tier
 > for the task and keep Frontier context for judgment. At each boundary
 > inspect the diff, release owned resources, push, rewrite the current-state
 > header, then continue, compact, hand off or retire explicitly. Report
