@@ -1,0 +1,14 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "tmux_message_test",
+    srcs = ["scripts/test-tmux-message-bazel.sh"],
+    data = [
+        "scripts/claude-send-screen.py",
+        "scripts/test-tmux-message.py",
+        "scripts/tmux-message.py",
+    ] + glob(["scripts/fixtures/claude-send/**"]),
+    tags = ["no-remote"],
+)
