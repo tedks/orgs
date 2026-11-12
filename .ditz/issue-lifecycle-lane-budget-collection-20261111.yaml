@@ -40,6 +40,15 @@ log_events:
     owner/checkpoint, and controller collection after verified exit. Docs guidance
     only; no live lane reconciliation or acceptance cases demonstrated. Issue remains
     open for the broader task/client/shell reconciliation and successor adoption work.'
+- time: 2026-11-12T21:28:59-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Partial completion: PR #51 merged 81b9f88 and deployed on active hosts.
+    Controller accepted and collected four completed Orgs renewal lanes: private handoffs
+    verified, voluntary exits with independent native/process receipts, tasks archived,
+    empty childless shells exited. Branches/evidence preserved. Broader lifecycle
+    automation and accounting remain open; this is a bounded controller reconciliation,
+    not a new automated retirement claim.'
 file_refs:
 - path: docs/research/diy-hrt-retirement-retro-20261111.md
   line:
