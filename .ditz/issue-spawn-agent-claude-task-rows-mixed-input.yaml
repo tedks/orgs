@@ -35,3 +35,13 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-12T21:30:34-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'PR #52 adds a synthetic regression of the observed Claude send-now queue,
+    empty-composer hint and background-task frame plus operator guidance. The production
+    parser remains unchanged: plain screen text can be spoofed by a transcript copy,
+    and read-only checks of the verified panes retained no native ANSI/style evidence.
+    Automatic delivery remains ambiguous; independent new submitted/queued evidence
+    or an attributable response is required before a manual acceptance record. Keep
+    this issue open for provenance evidence and a safe parser fix.'
