@@ -32,6 +32,14 @@ log_events:
     use the existing owner record. Acceptance includes restored finished lanes, active/paused
     negative cases and successor adoption without duplicate controllers. No live project
     cleanup authorized by this follow-up.'
+- time: 2026-11-12T21:16:56-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Draft PR #51 (26c6725) updates Orgs doctrine/roles/binding/retire-agent
+    prose for prompt thanks and retirement initiation on acceptance, retained-lane
+    owner/checkpoint, and controller collection after verified exit. Docs guidance
+    only; no live lane reconciliation or acceptance cases demonstrated. Issue remains
+    open for the broader task/client/shell reconciliation and successor adoption work.'
 file_refs:
 - path: docs/research/diy-hrt-retirement-retro-20261111.md
   line:
