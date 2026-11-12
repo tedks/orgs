@@ -42,6 +42,16 @@ log_events:
     publication and voluntary-exit guards. No live project control or research authority.
     Judgment guidance/evaluation tracked separately as lifecycle-judgment-reorientation
     and lifecycle-judgment-evaluation.'
+- time: 2026-11-12T20:21:30-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'PR47 light review caught and repaired an acceptance-test contradiction:
+    an empty resume argument or misleading cwd must neither establish nor override
+    native identity. The complete independent pinned-client/native-status/exact-idle-task
+    proof may still succeed; hints alone fail. Keep this as a paired fixture, not
+    a blanket rejection for missing resume argv. Read-only native status acquisition
+    has its own pinned-target/human-input protections and never authorizes exit before
+    identity is established.'
 file_refs:
 - path: docs/research/diy-hrt-retirement-retro-20261111.md
   line:
