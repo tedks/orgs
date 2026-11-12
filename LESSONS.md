@@ -7,14 +7,14 @@
 ## 2026-11-11 — A lifecycle proof must match the client's architecture
 
 - **What happened:** The diy-hrt retirement helper's unique writable rollout-FD requirement failed before offer or exit for local-daemon-attached Codex clients. Task archival alone left live clients and shells. A bounded manual closeout used exact native status, pinned process identity, idle task state, verified private recovery, matching native reconnect notices and process end, then childless-shell EOF. The final counts were 27 archived tasks, 24 ended clients and 26 closed shells; they name different objects.
-- **Evidence:** [diy-hrt lifecycle retrospective](docs/research/diy-hrt-retirement-retro-20261111.md), the diy-hrt November 10–11 public control checkpoints, and private structured closure receipts retained outside this public repository.
+- **Evidence:** [diy-hrt lifecycle retrospective](docs/research/diy-hrt-retirement-retro-20261111.md), the diy-hrt November 10–11 private control checkpoints, and private structured closure receipts retained outside this public repository.
 - **Applies when:** a proof method assumes each UI client owns the session artifact, or a controller equates task, client and window state during paused multi-lane cleanup. Keep those state receipts separate and design an exact, bounded alternate proof or stop when the deployed architecture differs.
 - **Reconsider when:** the harness supplies a trustworthy per-client process identity and transactional task/client/window closure receipts, or the proposed native status/task mapping cannot be attributed to a pinned client.
 
 ## 2026-11-11 — A sender timeout can be settled by independent evidence
 
 - **What happened:** `/status` and `/exit` sender attempts timed out on their screen receipt while later native observations established status and exact-session exits. No ambiguous payload was blindly replayed. One empty resume argument and misleading cwd also showed why identity cannot be inferred from a path.
-- **Evidence:** [diy-hrt lifecycle retrospective](docs/research/diy-hrt-retirement-retro-20261111.md) and the public closeout checkpoint; private per-client receipts remain outside this repository.
+- **Evidence:** [diy-hrt lifecycle retrospective](docs/research/diy-hrt-retirement-retro-20261111.md) and the private closeout checkpoint; private per-client receipts remain outside this repository.
 - **Applies when:** control travels through an interactive composer with bounded receipt observation. Preserve uncertain sends, require a fresh independent action witness, and keep exact identity and human-input checks.
 - **Reconsider when:** the transport provides durable event-ID acknowledgment and an exact action result that supersede screen inference.
 
