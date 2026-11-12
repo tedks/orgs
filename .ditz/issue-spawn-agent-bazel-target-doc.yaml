@@ -1,0 +1,21 @@
+id: spawn-agent-bazel-target-doc
+title: Document scoped spawn-agent Bazel test target in repo gate list
+desc: 'PR #52 adds `//skills/spawn-agent:tmux_message_test` as a scoped Bazel wrapper
+  for the parser suite and documents it in the spawn-agent skill. The repository AGENTS.md
+  Build and test section does not yet name this target or distinguish it from broader
+  gates. Add a concise note there when updating repo-level gate guidance; no parser
+  or transport behavior changes are needed. Filed as a nonblocking editorial follow-up
+  to the final council nit.'
+type: task
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-12T21:32:08-00:00
+references: []
+log_events:
+- time: 2026-11-12T21:32:08-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
