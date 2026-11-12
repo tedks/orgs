@@ -1,11 +1,17 @@
 ---
 name: retire-agent
-description: Preserve a private, resumable agent handoff and verify a polite exit, or transfer the handoff to a freshly spawned successor.
+description: Close out accepted agent work with a private resumable handoff and voluntary verified exit, or transfer the handoff to a fresh successor.
 ---
 
 # retire-agent
 
-Use this for an explicitly authorized retirement, waiting handoff, or migration.
+Use this when a controller accepts finished lane work and initiates closeout,
+or for an explicitly authorized retirement, waiting handoff, or migration.
+Send personal thanks promptly, independently of this skill's success; the
+offer and operational recovery are separate. A retained lane needs a named
+authorized next mission or review dependency requiring its exact context,
+with reason, owner and next event/checkpoint in the existing roster. A pause
+does not resume its package.
 A saved handoff and an ended agent process are separate receipts. Preserve
 human input and leave a session open when either receipt cannot be established.
 Read [the shard and recovery contract](references/protocol.md) before invoking
@@ -29,6 +35,12 @@ or exit input.
 A missing, changed or conflicting binding blocks input. Do not substitute
 home-wide searches, `/nix/store` discovery, cwd, environment UUIDs or newest
 rollout.
+If the scripted path blocks, the controller keeps ownership of collection:
+identify the failed assumption and protected invariant, use a bounded
+alternative observation within authority, and record its receipt or blocker.
+Retry only with new evidence, a changed hypothesis, or changed conditions.
+Never bypass native identity, private recovery, human input, voluntary exit,
+or process-end proof to make the procedure finish.
 
 ## Modes
 
@@ -90,6 +102,10 @@ original processes ended and a fresh native resume notice
 names the immutable shard's same session UUID; an exit transport result alone is
 insufficient. Never kill a session. Do not stop unrelated services or delete
 worktrees, branches, transcripts, or another actor's files.
+After verified process exit, collect verified owned resources and empty
+childless shells; distinguish a shell from the agent process and preserve any
+active work or unknown child. Record collection receipts in the existing
+owner record before marking the lane retired.
 
 The wrapper directly `exec`s Python: pending or usage failure exits nonzero
 (2), and only completed retirement exits zero. If piping output through `tail`

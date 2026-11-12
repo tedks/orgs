@@ -68,6 +68,15 @@ revokes a pause.
 
 When the coordinator's own tokens are the scarce resource:
 
+Accepted finished work triggers prompt personal thanks and retirement
+initiation in the same controller turn. Retain a lane only for a named
+authorized next mission or review dependency needing its exact context;
+record reason, owner and next event/checkpoint in the existing roster.
+If a retirement command blocks, reconcile its assumption and invariant with
+a bounded alternate observation; do not replay an ambiguous command or
+weaken the identity and input guards. After verified exit, collect owned
+resources and empty childless shells, preserving active work and evidence.
+
 - A worker is a Codex session in its own tmux window and worktree, spawned
   with the roster's tier and briefed from a file. Its session id is recorded
   so it can be brought back for its own work.

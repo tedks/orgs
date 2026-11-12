@@ -45,6 +45,12 @@ after that.
   `token-usage posture` (or `get_usage` for posture); CTOs choose the provider
   from posture.
 - A question is not a cancellation. Answer it and re-enter the mission.
+- When the controller accepts a finished lane's evidence, thank the agent
+  promptly and initiate retirement in that turn. Retain the lane only for a
+  named authorized next mission or review dependency needing its exact
+  context; record reason, owner, and next event/checkpoint in the roster.
+  DONE alone does not establish acceptance. A pause stays paused. Exit remains
+  the agent's choice after private recovery is verified.
 - Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.
 
 ## CEO (the human)
@@ -68,8 +74,9 @@ and treats one forming as the defect it is.
   artifacts alone, before any live pane, chat or predecessor session; that
   is the cold-start audit, and if it fails, file the protocol defect
   first. Rewrite the roster's current-state header. List
-  every live lane with pane, mission, state and next action. Find the idle
-  lanes and act: assign, or record idle and why.
+  every live lane with pane, mission, state and next action. Reconcile
+  finished lanes toward retirement; retain one only with a concrete reason,
+  owner, and next event/checkpoint, never a numeric timeout as exit permission.
 - **Reports:** consolidated sitreps on request; decision-log entries as
   decisions are made; blockers at once. Never routine acknowledgements.
 - **Lifecycle:** compact at checkpoints after the roster is current. A
@@ -81,6 +88,11 @@ and treats one forming as the defect it is.
   low to continue, ask that authority to explicitly pause or stop the lane's
   assignment. The roster never
   goes stale before a compaction.
+  Own closeout through verified process exit and collection of owned resources
+  and empty childless shells. If a procedure blocks, try a bounded alternate
+  observation that proves the same invariant; retry only when evidence or
+  conditions change. Preserve active work, human input, paused scope,
+  worktrees, branches, and evidence. Never kill an agent.
 - **Does not:** implement, except a tracer bullet; relay routine
   acknowledgements; watch lanes turn by turn; approve individual attempts
   inside a package that already carries repair authority.
@@ -104,7 +116,10 @@ and treats one forming as the defect it is.
   remaining gaps named; and the lifecycle request `COMPACT ME` where the
   binding uses it.
 - **Lifecycle:** compact between coherent tasks after the record is
-  current. At DONE, retire or hand off; never drift into a new mission.
+  current. At DONE, report the evidence for controller acceptance; the
+  controller thanks and initiates retirement on acceptance unless it records
+  a concrete authorized reason to retain this context. Never drift into a
+  new mission.
   Workers get a fresh context per task unless the next task needs exactly
   what they hold.
 
