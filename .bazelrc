@@ -1,1 +1,2 @@
 common --lockfile_mode=error
+try-import %workspace%/.bazelrc.local

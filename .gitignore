@@ -6,3 +6,4 @@ skills/synced/
 /result
 /result-*
 /bazel-*
+.bazelrc.local
