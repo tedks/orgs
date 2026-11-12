@@ -62,9 +62,12 @@ Claude can show a flush-left `❯` payload row followed by
 screen text cannot distinguish that queue row from a transcript copy with the
 same rows. The sender leaves this shape ambiguous; an empty composer or
 `Press up to edit queued messages` does not strengthen it. Inspect the pane
-immediately and record acceptance manually only when the fresh native queue
-entry is identifiable. Claude may retain little scrollback. Do not replay the
-pending payload on ambiguous evidence.
+immediately for independent new submitted or queued evidence, or a subsequent
+agent response attributable to the exact message. Such a response supports
+what the agent observed or completed, while the sender's transport result
+remains ambiguous. If neither exists, delivery remains unconfirmed and the
+private pending payload is preserved. Claude may retain little scrollback.
+Do not send a new message to manufacture proof or replay an ambiguous payload.
 
 The observed Codex `[Pasted Content N chars]` form is supported when it is the
 whole input and N matches the payload's Unicode code-point or UTF-16-unit

@@ -118,8 +118,12 @@ screen capture alone cannot establish that this row came from Claude rather
 than a transcript copy. The sender therefore leaves this shape ambiguous.
 The empty-composer hint `Press up to edit queued messages` and background-task
 rows alone do not prove receipt. Inspect an ambiguous pane promptly: Claude may
-redraw with little scrollback. Record acceptance manually only after checking
-a fresh native queue entry; do not replay the pending payload.
+redraw with little scrollback. Record acceptance manually only with independent
+new submitted or queued evidence, or a subsequent agent response attributable
+to the exact message. The response shows what the agent observed or completed;
+it does not turn the sender's ambiguous result into a verified transport receipt.
+If that evidence is absent, leave delivery unconfirmed and preserve the pending
+payload. Do not send another message just to obtain proof or replay the payload.
 
 The scoped parser suite runs with
 `nix develop --command bazel test //skills/spawn-agent:tmux_message_test`.
