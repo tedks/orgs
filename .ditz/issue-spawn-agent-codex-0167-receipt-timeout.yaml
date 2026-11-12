@@ -1,0 +1,25 @@
+id: spawn-agent-codex-0167-receipt-timeout
+title: Codex 0.167 queued and submitted messages produce tmux-message receipt-timeout
+desc: "Observed during 2026-11-12 closeout: four long offers sent to Codex v0.167.0
+  daemon clients returned receipt-timeout after one paste and Enter. A typed /status
+  also returned timeout although a fresh native status response proved execution.
+  Independent immediate pane reads showed the exact offers as native \u203A user rows
+  followed by agent responses. No ambiguous pending payload was replayed.\n\nReproduce
+  with sanitized synthetic frames for the measured Codex screen shape. Diagnose why
+  fresh native rows are not counted despite a recognized composer, then tighten receipt
+  recognition without accepting empty-composer disappearance, assistant prose, archived
+  unsent boxes or ambiguous history. Keep the existing exact pane, typing, modal and
+  one-paste guards. Separate from PR #52's Claude send-now queue change."
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-12T21:22:34-00:00
+references: []
+log_events:
+- time: 2026-11-12T21:22:34-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
