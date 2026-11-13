@@ -1,0 +1,39 @@
+id: tmux-message-enters0-stranded-paste
+title: 'tmux-message: ambiguous with enters=0 can strand a pasted return in an idle
+  receiver composer'
+desc: 'Observed in the 2026-11-13 return-message audit (private evidence with the
+  Orgs CTO). A lane''s LANDED report to an idle Codex CTO returned ambiguous mixed-input-after-paste
+  with enters=0. A pane read showed the payload unsubmitted in the receiver composer,
+  and the native user row appeared only about 11.5 h later, submitted by an unknown
+  actor. The protocol correctly forbids Enter or replay after ambiguity, but nothing
+  durable distinguishes "pasted, not submitted" from "probably queued", and no one
+  owns follow-up. In this instance the practical effect was low, because the CTO had
+  independently recorded the merge.
+
+
+  Smallest remedies, in order:
+
+  (1) Instruction: on ambiguous with enters=0, the sender records RETURN-UNSUBMITTED
+  in its durable status header and raises it in its next report. The controller''s
+  standup reads lane headers.
+
+  (2) Tool: emit a distinct reason or flag (e.g. pasted_not_submitted=true) when enters==0
+  after a paste, so callers can branch without reading the screen.
+
+
+  Acceptance: a synthetic idle-composer frame that triggers mixed-input before Enter
+  yields the distinct flag, and leaves the pending file with no Enter and no replay.
+  The existing ambiguity tests are unchanged.'
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-13T07:53:25-00:00
+references: []
+log_events:
+- time: 2026-11-13T07:53:25-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
