@@ -45,3 +45,19 @@ log_events:
     Automatic delivery remains ambiguous; independent new submitted/queued evidence
     or an attributable response is required before a manual acceptance record. Keep
     this issue open for provenance evidence and a safe parser fix.'
+- time: 2026-11-13T07:53:08-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Return-message audit 2026-11-13 (private evidence held by the Orgs CTO):
+    in a 72h sender-side sample of lane-to-CTO sends, Claude receivers accounted for
+    nearly all ambiguous mixed-input-after-paste results. For about 96% of ambiguous
+    CTO-bound sends, the receiver''s native Claude transcript showed the payload exactly
+    once, as a queue-operation enqueue (later dequeued as queued_command) or a submitted
+    user row, typically within 15-60 s. No duplicate was observed in the hand-traced
+    cases. Implication: Claude''s native transcript provides non-screen receipt evidence
+    (queue enqueue with content) that could confirm delivery without parsing the send-now
+    screen row. The receiver session is observable from ~/.claude/sessions/<pid>.json
+    for the pane''s claude child, not inferred from the newest transcript. Candidate
+    acceptance test: a verifier given (pane, pre-send time, payload hash) returns
+    delivered for a busy-Claude synthetic queue, and unknown, never delivered, when
+    the session file is missing or the content does not match.'
