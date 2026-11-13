@@ -21,3 +21,16 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-13T10:00:05-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'PR49 exact-head review at d171e1c: defer three nonblocking polish items
+    to this existing build maintenance issue: (1) qualify .bazelrc''s override comment
+    for Bazel command-specificity/inheritance (later file position only settles options
+    at equivalent command specificity); align the governing parent prose when corrected;
+    (2) say first directive rather than literal first line where comments precede
+    the infrastructure import; behavior is unchanged; (3) consider ignoring workspace-local
+    .bazelrc.local to reduce accidental per-host commits. Current allowlist excludes
+    .gitignore; do not widen this version/config PR for that nit. Owner Orgs CTO with
+    parent contract owner for shared wording. Exact-head standalone gates pass; active
+    ambient profile not qualified here.'
