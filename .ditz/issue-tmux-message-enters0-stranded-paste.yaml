@@ -4,17 +4,21 @@ title: 'tmux-message: ambiguous with enters=0 leaves receiver submission unconfi
 desc: 'Observed in the 2026-11-13 return-message audit (private evidence with the
   Orgs CTO). enters=0 records only that this sender sent no Enter; it does not show
   whether the receiver submitted the message. In the audit sample, some enters=0 ambiguous
-  sends had a matching receiver row within seconds. Those sends sat in multi-send
-  calls and were matched only by opening text, so they are unresolved, but they count
-  against reading enters=0 as "not submitted".
+  sends had a matching receiver row within seconds. Some calls contained multiple
+  sends; one was classified as a simple ambiguous send. Receiver matches are provisional
+  opening-text labels. Independently of those labels, this sender''s Enter count alone
+  cannot establish receiver state.
 
 
   One case had stronger evidence. A lane''s LANDED report to an idle Codex CTO returned
   ambiguous mixed-input-after-paste with enters=0. A pane read then showed the payload
   retained in the receiver composer, and the receiver''s native user row appeared
-  about 11.5 h later, submitted by an unknown actor. The protocol correctly forbids
-  Enter or replay after ambiguity, but nothing durable records the unresolved confirmation
-  or gives it an owner. In this instance the practical effect was low.
+  about 11.5 h later, submitted by an unknown actor. The protocol forbids blind replay.
+  Existing operator authority permits deliberate Enter-only recovery with fresh evidence
+  identifying the retained input as this attempt''s paste and preserving human input;
+  ambiguity alone grants no recovery action. The gap is reliable recording and ownership
+  of unresolved confirmation, not a categorical prohibition on guarded recovery. In
+  this instance the practical effect was low.
 
 
   Proposals (NOT ADOPTED; for the owner''s decision):
@@ -49,6 +53,10 @@ log_events:
   what: changed title
   comment: ""
 - time: 2026-11-13T07:58:03-00:00
+  who: Ted Smith
+  what: updated description
+  comment: ""
+- time: 2026-11-13T08:05:39-00:00
   who: Ted Smith
   what: updated description
   comment: ""
