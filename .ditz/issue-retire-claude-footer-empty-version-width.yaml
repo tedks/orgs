@@ -1,0 +1,25 @@
+id: retire-claude-footer-empty-version-width
+title: Cover Claude completion footers with empty versions and width-dependent status
+desc: 'Renewal P8 field report: exact final DONE followed by native duration and joined
+  token/update UI status can remain unobserved. Current protocol already supports
+  duration verbs and some joined status shapes; reproduce the precise empty-version
+  and narrow/truncated distinction before editing. Related older producer-owner tracker
+  evidence exists; raw records remain private. Add sanitized faithful fixtures for
+  full-width, wrapped, truncated, empty-version and separately status-only forms;
+  record installed source/CLI version. Preserve latest exact-event assistant block,
+  identity and exit invariants. Negative/mutation fixtures: later prose/turn, quoted
+  or wrong marker, modal, unknown suffix. Width workaround is diagnostic only, not
+  a required global resize. Owner Orgs CTO, renewal P8; unstarted repair.'
+type: task
+component: lifecycle
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-13T09:00:42-00:00
+references: []
+log_events:
+- time: 2026-11-13T09:00:42-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
