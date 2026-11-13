@@ -61,3 +61,20 @@ log_events:
     acceptance test: a verifier given (pane, pre-send time, payload hash) returns
     delivered for a busy-Claude synthetic queue, and unknown, never delivered, when
     the session file is missing or the content does not match.'
+- time: 2026-11-13T07:58:03-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Correction to my 2026-11-13 audit comment above, after review. The receiver
+    evidence was matched on the payload''s opening text (about 32 characters), not
+    on full payload or event identity. Many senders prefix every message with the
+    same lane name, so openings collide. Of the single-send ambiguous results in the
+    sample, 47 of 51 have an opening-text match whose first receiver row precedes
+    the next same-opening send to that CTO. That is a provisional label, not confirmed
+    delivery, and "exactly once" is withdrawn. A queue enqueue, its queued_command
+    attachment and a user row are representations of one message, not duplicates.
+    Five sends had more than two queue rows matching their opening, and these remain
+    unresolved. Read the summary as no evidence of widespread loss in this sample,
+    not as proof of no loss. Withdrawn: the suggestion that a transcript verifier
+    should be validated against these labels. Any verifier needs independently labelled
+    cases, e.g. synthetic sends with unique markers, before its positive target can
+    be set.'
