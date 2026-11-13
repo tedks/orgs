@@ -2,8 +2,10 @@
   description = "Portable agent skills and the harness-control runtime";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+  # Shared Bazel pin: bazel_8 at this revision is 8.7.0.
+  inputs.nixpkgs-bazel.url = "github:NixOS/nixpkgs/56c02bc00adcf003215cc4bd996d6efaf4cff188";
 
-  outputs = { nixpkgs, ... }:
+  outputs = { nixpkgs, nixpkgs-bazel, ... }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
@@ -168,7 +170,7 @@
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = [ pkgs.bazel_8 pkgs.bash pkgs.coreutils pkgs.gitMinimal ];
+        packages = [ nixpkgs-bazel.legacyPackages.${system}.bazel_8 pkgs.bash pkgs.coreutils pkgs.gitMinimal ];
       };
     };
 }
