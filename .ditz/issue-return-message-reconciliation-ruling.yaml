@@ -1,0 +1,42 @@
+id: return-message-reconciliation-ruling
+title: 'Return-message reconciliation: decide whether existing lane status needs a
+  confirmation marker'
+desc: 'Decision owner: Ted; accountable project owner: Orgs CTO. Proposed, not adopted.
+  The accepted private return-message audit supports a diagnostic gap between ambiguous
+  sender results, independent receiver evidence and controller follow-through. It
+  does not establish a fleet loss rate or justify a spool rewrite.
+
+
+  Options: (1) add a compact RETURN-UNCONFIRMED marker and resolution to existing
+  lane status headers, with controllers reconciling DONE/BLOCKED/LANDED headers during
+  existing standups; (2) use only existing prose status records and make the scan
+  practice explicit; (3) defer policy changes pending a bounded observed trial. Recommendation:
+  use existing records and standing reconciliation authority now; evaluate a compact
+  marker before imposing a new fleet-wide reporting requirement. Do not add another
+  ledger or mandatory acknowledgement message.
+
+
+  The marker reports unresolved confirmation; RETURN-UNSUBMITTED requires observed
+  retained composer evidence. Enters=0 records this sender''s action only. Preserve
+  the existing no-blind-replay and human-input guards and distinguish delivery, acknowledgement
+  and task completion.
+
+
+  Blocks: adoption of a new shared skill/doctrine reporting requirement and any fleet-wide
+  trial. Does not block acceptance/retirement of the completed audit or ordinary controller
+  reading of existing lane records. Related bounded tooling proposal: tmux-message-enters0-stranded-paste;
+  receipt provenance remains tracked by spawn-agent-claude-task-rows-mixed-input.
+  No production change or trial has been authorized by accepting the audit.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-13T08:05:39-00:00
+references: []
+log_events:
+- time: 2026-11-13T08:05:39-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
