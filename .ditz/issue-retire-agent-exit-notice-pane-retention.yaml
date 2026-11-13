@@ -1,0 +1,39 @@
+id: retire-agent-exit-notice-pane-retention
+title: 'retire-agent: retain native exit evidence before a client-root pane disappears'
+desc: 'Observed in a bounded Orgs audit closeout: spawn-agent launched the Claude
+  client as the tmux pane root. The accepted worker explicitly chose guarded exit.
+  retire-agent verified its native identity, observed its event-specific completion,
+  published and fetched the private shard, and sent a guarded literal exit once. The
+  client ended and tmux removed the pane before the sender/observer retained a fresh
+  native resume notice. The result remained ambiguous/pending despite independently
+  observed process end and no remaining original process-group members. No replay
+  or agent kill occurred.
+
+
+  This is an evidence-retention defect, not permission to weaken the two independent
+  exit receipts. Before exit input, determine whether the owned pane will survive
+  client exit and preserve the native notice using a scoped, verified retention mechanism
+  or fail before input with an actionable gap. Do not modify global tmux options or
+  unrelated panes. Preserve human-input and identity checks. After notice/process
+  verification, collect only the verified dead owned pane or empty childless shell.
+
+
+  Acceptance: an isolated direct-client pane fixture exits promptly yet retains the
+  exact same-session native notice long enough for verification and subsequent collection;
+  absent/mismatched notice never clears retirement. Paired fixture for an ordinary
+  shell-backed pane remains valid. No agent must be relaunched merely to manufacture
+  historical exit evidence. Private incident details remain with the Orgs CTO; no
+  production fix in this audit.'
+type: bugfix
+component: lifecycle
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-13T08:11:20-00:00
+references: []
+log_events:
+- time: 2026-11-13T08:11:20-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
