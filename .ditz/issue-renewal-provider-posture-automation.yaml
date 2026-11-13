@@ -1,0 +1,28 @@
+id: renewal-provider-posture-automation
+title: Automate provider posture at org task boundaries
+desc: 'Adopted direction: choose new lanes and CTO/lead migrations by weekly allowance
+  rate (remaining percentage divided by positive hours to reset), constrained by weekly
+  exhaustion and valid five-hour gates; no fixed ratio. First correct producer freshness
+  semantics: expired short-window data must not discard usable weekly comparisons
+  in favor of reset-first fallback. Preserve unknown states. Then integrate one posture
+  line in briefs/boundaries, defer exhausted-provider launches, migrate at task boundaries
+  with verified handoff and single package authority, and reduce concurrency/polling
+  when measured burn exceeds allowance. Counts need a defensible conversion before
+  comparison with percentage allowance. Owner Orgs CTO; producer and host installation
+  belong to the usage-tool owner. Tests: stale short/live weekly, weekly 100%, live
+  short exhaustion, missing/expired weekly, reset rollover, flips and idempotent boundary
+  actions. Reuse usage-posture-reset-doctrine and orgs-get-usage-posture-hardening.
+  No automatic rollout or live migrations claimed by this issue.'
+type: task
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-13T08:31:07-00:00
+references: []
+log_events:
+- time: 2026-11-13T08:31:07-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
