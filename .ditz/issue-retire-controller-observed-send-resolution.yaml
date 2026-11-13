@@ -1,0 +1,24 @@
+id: retire-controller-observed-send-resolution
+title: Assess controller receipts for outstanding retirement sends
+desc: Evaluate whether controller-observed exact message delivery can resolve an outgoing
+  ACK/DONE obligation when the retiring lane did not retain sender handles. Delivery
+  does not prove sender subprocess termination or resource release. Preserve native
+  identity, active-work, human-input, private recovery, voluntary exit and process-end
+  guards. Require bounded independent process/descendant proof or accepted transfer
+  for actual resources; unavailable evidence remains explicit. No replay and no new
+  mandatory paperwork. Owner Orgs CTO; fold into renewal P8. Existing manual controller
+  receipt remains until a reviewed contract and negative fixtures establish the safe
+  boundary.
+type: task
+component: lifecycle
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-13T08:31:07-00:00
+references: []
+log_events:
+- time: 2026-11-13T08:31:07-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
