@@ -1,29 +1,36 @@
 id: tmux-message-enters0-stranded-paste
-title: 'tmux-message: ambiguous with enters=0 can strand a pasted return in an idle
-  receiver composer'
+title: 'tmux-message: ambiguous with enters=0 leaves receiver submission unconfirmed
+  and unowned'
 desc: 'Observed in the 2026-11-13 return-message audit (private evidence with the
-  Orgs CTO). A lane''s LANDED report to an idle Codex CTO returned ambiguous mixed-input-after-paste
-  with enters=0. A pane read showed the payload unsubmitted in the receiver composer,
-  and the native user row appeared only about 11.5 h later, submitted by an unknown
-  actor. The protocol correctly forbids Enter or replay after ambiguity, but nothing
-  durable distinguishes "pasted, not submitted" from "probably queued", and no one
-  owns follow-up. In this instance the practical effect was low, because the CTO had
-  independently recorded the merge.
+  Orgs CTO). enters=0 records only that this sender sent no Enter; it does not show
+  whether the receiver submitted the message. In the audit sample, some enters=0 ambiguous
+  sends had a matching receiver row within seconds. Those sends sat in multi-send
+  calls and were matched only by opening text, so they are unresolved, but they count
+  against reading enters=0 as "not submitted".
 
 
-  Smallest remedies, in order:
-
-  (1) Instruction: on ambiguous with enters=0, the sender records RETURN-UNSUBMITTED
-  in its durable status header and raises it in its next report. The controller''s
-  standup reads lane headers.
-
-  (2) Tool: emit a distinct reason or flag (e.g. pasted_not_submitted=true) when enters==0
-  after a paste, so callers can branch without reading the screen.
+  One case had stronger evidence. A lane''s LANDED report to an idle Codex CTO returned
+  ambiguous mixed-input-after-paste with enters=0. A pane read then showed the payload
+  retained in the receiver composer, and the receiver''s native user row appeared
+  about 11.5 h later, submitted by an unknown actor. The protocol correctly forbids
+  Enter or replay after ambiguity, but nothing durable records the unresolved confirmation
+  or gives it an owner. In this instance the practical effect was low.
 
 
-  Acceptance: a synthetic idle-composer frame that triggers mixed-input before Enter
-  yields the distinct flag, and leaves the pending file with no Enter and no replay.
-  The existing ambiguity tests are unchanged.'
+  Proposals (NOT ADOPTED; for the owner''s decision):
+
+  (1) Instruction: on ambiguous with enters=0, the sender records RETURN-UNCONFIRMED
+  <marker> in its durable status. It upgrades this to RETURN-UNSUBMITTED only on observed
+  retained composer evidence, and resolves it when independent receipt or acknowledgement
+  evidence appears. The controller''s standup reads lane status records.
+
+  (2) Tool: report the sender''s action explicitly (e.g. submit_not_attempted=true
+  when a paste occurred with zero Enters), without claiming the receiver''s state.
+
+
+  Acceptance for (2): a synthetic frame that triggers mixed-input before Enter yields
+  submit_not_attempted=true and no receiver-state claim, sends no Enter, does no replay
+  and keeps the pending file. The existing ambiguity tests are unchanged.'
 type: bugfix
 component: spawn-agent
 release:
@@ -36,4 +43,12 @@ log_events:
 - time: 2026-11-13T07:53:25-00:00
   who: Ted Smith
   what: created
+  comment: ""
+- time: 2026-11-13T07:58:03-00:00
+  who: Ted Smith
+  what: changed title
+  comment: ""
+- time: 2026-11-13T07:58:03-00:00
+  who: Ted Smith
+  what: updated description
   comment: ""
