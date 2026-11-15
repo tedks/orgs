@@ -174,6 +174,7 @@ Options precede actual message text or `--prompt-file FILE`:
 | `--receipt-wait` | 15 | Additional confirmation budget |
 | `--retry-wait` | 3 | Minimum interval before the second Enter |
 | `--poll-interval` | 0.25 | Screen sampling cadence |
+| `--diagnostic-file ABSOLUTE_NEW_PATH` | off | One-attempt private structural diagnostic; see below |
 
 `--backoff` waits within `--max-wait` for changing input to settle, rather than
 returning immediately when typing is detected. Stable drafts no longer block
@@ -187,6 +188,44 @@ render + submit-delay + receipt-wait; operations also have subprocess timeouts.
 The launcher gives `/compact` its configured compaction timeout as the receipt
 budget, because some layouts show only completion rather than an initial user
 row. Receipt waits may exceed 600 seconds when explicitly configured.
+
+### Opt-in structural diagnostic
+
+`--diagnostic-file` is an explicit option on one `send` invocation. It does
+not persist to subsequent calls, install a watcher, or collect additional
+frames. The sender reserves a new file before any input. Its absolute parent
+path must have no symlink component; the final directory must be owned by the
+caller with mode 0700. Existing targets and unsafe paths return a fixed
+`unsafe-diagnostic-path` usage error before paste, Enter, or cursor navigation.
+The reserved file is mode 0600. The ordinary target resolver and per-pane lock
+still pin the one destination; the diagnostic cannot redirect it.
+
+The JSON artifact contains a fixed schema, safe outcome/reason enums, input
+method, sender Enter count, the last pre-paste sample, at most 16 recent
+post-paste samples, and bounded paste/Enter events. Samples report elapsed
+time, pane dimensions, relative cursor, composer kind/harness, selected
+predicate decisions, and at most 12 composer rows of 160 display cells each.
+Every arbitrary non-whitespace glyph is replaced by a width-preserving `#`;
+combining marks are omitted. SGR is reduced to the allowlisted style flags
+bold, dim, italic, underline, inverse, foreground and background with cell
+spans. Recognized prompt/paste/image marker types and bounded numeric counts
+are separate fields. Unknown, modal, malformed or non-SGR control framing
+yields no row structure. No raw ANSI/OSC payload, arbitrary text, history,
+native identifier, pending payload, screenshot or text hash enters the file.
+The entire JSON is capped at 64 KiB; older post-paste samples are dropped if
+needed. This layout, cursor and timing metadata is still private and may
+reveal word boundaries and lengths, including those of any human draft. Only
+reviewed synthetic reconstruction belongs in public fixtures.
+
+Diagnostic serialization or writing happens after the transport decision. A
+late failure reports fixed `diagnostic_status=write-failed` while preserving
+the send's original status, receipt, Enter count and exit code. Cleanup removes
+the reserved name only if its device/inode still match; an unknown replacement
+is left untouched. A successful artifact reports `diagnostic_status=written`.
+If the process crashes or is killed, a reserved empty or partial file may
+remain for its owner to inspect and dispose of; there is no automatic cleanup,
+upload or retention policy. Normal pending-message ambiguity rules still
+apply, and a diagnostic never licenses replay.
 For slash commands such as `/compact` and `/exit`, use `--typed-command`: the sender inserts
 literal characters with `tmux send-keys -l` rather than bracketed paste. The
 same lock, input verification, settling delay, and NEW
