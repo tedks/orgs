@@ -1,0 +1,26 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+sh_test(
+    name = "status_capture_test",
+    srcs = ["test-status-capture-bazel.sh"],
+    data = [
+        "test_harness_status_parser_capture.py",
+        "harness_status.py",
+        "fixtures/claude-statusline.json",
+        "//skills/_shared/hooks:capture-claude-status.sh",
+    ],
+    tags = ["no-remote"],
+)
+
+sh_test(
+    name = "status_capture_mutation_test",
+    srcs = ["test-status-capture-bazel.sh"],
+    args = ["--mutation-check"],
+    data = [
+        "test_harness_status_parser_capture.py",
+        "harness_status.py",
+        "fixtures/claude-statusline.json",
+        "//skills/_shared/hooks:capture-claude-status.sh",
+    ],
+    tags = ["no-remote"],
+)

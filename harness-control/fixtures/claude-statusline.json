@@ -1,0 +1,18 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "cwd": "/example/fallback",
+  "workspace": {"current_dir": "/example/worktree", "project_dir": "/example/project"},
+  "transcript_path": "/example/private-transcript.jsonl",
+  "model": {"id": "claude-example", "display_name": "Example"},
+  "context_window": {
+    "context_window_size": 200000,
+    "used_percentage": 25.5,
+    "remaining_percentage": 74.5
+  },
+  "rate_limits": {
+    "five_hour": {"used_percentage": 0, "resets_at": 2000000100},
+    "seven_day": {"used_percentage": 42.5, "resets_at": 2000600000},
+    "spend_limit": {"used_percentage": 105, "resets_at": 2000700000}
+  },
+  "unrelated_private_field": "never persist this"
+}

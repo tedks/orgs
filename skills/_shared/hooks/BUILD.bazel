@@ -20,3 +20,12 @@ sh_test(
     data = ["search-guard.sh", "//skills/_shared/search-guard:search_guard.py"],
     tags = ["no-remote"],
 )
+
+sh_test(
+    name = "capture_session_state_test",
+    srcs = ["test-capture-session-state.sh"],
+    data = ["capture-session-state.sh"],
+    tags = ["no-remote"],
+)
+
+exports_files(["capture-claude-status.sh"])
