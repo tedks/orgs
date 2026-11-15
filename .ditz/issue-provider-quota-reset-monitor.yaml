@@ -38,3 +38,24 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-15T01:29:34-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO contract ruling: accept an explicit operator-configured stable account
+    scope per provider as a local namespace, not provider-authenticated identity.
+    Missing scope disables comparison/notification. A scope change requires explicit
+    configuration, starts a fresh isolated baseline and cannot manufacture a reset;
+    preserve old dedup evidence. Document that an unreported account change under
+    unchanged scope cannot be detected with the current producer. Deployment owner
+    must bind observations to the declared scope; do not infer identity from descriptive
+    source strings.
+
+    Delivery contract: destination selection remains with Ted. Pluggable command may
+    expose only the receipt it actually proves. Without destination idempotency or
+    a reconciliation receipt, durably mark an event in flight before the external
+    effect and serialize senders; a crash/timeout with uncertain delivery remains
+    unknown, with no automatic retry. Retry only when evidence establishes no delivery,
+    or when a destination idempotency key makes retry safe. This prioritizes the requested
+    duplicate suppression, does not promise guaranteed delivery, and must be tested
+    on both crash sides. Do not silently accept automatic replay after an ambiguous
+    send. Keep the implementation small; no generalized queue platform.'
