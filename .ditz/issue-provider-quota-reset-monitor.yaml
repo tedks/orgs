@@ -1,0 +1,36 @@
+id: provider-quota-reset-monitor
+title: Monitor observed provider quota resets and notify the operator once
+desc: 'Authorized outcome: automatically monitor fresh provider quota observations
+  and notify the operator on demonstrated reset or replenishment. Orgs owns the monitor,
+  consumer contract, tests and review; the usage-tool/host owner retains observation
+  production, host scheduling/deployment, and the separate stale-five-hour posture
+  fallback defect. Distinguish five-hour and weekly windows per provider/account;
+  elapsed reset timestamps, stale/missing/offline observations and first sight of
+  an account must not alone announce a reset. Persist notification deduplication across
+  restart; specify delivery failure and crash behavior honestly. Reuse an established
+  operator notification route; ask for a channel only if none exists. No quotas, credentials,
+  session identities or host-private payloads in public artifacts. No lane pause is
+  lifted and no automatic lane spawning/migration is part of this task.
+
+  Acceptance: executable fixtures demonstrate genuine observed replenishment notification,
+  no repeated notification on duplicate observations/restart, and no stale/offline/timestamp-only
+  reset notification; include out-of-order data, independent windows/providers, crash/retry
+  and observation freshness cases. Meaningful negative/mutation checks, exact-head
+  local gates and council to fixpoint before normal merge. Deployed status additionally
+  requires host scheduling, persistent state and end-to-end notification evidence;
+  clearly label synthetic tests, implementation and deployment separately. First checkpoint:
+  producer schema/freshness semantics, existing notification route, deployment owner,
+  and failing boundary fixtures, before expanding implementation.'
+type: feature
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T01:25:25-00:00
+references: []
+log_events:
+- time: 2026-11-15T01:25:25-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
