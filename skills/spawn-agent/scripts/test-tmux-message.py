@@ -2391,7 +2391,10 @@ class DiagnosticTests(unittest.TestCase):
                                  {k: v for k, v in off_result.items() if k != 'pending_file'})
                 self.assertEqual(on_result['diagnostic_status'], 'written')
                 self.assertTrue((private / 'record.json').exists())
-                self.assertNotIn(ClaudeExitTerminal.session, (private / 'record.json').read_text())
+                artifact = (private / 'record.json').read_text()
+                self.assertNotIn(ClaudeExitTerminal.session, artifact)
+                if case == 'literal':
+                    self.assertTrue(json.loads(artifact)['post_paste'][-1]['predicates']['command_completion'])
 
     def test_late_write_and_serialization_failure_preserve_transport(self):
         for failure in ('write', 'serialize', 'replace'):

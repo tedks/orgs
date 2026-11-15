@@ -1176,8 +1176,7 @@ def main():
     except OSError:
         if diagnostic_file is None:
             raise  # Preserve the pre-existing opt-out setup failure path.
-        if diagnostic_file is not None:
-            diagnostic_file.abort()
+        diagnostic_file.abort()
         if pending is not None:
             try:
                 (pending / "message").unlink(missing_ok=True)
