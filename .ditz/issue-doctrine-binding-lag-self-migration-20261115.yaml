@@ -1,0 +1,43 @@
+id: doctrine-binding-lag-self-migration-20261115
+title: Doctrine, ROLES and Claude binding lag the ruled CTO self-migration and the
+  landed harness-control MCP
+desc: 'Found by the Goals CTO successor (Claude Fable 5.2) during its cold-start audit
+  on 2026-11-15, reading doctrine/DOCTRINE.md, doctrine/ROLES.md and bindings/claude-code.md
+  at the orgs master checkout dated Nov 12.
+
+
+  1. DOCTRINE.md (Quiet coordination and lifecycle, and the prompt block), ROLES.md
+  (CTO lifecycle; Handoff and migration) and bindings/claude-code.md (Handoff and
+  migration row) all still say a CTO''s own migration "waits on orgs-cto-self-migration-approver".
+  That issue was ruled and closed by Ted on 2026-11-02: no approver; the CTO migrates
+  itself on its own quota judgment and records the reason. A cold reader who follows
+  the text concludes that a CTO handoff such as Goals event 55197ac6 was unauthorized,
+  and has to find the closed issue to learn otherwise.
+
+
+  2. bindings/claude-code.md tier table (dated 2026-09-26) maps Frontier to Claude
+  Fable 5.1; live Frontier lanes run claude-fable-5-2.
+
+
+  3. bindings/claude-code.md "Harness self-control" row and the Lean operating mode
+  bullets say self compact/exit is pending the harness-control MCP. The MCP is installed
+  in live sessions (get_status, self_compact, self_exit, record_checkpoint). ROLES.md
+  "This stays until the harness-control MCP lands" has the same lag.
+
+
+  Fix: promote the ruling into the three texts, refresh the tier table, and state
+  the current self-control contract (or say explicitly which peer-driven steps still
+  apply). Text-only; no behavior was blocked.'
+type: bugfix
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T23:25:30-00:00
+references: []
+log_events:
+- time: 2026-11-15T23:25:30-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
