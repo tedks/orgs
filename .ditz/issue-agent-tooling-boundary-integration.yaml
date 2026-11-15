@@ -56,3 +56,14 @@ log_events:
     occurred. Sole migration lead owns the fix, exact-head gates/council and sanitized
     snapshot refresh. Public Orgs PR54 remains a separate acceptance step. No host
     activation or source-authority change.'
+- time: 2026-11-15T03:19:43-00:00
+  who: Ted Smith
+  what: commented
+  comment: Standalone collector child source accepted and normally merged after the
+    original one-rung reviewer cleared the lock-wait cancellation fix delta. Owner
+    reran behavior and regression-mutation Bazel targets uncached, both passed, and
+    rechecked formal council clearance. Child merge tree matches the tested source.
+    No live collection or deployment. Sole migration lead continues the authorized
+    public Orgs snapshot/shared-tooling and private integration work; public PR54
+    still requires separate frozen-head privacy, gates and review acceptance. Branches
+    and evidence preserved.
