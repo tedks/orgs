@@ -1,0 +1,30 @@
+id: retire-claude-model-exit-notice-20261115
+title: retire.py cannot verify the exit notice of a Claude session launched with --model
+desc: "Observed by the Goals CTO on 2026-11-15 retiring a Claude Opus worker that
+  agent-spawn launched with `--model claude-opus-5-5`.\n\nClaude prints its exit notice
+  as:\n\n    Resume this session with:\n    claude --model claude-opus-5-5 --resume
+  <session-uuid>\n\nretire.py (line ~729-737) builds the expected notice as the literal
+  `claude --resume ` followed by the session id, so the notice never matches. The
+  retirement stays `pending-exit` with \"retirement pending original process end and
+  fresh same-session exit notice\" although the pinned process ended, the retained
+  dead pane exited 0 and the notice names the shard's exact session id. Every lane
+  spawned with an explicit model hits this, which is now the normal way to spawn (tier
+  per lane), and so does every `--handoff` successor.\n\nEvidence (sanitized): private
+  event 7f4399abd7144429951fd3348a1cb276, receipt status pending-exit; the same run's
+  Codex worker (event 8862f228c8cf4912ad76903d1a7ba7fc) verified normally.\n\nFix:
+  accept optional launch arguments between `claude` and `--resume` in the notice matcher
+  (anchored, same session id required), with a mutation-checked test using the measured
+  `--model` form. Do not loosen the session-id or process-end checks."
+type: bugfix
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T23:46:38-00:00
+references: []
+log_events:
+- time: 2026-11-15T23:46:38-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
