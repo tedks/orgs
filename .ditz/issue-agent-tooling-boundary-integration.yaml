@@ -1,0 +1,30 @@
+id: agent-tooling-boundary-integration
+title: Integrate reusable agent tooling ownership and private configuration boundary
+desc: Authorized Orgs side of cross-repository tooling ownership consolidation. Orgs
+  owns reusable observation hooks, safety/search workflow tooling, messaging integration,
+  all harness-control, tier-drift and tier-drift-collect, and generic coordination
+  instructions. Personal instructions/configuration and token-usage/calibrate/tripwire,
+  installation/toolchain updates, session recovery/tmux snapshots, operational reports/backlog,
+  config merging, inference and host hygiene except orphaned tests remain with the
+  private configuration owner. First checkpoint is an exact path manifest, public/private
+  config split and dependency order. Preserve standalone child package contracts;
+  establish the nested tier-drift source owner before moving anything. No private
+  Git history import; sanitize public reusable source before any public commit/push.
+  Preserve existing spawn compatibility work and quota monitor/producer work; no duplication.
+  The shared migration lead owns bounded execution after manifest coordination; Orgs
+  CTO owns child acceptance and normal merge. Exact-head applicable gates, privacy/source
+  review and council fixpoint before merge. This issue tracks Orgs integration, not
+  host deployment acceptance or the separate quota notification outcome.
+type: task
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T02:03:18-00:00
+references: []
+log_events:
+- time: 2026-11-15T02:03:18-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
