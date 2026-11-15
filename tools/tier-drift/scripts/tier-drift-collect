@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# tier-drift-collect - run the tier-drift collector on every configured host
+#
+# Usage:
+#   tier-drift-collect [host...]    # default: every host in the config
+#
+# Writes aggregates without prompts or session IDs to
+# ${TIER_DRIFT_OUT:-~/.local/share/tier-drift/<UTC date>}/<host>.json.
+# Gemini diagnostics include project directory basenames (not full paths),
+# which can reveal project names. Error sidecars preserve captured stderr.
+#   collector: ${TIER_DRIFT_SRC:-<this checkout>/src/tier_drift/collector.py}
+#   config:    $TIER_DRIFT_CONFIG (required; operator-owned)
+#   timeout:   ${TIER_DRIFT_SSH_TIMEOUT:-300} seconds per remote host
+# Stands in for `tier-drift collect` until that CLI exists.
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+config=${TIER_DRIFT_CONFIG:-}
+[[ -n $config ]] || { echo "tier-drift-collect: TIER_DRIFT_CONFIG is required" >&2; exit 2; }
+src=${TIER_DRIFT_SRC:-$here/../src/tier_drift/collector.py}
+out=${TIER_DRIFT_OUT:-$HOME/.local/share/tier-drift/$(date -u +%Y-%m-%d)}
+ssh_timeout=${TIER_DRIFT_SSH_TIMEOUT:-300}
+[[ -r $config ]] || { echo "tier-drift-collect: no config at $config" >&2; exit 2; }
+[[ -r $src ]] || { echo "tier-drift-collect: no collector at $src" >&2; exit 2; }
+[[ $ssh_timeout =~ ^[1-9][0-9]*$ ]] || {
+  echo "tier-drift-collect: TIER_DRIFT_SSH_TIMEOUT must be a positive integer number of seconds" >&2
+  exit 2
+}
+ssh_timeout=${ssh_timeout}s
+
+field() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1])).get(sys.argv[2], ""); print("\n".join(v) if isinstance(v, list) else v)' "$config" "$1"; }
+# base64 keeps the collector config one shell word: ssh joins its arguments
+# into a single remote command line, so raw JSON would be re-split remotely.
+cfg=$(python3 -c 'import base64,json,sys; print(base64.b64encode(json.dumps(json.load(open(sys.argv[1]))["collector"]).encode()).decode())' "$config")
+suffix=$(field ssh_suffix)
+if (( $# )); then hosts=("$@"); else mapfile -t hosts < <(field hosts); fi
+
+mkdir -p "$out"
+self=$(hostname -s)
+failed=0
+collector_failed=0
+tmp='' err='' status_tmp=''
+cleanup() {
+  local path
+  for path in "${tmp:-}" "${err:-}" "${status_tmp:-}"; do
+    [[ -z $path ]] || rm -f -- "$path"
+  done
+}
+run_pid=
+handle_signal() {
+  local exit_status=$1 candidate=${run_pid:-${!:-}} job_pid
+  for job_pid in $(jobs -p); do
+    [[ $job_pid == "$candidate" ]] || continue
+    kill -TERM "$candidate" 2>/dev/null || true
+    wait "$candidate" 2>/dev/null || true
+    break
+  done
+  run_pid=
+  exit "$exit_status"
+}
+trap cleanup EXIT
+trap 'handle_signal 130' INT
+trap 'handle_signal 143' TERM
+trap 'handle_signal 129' HUP
+trap 'handle_signal 131' QUIT
+archive_previous() {
+  [[ -e $out/$host.json ]] || return 0
+  local stale_at stale collision=0
+  stale_at=$(date -u +%Y%m%dT%H%M%S.%N)
+  stale="$out/$host.json.stale-$stale_at-$$"
+  while [[ -e $stale ]]; do
+    collision=$((collision + 1))
+    stale="$out/$host.json.stale-$stale_at-$$-$collision"
+  done
+  mv -- "$out/$host.json" "$stale"
+}
+for host in "${hosts[@]}"; do
+  lock="$out/.$host.lock"
+  exec {host_lock}>"$lock"
+  flock -x "$host_lock"
+  tmp=$(mktemp "$out/$host.json.tmp.XXXXXX")
+  err=$(mktemp "$out/$host.error.tmp.XXXXXX")
+  if [[ $host == "$self" ]]; then
+    run=(python3 "$src" "$cfg")
+  else
+    remote_cmd="python3 - '$cfg'; rc=\$?; if [ \"\$rc\" -eq 255 ]; then exit 254; fi; if [ \"\$rc\" -eq 124 ]; then exit 123; fi; if [ \"\$rc\" -eq 137 ]; then exit 136; fi; exit \"\$rc\""
+    run=(timeout --kill-after=5s "$ssh_timeout" ssh -o BatchMode=yes -o ConnectTimeout=8 "$host$suffix" "$remote_cmd")
+  fi
+  # Async children inherit ignored SIGINT, so forward TERM explicitly for local collectors too.
+  ( exec {host_lock}>&-; exec "${run[@]}" ) < "$src" > "$tmp" 2>"$err" &
+  run_pid=$!
+  if wait "$run_pid"; then
+    run_pid=
+    mv "$tmp" "$out/$host.json"
+    rm -f -- "$out/$host.unreachable.json"
+    [[ ! -s $err ]] || cat "$err" >&2
+    rm -f -- "$err"
+    echo "$host -> $out/$host.json"
+  else
+    rc=$?
+    run_pid=
+    if [[ $host != "$self" && ( $rc -eq 124 || $rc -eq 137 ) ]]; then
+      printf 'remote collection timed out after %s\n' "$ssh_timeout" >> "$err"
+    fi
+    [[ ! -s $err ]] || cat "$err" >&2
+    if [[ $host != "$self" && ( $rc -eq 255 || $rc -eq 124 || $rc -eq 137 ) ]]; then
+      echo "tier-drift-collect: $host unreachable; skipped" >&2
+      archive_previous
+      attempted_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      status_tmp=$(mktemp "$out/$host.unreachable.json.tmp.XXXXXX")
+      python3 - "$host" "$attempted_at" "$status_tmp" "$err" <<'PY'
+import json
+import pathlib
+import sys
+
+host, attempted_at, target, error_path = sys.argv[1:]
+error = pathlib.Path(error_path).read_text(errors="replace").strip() or "collector exited unsuccessfully"
+document = {
+    "schema": 1,
+    "host": f"{host} (unreachable)",
+    "collected_at": attempted_at,
+    "python": "unknown",
+    "seconds": 0,
+    "turns": [],
+    "claude_tokens": [],
+    "codex_tokens": [],
+    "first_use": {},
+    "last_use": {},
+    "sources": {},
+    "diagnostics": {
+        "errors": {},
+        "deduplicated": {},
+        "gemini_cli_projects": [],
+        "seen_values": {},
+    },
+    "status": "unreachable",
+    "attempted_at": attempted_at,
+    "error": error,
+}
+pathlib.Path(target).write_text(json.dumps(document) + "\n")
+PY
+      mv "$status_tmp" "$out/$host.unreachable.json"
+      failed=$((failed + 1))
+    else
+      echo "tier-drift-collect: $host collector failed (exit $rc)" >&2
+      rm -f -- "$out/$host.unreachable.json"
+      archive_previous
+      collector_failed=$((collector_failed + 1))
+    fi
+    rm -f -- "$tmp" "$err"
+  fi
+  flock -u "$host_lock"
+  exec {host_lock}>&-
+done
+# Unreachable laptops are tolerated if any host succeeds; collector errors fail.
+(( failed < ${#hosts[@]} && collector_failed == 0 ))

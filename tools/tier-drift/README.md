@@ -33,6 +33,16 @@ for the design and the roadmap.
 | `page/` | the rendered report's HTML, CSS and JS |
 | `tests/` | pytest suite |
 
+## Fleet collection
+
+`scripts/tier-drift-collect` runs the host collector across an operator-defined
+list. Set `TIER_DRIFT_CONFIG` to a JSON file with `hosts`, `ssh_suffix`, and
+`collector` fields; the file is operator-owned and is not part of this source.
+Optional `TIER_DRIFT_OUT`, `TIER_DRIFT_SRC`, and `TIER_DRIFT_SSH_TIMEOUT`
+override the output directory, collector source, and per-host timeout. Positional
+host arguments select a subset; without them, the configured hosts are used.
+The command writes one aggregate or an explicit unreachable status per host.
+
 ## Contributing
 
 See [AGENTS.md](AGENTS.md).

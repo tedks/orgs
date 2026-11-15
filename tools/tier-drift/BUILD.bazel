@@ -36,9 +36,8 @@ TEST_MODULES = [
         ],
         main = "tests/pytest_main.py",
         precompile = "disabled",
-        # The golden and floor tests are skipped unless pointed at private
-        # data or a real host; these carry the pointers into the sandbox.
-        env_inherit = ["TIER_DRIFT_GOLDEN_DIR", "TIER_DRIFT_FLOOR_HOST", "HOME", "SSH_AUTH_SOCK"],
+        # The default graph never inherits private snapshot or SSH selectors.
+        # Operators can opt in with explicit --test_env flags.
         deps = [
             ":tier_drift_lib",
             "@pypi//pytest",
@@ -46,3 +45,11 @@ TEST_MODULES = [
     )
     for module in TEST_MODULES
 ]
+
+# The launcher uses fake SSH/hostname and synthetic aggregates only.
+py_test(
+    name = "test_tier_drift_collect",
+    srcs = ["tests/test_tier_drift_collect.py"],
+    main = "tests/test_tier_drift_collect.py",
+    data = ["scripts/tier-drift-collect"],
+)

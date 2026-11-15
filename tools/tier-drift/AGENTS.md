@@ -48,6 +48,23 @@ Bazel is the build and test gate:
 nix develop --command bazel test //...
 ```
 
+The default Bazel graph runs the collector and static Python 3.6 floor checks,
+and imports the golden test module before skipping its private assertions. It
+does not inherit private golden snapshot or SSH host selectors. To run the
+private cases deliberately, use `--test_env` with the individual target and
+disable cached results for a fresh observation:
+
+```bash
+nix develop --command bazel test //:test_golden --test_env=TIER_DRIFT_GOLDEN_DIR=/absolute/private/snapshot-root --nocache_test_results
+nix develop --command bazel test //:test_collector_floor --test_env=TIER_DRIFT_FLOOR_HOST=host.example --test_env=HOME --test_env=SSH_AUTH_SOCK --nocache_test_results
+```
+
+The latter contacts the named host through the operator's SSH configuration.
+An agent socket under `/tmp` may be hidden by Bazel's test sandbox; use an
+operator-controlled reachable socket or an explicit SSH key when needed.
+These isolation rules apply to Bazel. `uv run pytest` below inherits the
+shell's environment, so clear private selectors before that command.
+
 `BUILD.bazel` lists sources and test modules explicitly rather than by glob,
 so a new module must be added there, or it is not built or not run. Lint and
 the fast inner loop run through uv:
