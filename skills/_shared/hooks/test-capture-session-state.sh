@@ -390,7 +390,8 @@ STATE8="$HOME8/.claude/session-state"
 mkdir -p "$STATE8"
 SID_LIVE="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 echo "{\"session_id\":\"$SID_LIVE\"}" > "$STATE8/$SID_LIVE.json"
-touch -d '31 days ago' "$STATE8/$SID_LIVE.json"
+echo "{\"session_id\":\"$SID_LIVE\"}" > "$STATE8/$SID_LIVE.status.json"
+touch -d '31 days ago' "$STATE8/$SID_LIVE.json" "$STATE8/$SID_LIVE.status.json"
 read -r self_stat < "/proc/$$/stat"; read -ra self_fields <<< "${self_stat##*) }"
 printf '%s %s %s\n' "$SID_LIVE" "${self_fields[19]}" "$BOOT" > "$STATE8/current.$$"
 SID_UNRELATED="eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
@@ -398,6 +399,8 @@ PAYLOAD_UNRELATED="$(jq -n --arg sid "$SID_UNRELATED" '{session_id: $sid, cwd: "
 run_hook "$HOME8" "$PAYLOAD_UNRELATED" >/dev/null
 assert "the live session's 31-day-old state file survives an unrelated session's hook run" \
   test -f "$STATE8/$SID_LIVE.json"
+assert "the live session's 31-day-old status snapshot also survives" \
+  test -f "$STATE8/$SID_LIVE.status.json"
 
 echo "case: an OLD state file with NO live pointer is still cleaned up"
 HOME9="$WORK/home9"
@@ -405,12 +408,15 @@ STATE9="$HOME9/.claude/session-state"
 mkdir -p "$STATE9"
 SID_DEAD="cccccccc-cccc-cccc-cccc-cccccccccccc"
 echo "{\"session_id\":\"$SID_DEAD\"}" > "$STATE9/$SID_DEAD.json"
-touch -d '31 days ago' "$STATE9/$SID_DEAD.json"
+echo "{\"session_id\":\"$SID_DEAD\"}" > "$STATE9/$SID_DEAD.status.json"
+touch -d '31 days ago' "$STATE9/$SID_DEAD.json" "$STATE9/$SID_DEAD.status.json"
 SID_UNRELATED2="ffffffff-ffff-ffff-ffff-ffffffffffff"
 PAYLOAD_UNRELATED2="$(jq -n --arg sid "$SID_UNRELATED2" '{session_id: $sid, cwd: "/tmp", hook_event_name: "PreToolUse", tool_name: "Bash"}')"
 run_hook "$HOME9" "$PAYLOAD_UNRELATED2" >/dev/null
 assert "a 31-day-old state file with no live pointer is still swept" \
   test ! -f "$STATE9/$SID_DEAD.json"
+assert "a 31-day-old status snapshot with no live pointer is also swept" \
+  test ! -f "$STATE9/$SID_DEAD.status.json"
 
 echo "case: a STALE pointer (right session_id, wrong start time) does not pin a state file forever"
 # A pid reused by an unrelated process produces exactly this shape: the

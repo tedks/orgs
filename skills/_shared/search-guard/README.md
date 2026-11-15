@@ -15,6 +15,10 @@ classification. The `measure` subcommand replays local Claude and Codex logs
 when an operator deliberately invokes it; it does not send them anywhere.
 The wrapper accepts `SEARCH_GUARD_WRAPPED_NAME=find|grep|rg` when an installed
 compatibility entry point delegates to it under another basename.
+That entry point also appends its own path to `SEARCH_GUARD_PROXY_SEEN`
+(colon-separated), so PATH resolution skips the proxy without treating it as
+an already-classified command. The shared wrapper still decides whether the
+search is broad.
 
 Tests use synthetic homes and fake tools. The public source contains no fleet
 roots, host list, personal search log, or installed settings.

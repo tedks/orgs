@@ -21,6 +21,7 @@ SCAN=${SCAN//$'\n'/;}
 # Deletion guard: Python 3 lexes shell words without evaluating any shell text.
 # Supported: simple commands/pipelines/lists, comments, single/double quotes,
 # escapes/continuations, assignments, plain sudo/env/command/exec wrappers,
+# simple timeout DURATION, reserved command-position words and brace groups,
 # variable/parameter/command substitutions as opaque dynamic word fragments,
 # GNU rm -r/-R (in any short-option bundle), --recursive and its abbreviations,
 # options interspersed with operands, and --. No force flag is required.
@@ -29,7 +30,8 @@ SCAN=${SCAN//$'\n'/;}
 # /tmp, /var/tmp and /dev/shm are shared: /tmp/prefix* is blocked;
 # /tmp/run-123/* has a concrete directory boundary.
 # A dynamic operand needs a concrete literal component (not just './$dir').
-# Quoted/escaped globs are literal names. Literal paths remain allowed: this
+# Unquoted tilde at the start of an operand expands to a home directory and is
+# blocked; quoted/escaped tildes and globs are literal names. Literal paths remain allowed: this
 # guard does not prove ownership, inspect the filesystem or replace enumeration.
 # Non-goals: aliases/functions, eval/sh -c, heredocs, dynamic command names,
 # shell-specific expansions (brace/extglob), commands inside substitutions,
@@ -42,16 +44,16 @@ import sys
 
 DYNAMIC = '\x00'
 
-def token(text, globs):
+def token(text, globs, home):
     # Only an unquoted closing bracket in THIS word closes a bracket pattern.
     closing = [i for i in globs if text[i] == ']']
     return text, [i for i in globs if text[i] != ']' and
-                  (text[i] != '[' or any(end > i for end in closing))]
+                  (text[i] != '[' or any(end > i for end in closing))], home
 
 
 def words(source):
-    """Yield (text, active-glob offsets), or command separators as None."""
-    i, text, globs, quote, started = 0, '', [], '', False
+    """Yield (text, active-glob offsets, home-expansion), or None separators."""
+    i, text, globs, quote, started, home = 0, '', [], '', False, False
     while i < len(source):
         c = source[i]
         if c == '\\' and quote != "'" and i + 1 < len(source):
@@ -69,16 +71,16 @@ def words(source):
             started = True
             i += 1
             continue
-        if not quote and (c.isspace() or c in ';|&()<>'):
+        if not quote and (c.isspace() or c in ';|&()<>{}'):
             if started:
-                yield token(text, globs)
-                text, globs, started = '', [], False
-            if c == '\n' or c in ';|&()':
+                yield token(text, globs, home)
+                text, globs, started, home = '', [], False, False
+            if c == '\n' or c in ';|&(){}':
                 yield None
             elif c in '<>':
                 # Redirection targets aren't rm operands. The command remains
                 # in this segment; the consumer discards the next target word.
-                yield c, []
+                yield c, [], False
             i += 1
             continue
         if not quote and c == '#' and not started:
@@ -121,15 +123,19 @@ def words(source):
             continue
         if not quote and c in '*?[]':
             globs.append(len(text))
+        if not quote and c == '~' and not started:
+            home = True
         text += c
         started = True
         i += 1
     if started:
-        yield token(text, globs)
+        yield token(text, globs, home)
 
 
 def unsafe(word):
-    text, globs = word
+    text, globs, home = word
+    if home:
+        return 'unquoted home-directory expansion'
     # Literal content inside a dynamic component is an anchor too (run-$id).
     concrete = lambda part: part.replace(DYNAMIC, '') not in ('', '.', '..')
     if DYNAMIC in text and not any(concrete(p) for p in text.split('/')):
@@ -159,8 +165,11 @@ def deletion_reason(segment):
     i = 0
     while i < len(segment):
         name = segment[i][0]
-        if re.match(r'^[A-Za-z_][A-Za-z_0-9]*=', name) or name in ('do', 'then'):
+        if re.match(r'^[A-Za-z_][A-Za-z_0-9]*=', name) or name in (
+                'do', 'then', 'else', 'elif', 'if', 'while', 'until', '!', 'time'):
             i += 1
+        elif name == 'timeout' and i + 1 < len(segment):
+            i += 2  # GNU timeout's simple DURATION COMMAND form.
         elif name in ('sudo', 'env', 'command', 'exec'):
             i += 1
             # Natural wrapper flags; flags taking values are outside this grammar.

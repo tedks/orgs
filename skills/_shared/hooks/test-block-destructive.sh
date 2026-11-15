@@ -223,6 +223,16 @@ deletion_case double_slash_var_tmp BLOCK 'rm -rf //var/tmp/*'
 deletion_case double_slash_var_tmp_owned ALLOW 'rm -rf //var/tmp/owned-run-123/*'
 deletion_case double_slash_shm BLOCK 'rm -rf //dev/shm/*'
 deletion_case double_slash_shm_owned ALLOW 'rm -rf //dev/shm/owned-run-123/*'
+deletion_case home_expansion BLOCK 'rm -rf ~'
+deletion_case home_glob BLOCK 'rm -rf ~/*'
+deletion_case home_user BLOCK 'rm -rf ~other/*'
+deletion_case quoted_home ALLOW "rm -rf '~'"
+deletion_case escaped_home ALLOW 'rm -rf \~'
+deletion_case else_rm BLOCK 'if false; then :; else rm -rf "$dir"; fi'
+deletion_case brace_rm BLOCK '{ rm -rf "$dir"; }'
+deletion_case bang_rm BLOCK '! rm -rf "$dir"'
+deletion_case time_rm BLOCK 'time rm -rf "$dir"'
+deletion_case timeout_rm BLOCK 'timeout 5 rm -rf "$dir"'
 # DELETION_CASES_END
 
 echo

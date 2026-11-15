@@ -39,7 +39,13 @@ mutants = {
     'ignore-double-dash': change("options = False\n        elif", "recursive = True\n        elif"),
     'merge-separators': change('yield None', 'pass  # lose command boundary'),
     'ignore-redirection': change("if token in ('<', '>'):", 'if False:'),
-    'unmatched-bracket-glob': change('def token(text, globs):', 'def token(text, globs):\n    return text, globs'),
+    'unmatched-bracket-glob': change('def token(text, globs, home):', 'def token(text, globs, home):\n    return text, globs, home'),
+    'ignore-home': change('if home:', 'if False:'),
+    'ignore-else': change("'do', 'then', 'else', 'elif'", "'do', 'then', 'elif'"),
+    'ignore-braces': change("c in ';|&()<>{}'", "c in ';|&()<>'"),
+    'ignore-bang': change("'until', '!', 'time'", "'until', 'time'"),
+    'ignore-time': change("'until', '!', 'time'", "'until', '!'"),
+    'ignore-timeout': change("elif name == 'timeout' and i + 1 < len(segment):", "elif False:"),
 }
 # Additional ALLOW cases whose purpose is a parsing boundary use that boundary's
 # targeted mutant rather than borrowing a failure on their safe literal operand.
@@ -57,6 +63,14 @@ focused = {
     'unmatched_bracket': 'unmatched-bracket-glob',
     'bracket_other_word': 'unmatched-bracket-glob',
     'bracket_quoted_close': 'unmatched-bracket-glob',
+    'home_expansion': 'ignore-home',
+    'home_glob': 'ignore-home',
+    'home_user': 'ignore-home',
+    'else_rm': 'ignore-else',
+    'brace_rm': 'ignore-braces',
+    'bang_rm': 'ignore-bang',
+    'time_rm': 'ignore-time',
+    'timeout_rm': 'ignore-timeout',
 }
 failures = 0
 with tempfile.TemporaryDirectory(prefix='deletion-hook-mutants-') as scratch:

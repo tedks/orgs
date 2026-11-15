@@ -33,6 +33,10 @@ case "$name" in find|grep|rg) ;; *) echo "search-wrapper: unsupported tool name"
 # real tool's children (find -exec, rg --pre); a wrapper there skips its
 # decision, which is moot -- their parent is find or rg, not an agent shell.
 _seen=${_SEARCH_GUARD_SEEN:-}
+# A fleet-owned compatibility proxy delegates here before any classification.
+# Skip its inode during PATH resolution, but do not treat it as a prior guard
+# decision (_SEARCH_GUARD_SEEN has that separate meaning).
+_proxy_seen=${SEARCH_GUARD_PROXY_SEEN:-}
 real=
 _ifs=$IFS
 IFS=:
@@ -44,6 +48,9 @@ for _d in $PATH; do
     [ "$_c" -ef "$0" ] && continue
     _skip=
     for _s in $_seen; do
+        [ -n "$_s" ] && [ "$_c" -ef "$_s" ] && { _skip=1; break; }
+    done
+    for _s in $_proxy_seen; do
         [ -n "$_s" ] && [ "$_c" -ef "$_s" ] && { _skip=1; break; }
     done
     [ -n "$_skip" ] && continue
@@ -60,6 +67,9 @@ fi
 run() {
     _SEARCH_GUARD_SEEN="$_seen:$0"
     export _SEARCH_GUARD_SEEN
+    # The installed proxy supplies the name only for this decision. A real
+    # find/rg may invoke another wrapped search tool as a child.
+    unset SEARCH_GUARD_WRAPPED_NAME
     exec "$real" "$@"
 }
 

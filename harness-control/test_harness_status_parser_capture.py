@@ -10,6 +10,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -151,14 +153,14 @@ class WriterTests(unittest.TestCase):
         self.home = Path(self.temp.name)
         self.bin = self.home / "bin"
         self.bin.mkdir()
-        for name, body in (("whoami", "printf user"), ("hostname", "printf host"), ("git", "exit 1")):
-            self.stub(name, body)
+        self.real_mv = shutil.which("mv")
+        self.assertIsNotNone(self.real_mv)
         self.env = {**os.environ, "HOME": str(self.home), "PATH": str(self.bin) + os.pathsep + os.environ["PATH"]}
         self.path = self.home / ".claude/session-state" / f"{SID}.status.json"
 
     def stub(self, name, body):
         path = self.bin / name
-        path.write_text("#!/bin/bash\n" + body + "\n")
+        path.write_text("#!/usr/bin/env bash\n" + body + "\n")
         path.chmod(0o755)
 
     def run_script(self, data=None):
@@ -201,7 +203,7 @@ assert json.loads(source.read_text())["model"]["display_name"] == "Updated"
 assert json.loads(destination.read_text())["model"]["display_name"] == "Example"
 CHECK
 [ "$?" -eq 0 ] || exit 1
-exec /bin/mv "$@"''')
+exec ''' + shlex.quote(self.real_mv) + ''' "$@"''')
         changed = copy.deepcopy(FIXTURE)
         changed["model"]["display_name"] = "Updated"
         self.assertEqual(self.run_script(changed).returncode, 0)

@@ -290,7 +290,7 @@ if [ ! -f "$STATE_FILE" ]; then
         fi
     done
     while IFS= read -r f; do
-        sid=${f##*/}; sid=${sid%.json}
+        sid=${f##*/}; sid=${sid%.json}; sid=${sid%.status}
         # A `case` pattern is a glob, and $sid comes from a filename -- every
         # writer of a *.json here validates session_id as a UUID first, so
         # this never matters in practice, but a plain string-equality loop

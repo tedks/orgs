@@ -10,6 +10,7 @@
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$HERE/search-wrapper" ] || HERE="$(cd "$HERE/.." && pwd)"
 WRAPPER="$HERE/search-wrapper"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -18,7 +19,7 @@ BIN="$TMP/bin" REAL="$TMP/real" H="$TMP/home" STATE="$TMP/state"
 mkdir -p "$BIN" "$REAL" "$H/Projects/repo" "$STATE"
 for n in rg find grep; do
     ln -s "$WRAPPER" "$BIN/$n"
-    printf '#!/bin/sh\necho "REAL %s $*"\nexit ${FAKE_EXIT:-0}\n' "$n" > "$REAL/$n"
+    printf '#!/bin/sh\nif [ "${FAKE_NESTED:-}" = 1 ] && [ "%s" = find ]; then grep -n needle file; exit; fi\necho "REAL %s $*"\nexit ${FAKE_EXIT:-0}\n' "$n" "$n" > "$REAL/$n"
     chmod +x "$REAL/$n"
 done
 PY="$(command -v python3)"
@@ -66,6 +67,25 @@ expect_real "no marker"
 ln -s "$WRAPPER" "$H/search-wrapper"
 run CODEX_THREAD_ID=abc "$H/Projects/repo"     'SEARCH_GUARD_WRAPPED_NAME=rg "$HOME/search-wrapper" --files "$HOME/Projects"'
 expect_refused "delegated rg name"
+
+# A separate installed proxy must be skipped as a PATH candidate without
+# marking the command classified; otherwise it loops or silently allows it.
+cat > "$TMP/proxy" <<'SH'
+#!/bin/sh
+SEARCH_GUARD_WRAPPED_NAME=${0##*/}
+SEARCH_GUARD_PROXY_SEEN=${SEARCH_GUARD_PROXY_SEEN:-}:$0
+export SEARCH_GUARD_WRAPPED_NAME SEARCH_GUARD_PROXY_SEEN
+exec "$SHARED_SEARCH_WRAPPER" "$@"
+SH
+chmod +x "$TMP/proxy"
+for n in rg find grep; do ln -sf "$TMP/proxy" "$BIN/$n"; done
+run "" "$H/Projects/repo" 'find --version' SHARED_SEARCH_WRAPPER="$WRAPPER"
+expect_real "installed proxy reaches real find"
+run CODEX_THREAD_ID=abc "$H/Projects/repo" 'find "$HOME" -name x' SHARED_SEARCH_WRAPPER="$WRAPPER"
+expect_refused "installed proxy still classifies broad find"
+for n in rg find grep; do ln -sf "$WRAPPER" "$BIN/$n"; done
+run "" "$H/Projects/repo" 'SEARCH_GUARD_WRAPPED_NAME=find "$HOME/search-wrapper" . -name x' FAKE_NESTED=1
+if [ "$RC" -eq 0 ] && [[ "$OUT" == 'REAL grep -n needle file' ]]; then ok; else bad "nested grep retains its own tool name: rc=$RC out=$OUT err=$ERR"; fi
 
 # 2. Each marker turns the guard on.
 for m in CLAUDECODE=1 CODEX_THREAD_ID=abc CODEX_SESSION_ID=abc GEMINI_CLI=1 OPENCODE=1; do
