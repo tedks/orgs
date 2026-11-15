@@ -19,8 +19,8 @@ type: task
 component: doctrine
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-15T02:03:18-00:00
 references: []
 log_events:
@@ -89,3 +89,14 @@ log_events:
     child history. Final public tree/history/metadata scan and a specific source-owner
     privacy ruling are recorded on PR54. Accountable Orgs CTO whole-diff audit and
     normal merge remain outstanding; no host rollout.
+- time: 2026-11-15T04:00:07-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: Orgs source accepted and normally merged as PR54 at 0de06be9a7c6f8836d9ebbaf4f32487a788f438b
+    from reviewed cbd516c8a3f58c284c012ba1ccdf99b8671ddb74. Fresh whole-diff accountable
+    review CLEAN, formal exact-head check CLEAN; owner reran nine scoped Bazel targets
+    uncached and inspected complete final-head gates. Six embedded snapshot files
+    match accepted standalone source. Merge tree equals tested head. Narrow privacy
+    ruling and full scan accepted. This issue explicitly tracks Orgs source integration;
+    separate private consumer integration and host deployment remain with their owner,
+    and quota activation remains unaccepted.
