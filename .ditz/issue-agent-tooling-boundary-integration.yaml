@@ -67,3 +67,14 @@ log_events:
     public Orgs snapshot/shared-tooling and private integration work; public PR54
     still requires separate frozen-head privacy, gates and review acceptance. Branches
     and evidence preserved.
+- time: 2026-11-15T03:43:03-00:00
+  who: Ted Smith
+  what: commented
+  comment: PR54 privacy interpretation resolved for the specific already-public term
+    dotfiles and generic delegation sentence in commit a0747a0. Verified published
+    base ad76350 already names the dotfiles repo; reviewed wording adds no runtime
+    path, host/account/session/credential identifier or private revision. No history
+    rewrite required or authorized. Narrow ruling posted on PR54 comment6888707009;
+    not a waiver for other names/config and not blanket privacy/source acceptance.
+    Lead continues final-head gates and new tree/history privacy evidence before separate
+    READY.
