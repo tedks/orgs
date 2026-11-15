@@ -18,8 +18,9 @@ scope is an operator configured local namespace, not a provider authenticated
 account ID; the epoch changes on scope transitions, including removal and
 re-addition. The producer binds these fields when ingesting a source
 observation, never by relabeling saved data at export. The series and event
-event IDs include both and exclude descriptive source. Only the current identity is retained as each meter's
-baseline, so scope/epoch transitions, including a return to an earlier value,
+Event IDs include both and exclude the descriptive source; each meter keeps
+one baseline tagged with its current identity. Scope/epoch transitions,
+including a return to an earlier value,
 cannot resurrect an old comparison. Old dedup records remain. Deployment must
 bind the configured scope to the account in
 use. A credential switch without a scope/epoch change is undetectable.

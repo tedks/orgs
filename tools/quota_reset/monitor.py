@@ -177,11 +177,11 @@ def process(meters, state_path, sender, now=None):
                 continue
             key = series_key(item)
             previous = state["series"].get(key)
-            if previous is not None and timestamp(item["observed"]) <= timestamp(previous["observed"]):
-                continue
             identity = [item["account_scope"], item["account_epoch"], item["source"]]
             if previous is not None and previous["identity"] != identity:
                 previous = None  # scope, epoch or source transition: baseline only
+            if previous is not None and timestamp(item["observed"]) <= timestamp(previous["observed"]):
+                continue
             observed = timestamp(item["observed"])
             reset = timestamp(item["reset_at"])
             if previous is None:

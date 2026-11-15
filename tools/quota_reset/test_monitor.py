@@ -32,17 +32,27 @@ def reading(used, observed, reset, *, minutes=300, scope="local-a", epoch="epoch
 
 
 def concurrent_tick(meters, state_path, log_path, now, barrier):
-    def sender(event):
+    original_load = monitor.load_state
+
+    def synchronized_load(path):
+        state = original_load(path)
         try:
-            barrier.wait(timeout=0.3)
+            barrier.wait(timeout=1)
         except BrokenBarrierError:
-            pass  # with a lock, the second process never reaches sender
+            pass  # with a lock, the second process cannot load until this returns
+        return state
+
+    def sender(event):
         with open(log_path, "a", encoding="utf-8") as stream:
             stream.write(event["id"] + "\n")
             stream.flush()
             os.fsync(stream.fileno())
         return monitor.ACCEPTED
-    monitor.process(meters, state_path, sender, now)
+    monitor.load_state = synchronized_load
+    try:
+        monitor.process(meters, state_path, sender, now)
+    finally:
+        monitor.load_state = original_load
 
 
 class MonitorTest(unittest.TestCase):
@@ -229,6 +239,14 @@ class MonitorTest(unittest.TestCase):
         self.run_tick({"openai.secondary": reading(5, T0 + timedelta(minutes=15), reset + timedelta(hours=5), epoch="epoch-b")}, T0 + timedelta(minutes=16))
         self.run_tick({"openai.secondary": reading(4, T0 + timedelta(minutes=20), reset + timedelta(hours=10))}, T0 + timedelta(minutes=21))
         self.assertEqual(self.sent, [])
+
+    def test_equal_timestamp_new_identity_can_be_pre_reset_baseline(self):
+        reset = T0 + timedelta(minutes=10)
+        self.run_tick({"openai.secondary": reading(80, T0, reset, source="A")}, T0 + timedelta(minutes=1))
+        self.run_tick({"openai.secondary": reading(75, T0, reset, source="B")}, T0 + timedelta(minutes=1))
+        self.run_tick({"openai.secondary": reading(1, T0 + timedelta(minutes=15), reset + timedelta(hours=5), source="B")}, T0 + timedelta(minutes=16))
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0]["source"], "B")
 
     def test_source_cannot_create_second_event_id_for_one_reset(self):
         reset = T0 + timedelta(minutes=10)
