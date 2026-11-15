@@ -49,3 +49,12 @@ log_events:
     scoped Bazel targets, Nix build, privacy/diff checks pass; final nix flake check
     is running. Historical incident remains open, unreproduced and unfixed. No live
     diagnostic invocation, installation or rollout.'
+- time: 2026-11-15T19:44:17-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'READY for root whole-diff audit at pushed fa73f8f5e46822c183a8baa22c9a2a623bd2298c,
+    PR #55 marked ready. Exact-head nix flake check package/transport/unit, nix build,
+    scoped Bazel, 159 Python transport tests, 12 mutation controls, supporting local
+    gates, diff/privacy scan all pass. Formal council check CLEAN: OpenAI and Anthropic
+    clean; Google EMPTY quota. No live diagnostic invocation/install. Parent historical
+    incident remains open and unreproduced; root owns audit/merge and host-owner rollout.'
