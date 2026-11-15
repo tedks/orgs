@@ -17,8 +17,8 @@ type: feature
 component: spawn-agent
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
-disposition:
+status: closed
+disposition: fixed
 creation_time: 2026-11-15T18:57:04-00:00
 references: []
 log_events:
@@ -58,3 +58,13 @@ log_events:
     gates, diff/privacy scan all pass. Formal council check CLEAN: OpenAI and Anthropic
     clean; Google EMPTY quota. No live diagnostic invocation/install. Parent historical
     incident remains open and unreproduced; root owns audit/merge and host-owner rollout.'
+- time: 2026-11-15T19:49:33-00:00
+  who: Ted Smith
+  what: 'closed: fixed'
+  comment: Accepted and normally merged as PR55 39832602f8bb1c91df37fcdeb7bd937fa6db6993
+    from exact reviewed fa73f8f5e46822c183a8baa22c9a2a623bd2298c; merge tree matches
+    tested head. Fresh whole-diff one-rung review CLEAN; root reran focused Bazel
+    targets uncached 2/2, Nix check/build and formal exact-head council check. Diagnostic
+    is default off; no live invocation/rollout or historical fix claimed. Same-UID
+    concurrent name-replacement limitation recorded in acceptance comment6900273517.
+    Historical incident stays open.
