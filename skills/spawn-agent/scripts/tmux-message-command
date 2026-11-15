@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ ${AGENT_SKILLS_ROOT+x} ]]; then
+    skills_root="$AGENT_SKILLS_ROOT"
+    if [[ "$skills_root" != /* ]]; then
+        echo "ERROR: AGENT_SKILLS_ROOT must be an absolute path" >&2
+        exit 1
+    fi
+else
+    skills_root="$HOME/.claude/skills"
+fi
+transport="$skills_root/spawn-agent/scripts/tmux-message.sh"
+if [[ ! -x "$transport" ]]; then
+    echo "ERROR: tmux-message transport is unavailable at $transport; install the shared skills" >&2
+    exit 1
+fi
+exec "$transport" "$@"

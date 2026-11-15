@@ -12,3 +12,13 @@ sh_test(
     ] + glob(["scripts/fixtures/claude-send/**"]),
     tags = ["no-remote"],
 )
+
+sh_test(
+    name = "tmux_message_command_test",
+    srcs = ["scripts/test-tmux-message-command-bazel.sh"],
+    data = [
+        "scripts/test-tmux-message-command.py",
+        "scripts/tmux-message-command",
+    ],
+    tags = ["no-remote"],
+)
