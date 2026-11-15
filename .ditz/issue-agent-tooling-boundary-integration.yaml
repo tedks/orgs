@@ -32,3 +32,16 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-15T02:07:27-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'First path/config/dependency manifest reviewed. Accepted source authority:
+    standalone telemetry child remains canonical for package and generic collector
+    launcher; Orgs receives a separately reviewed sanitized snapshot delta, preserving
+    standalone Nix/Bazel workflows and license. No duplicate import or private history.
+    Found stale local child baseline relative to its remote: lead directed to use
+    current remote in an isolated worktree and preserve the already-merged pure-default
+    testing boundary (private golden/SSH remains explicit opt-in). Existing observation
+    and installed-wrapper contracts remain intact; token-usage production and the
+    pending quota producer extension remain with the private configuration owner.
+    No migration source or live rollout accepted yet.'
