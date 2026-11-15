@@ -66,3 +66,26 @@ log_events:
     describes Enter-count/status wording; spawn-agent-codex-0167-receipt-timeout describes
     a distinct fresh receipt-reconciliation class. Neither is assumed to explain this
     midsend failure.'
+- time: 2026-11-15T18:51:45-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'First evidence checkpoint: original review send result recovered: paste
+    attempted, mixed-input-after-paste, zero Enters, no verified receipt, pending
+    payload preserved. Roughly seventeen hours later, the identified receiver transcript
+    contains a combined user row beginning with the exact original payload and including
+    later watchdog notices; no matching earlier review row was found in that session.
+    Later watchdog logs also reported ambiguous delivery. This does not establish
+    continuous composer retention or who submitted the combined row. Sender durable
+    status had accurately recorded the ambiguity; controller state was subsequently
+    reconciled.
+
+
+    Decisive gap: no contemporaneous post-paste screen, cursor, dimensions or fingerprints
+    found in the sender result/transcript. Pending payload bytes cannot reconstruct
+    that UI shape. Exact existing evidence pointers requested once from the two owners.
+    Causal parser diagnosis and a historical-shape RED regression remain blocked;
+    no source fix or successful old delivery claimed. Fresh receipt-timeout-with-Enter
+    cases are separate and remain under the related receipt-timeout issue. Evidence
+    and payloads preserved privately; no replay/clearing. Lane retained only to reconcile
+    outstanding evidence responses; next checkpoint on responses or scheduled standup,
+    with explicit unknowns.'
