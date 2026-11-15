@@ -1,0 +1,22 @@
+id: quota-reset-state-retention
+title: Bound and inspect quota-reset monitor dedup state growth
+desc: 'Council Nit N5 on PR #53: the monitor retains event IDs indefinitely to prevent
+  duplicate alerts after restarts and delayed/replayed source observations. At current
+  expected reset frequency this is small, so retention is intentionally not part of
+  the first consumer. Measure actual state growth after deployment and design a bounded
+  retention or archive rule that preserves the no-duplicate invariant across old observations;
+  include an operator inspection path for unknown deliveries. Do not prune event IDs
+  by age without proving replay safety.'
+type: task
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T01:45:32-00:00
+references: []
+log_events:
+- time: 2026-11-15T01:45:32-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
