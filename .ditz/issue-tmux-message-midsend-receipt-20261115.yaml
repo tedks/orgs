@@ -1,0 +1,41 @@
+id: tmux-message-midsend-receipt-20261115
+title: Investigate delayed Codex messages stranded in composer or receipt reconciliation
+desc: 'A user observed that an exact-head review request and later watchdog notices
+  remained stuck in a Codex recipient input path for hours and arrived only after
+  human intervention. A freshly pushed sender status still described ambiguous, untouched
+  receiver input. Independent review was delayed and coordination status became stale.
+  Original sender receipt and root cause are not established; this report is evidence
+  of an observed failure, not successful old delivery.
+
+
+  Investigate with preserved private sender/receiver evidence and distinguish attempted
+  paste, Enter action, unsubmitted composer, submitted/queued receipt, acknowledgement
+  and stale status. Link existing tmux-message-enters0-stranded-paste; do not assume
+  this is the same cause. Public evidence and fixtures must be synthetic/sanitized,
+  with exact UI control/whitespace/cursor shape preserved where relevant. No private
+  identities, project payloads or native transcripts in public history.
+
+
+  Acceptance: bounded causal report naming unknowns; failing regression for the actual
+  measured composer/receipt shape before a minimal shared transport/instruction repair;
+  positive/negative human-input and receipt controls; mutation check of changed guard;
+  applicable exact-head Bazel/Nix gates and formal council fixpoint, then source-owner
+  audit. If original shape cannot be recovered, report the evidence gap rather than
+  invent a reproducer or claim root cause. Existing pending payloads/receipts remain
+  untouched, no replay/clearing of ambiguous input, no weakening of identity or human-input
+  protection, no spool rewrite or consumer mission changes. Owner Orgs CTO; one Lead
+  investigation/repair lane. First checkpoint within thirty minutes of lane start:
+  evidence chronology, regression shape or missing-evidence request.'
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T18:43:06-00:00
+references: []
+log_events:
+- time: 2026-11-15T18:43:06-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
