@@ -4,6 +4,8 @@ test_suite(
     name = "portable_tools_test",
     tests = [
         "//tools/crystal:crystal_test",
+        "//tools/quota_reset:monitor_mutation_test",
+        "//tools/quota_reset:monitor_test",
         "//tools/standup:standup_test",
     ],
 )

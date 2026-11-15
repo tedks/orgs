@@ -1,0 +1,14 @@
+package(default_visibility = ["//visibility:public"])
+
+py_test(
+    name = "monitor_test",
+    srcs = ["monitor.py", "test_monitor.py"],
+    main = "test_monitor.py",
+)
+
+py_test(
+    name = "monitor_mutation_test",
+    srcs = ["monitor.py", "test_monitor.py"],
+    main = "test_monitor.py",
+    args = ["--mutation-check"],
+)
