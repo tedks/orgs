@@ -148,7 +148,13 @@ PY
 for host in "${hosts[@]}"; do
   lock="$out/.$host.lock"
   exec {host_lock}>"$lock"
-  flock -x "$host_lock"
+  # Bash defers traps while a foreground flock waits. Waiting through the
+  # builtin instead lets cancellation terminate the helper before it can
+  # acquire the lock and start a collection after the caller has gone away.
+  flock -x "$host_lock" &
+  run_pid=$!
+  wait "$run_pid"
+  run_pid=
   tmp=$(mktemp "$out/$host.json.tmp.XXXXXX")
   err=$(mktemp "$out/$host.error.tmp.XXXXXX")
   if [[ $host == "$self" ]]; then

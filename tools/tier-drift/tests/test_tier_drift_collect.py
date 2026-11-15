@@ -3,19 +3,21 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import pathlib
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
 from datetime import datetime
 
 REPO = pathlib.Path(__file__).absolute().parents[1]
-SCRIPT = REPO / "scripts/tier-drift-collect"
+SCRIPT = pathlib.Path(os.environ.get("TIER_DRIFT_TEST_SCRIPT", REPO / "scripts/tier-drift-collect"))
 
 
 def aggregate(host: str, collected_at: str = "2026-10-29T00:00:00Z") -> dict:
@@ -535,6 +537,102 @@ class CollectorWrapperTests(unittest.TestCase):
                 self.assertFalse((out / "node-a.unreachable.json").exists())
                 self.assertEqual(list(out.glob("node-a.*.tmp.*")), [])
                 self.assert_fake_ssh_stopped(log)
+
+    def test_cancel_while_waiting_for_host_lock_never_collects(self):
+        signals = (
+            (signal.SIGTERM, 143),
+            (signal.SIGINT, 130),
+            (signal.SIGHUP, 129),
+            (signal.SIGQUIT, 131),
+        )
+        selected = os.environ.get("TIER_DRIFT_TEST_SIGNAL")
+        if selected:
+            signals = tuple(pair for pair in signals if pair[0].name == selected)
+        for sig, expected_status in signals:
+            with self.subTest(signal=sig):
+                out = self.root / f"waiting-{sig.name}"
+                out.mkdir()
+                old = out / "node-a.json"
+                original = json.dumps(aggregate("node-a", "2026-10-28T00:00:00Z"))
+                old.write_text(original)
+                lock = out / ".node-a.lock"
+                ready = out / "holder-ready"
+                log = out / "ssh-events.log"
+                holder = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-c",
+                        """
+import fcntl, pathlib, sys
+with open(sys.argv[1], 'w') as stream:
+    fcntl.flock(stream, fcntl.LOCK_EX)
+    pathlib.Path(sys.argv[2]).touch()
+    sys.stdin.read()
+""",
+                        str(lock),
+                        str(ready),
+                    ],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+                proc = None
+                try:
+                    deadline = time.monotonic() + 5
+                    while (
+                        not ready.exists() and holder.poll() is None and time.monotonic() < deadline
+                    ):
+                        time.sleep(0.02)
+                    self.assertTrue(ready.exists(), "first holder did not acquire the lock")
+                    proc = subprocess.Popen(
+                        [str(SCRIPT), "node-a"],
+                        cwd=REPO,
+                        env={**self.base_env, "TIER_DRIFT_OUT": str(out), "FAKE_SSH_LOG": str(log)},
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        start_new_session=True,
+                        preexec_fn=reset_test_signal_defaults,
+                    )
+                    child = None
+                    deadline = time.monotonic() + 5
+                    while proc.poll() is None and time.monotonic() < deadline:
+                        children = pathlib.Path(f"/proc/{proc.pid}/task/{proc.pid}/children")
+                        if children.exists():
+                            for pid in children.read_text().split():
+                                comm = pathlib.Path(f"/proc/{pid}/comm")
+                                if comm.exists() and comm.read_text().strip() == "flock":
+                                    child = int(pid)
+                                    break
+                        if child is not None:
+                            break
+                        time.sleep(0.02)
+                    self.assertIsNotNone(child, "second wrapper did not wait in flock")
+                    proc.send_signal(sig)
+                    stdout, stderr = proc.communicate(timeout=2)
+                    self.assertEqual(proc.returncode, expected_status, (stdout, stderr))
+                    self.assertFalse(pathlib.Path(f"/proc/{child}").exists(), "lock waiter leaked")
+                    self.assertIsNone(holder.poll(), "first holder was disturbed")
+                    with lock.open() as stream:
+                        with self.assertRaises(BlockingIOError):
+                            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.assertEqual(old.read_text(), original)
+                    self.assertFalse(log.exists(), "cancelled waiter started SSH")
+                    self.assertEqual(list(out.glob("node-a.*.tmp.*")), [])
+                    self.assertFalse((out / "node-a.unreachable.json").exists())
+                finally:
+                    if proc is not None and proc.poll() is None:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                        proc.wait(timeout=5)
+                    if holder.poll() is None:
+                        holder.stdin.close()
+                        holder.wait(timeout=5)
+                    else:
+                        holder.wait(timeout=5)
+                self.assertEqual(old.read_text(), original)
+                self.assertFalse(log.exists(), "cancelled waiter collected after lock release")
 
     def test_cleanup_does_not_remove_inherited_temp_path(self):
         marker = self.root / "keep-me"

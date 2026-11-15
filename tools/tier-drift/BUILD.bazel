@@ -53,4 +53,14 @@ py_test(
     main = "tests/test_tier_drift_collect.py",
     data = ["scripts/tier-drift-collect"],
     deps = [":tier_drift_lib"],
+    tags = ["no-remote"],
+)
+
+py_test(
+    name = "test_tier_drift_collect_mutations",
+    srcs = ["tests/test_tier_drift_collect_mutations.py"],
+    main = "tests/test_tier_drift_collect_mutations.py",
+    data = ["scripts/tier-drift-collect", "tests/test_tier_drift_collect.py"],
+    deps = [":tier_drift_lib"],
+    tags = ["no-remote"],
 )
