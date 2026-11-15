@@ -9,6 +9,7 @@ import os
 import tempfile
 import unittest
 import sys
+from threading import BrokenBarrierError
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -30,8 +31,12 @@ def reading(used, observed, reset, *, minutes=300, scope="local-a", epoch="epoch
     }
 
 
-def concurrent_tick(meters, state_path, log_path, now):
+def concurrent_tick(meters, state_path, log_path, now, barrier):
     def sender(event):
+        try:
+            barrier.wait(timeout=0.3)
+        except BrokenBarrierError:
+            pass  # with a lock, the second process never reaches sender
         with open(log_path, "a", encoding="utf-8") as stream:
             stream.write(event["id"] + "\n")
             stream.flush()
@@ -97,11 +102,50 @@ class MonitorTest(unittest.TestCase):
         saved = json.loads(self.state.read_text())
         self.assertEqual(len(saved["events"]), 2)
 
+    def test_small_positive_replenishment_after_crossed_deadline(self):
+        reset = T0 + timedelta(minutes=10)
+        self.run_tick({"anthropic.five_hour": reading(4, T0, reset)}, T0 + timedelta(minutes=1))
+        self.run_tick({"anthropic.five_hour": reading(0, T0 + timedelta(minutes=15), reset + timedelta(hours=5))}, T0 + timedelta(minutes=16))
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0]["previous_used_percent"], 4)
+        self.assertIn("replenishment observed since", self.sent[0]["message"])
+        self.assertIn(self.sent[0]["previous_observed"], self.sent[0]["message"])
+        self.assertIn(self.sent[0]["observed"], self.sent[0]["message"])
+        self.assertEqual(self.sent[0]["remaining_percent"], 100)
+
+    def test_long_gap_with_fresh_post_observation_reports_since_last_reading(self):
+        reset = T0 + timedelta(minutes=10)
+        self.run_tick({"anthropic.five_hour": reading(95, T0, reset)}, T0 + timedelta(minutes=1))
+        low = {"anthropic.five_hour": reading(3, T0 + timedelta(hours=12), reset + timedelta(hours=15))}
+        self.run_tick(low, T0 + timedelta(hours=12, minutes=1))
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0]["previous_observed"], T0.isoformat())
+        self.assertNotIn("now", self.sent[0]["message"])
+
+    def test_long_gap_stale_or_unbound_post_does_not_alert(self):
+        reset = T0 + timedelta(minutes=10)
+        self.run_tick({"anthropic.five_hour": reading(95, T0, reset)}, T0 + timedelta(minutes=1))
+        low = reading(3, T0 + timedelta(hours=12), reset + timedelta(hours=15))
+        self.run_tick({"anthropic.five_hour": low}, T0 + timedelta(hours=13))
+        self.assertEqual(self.sent, [])
+        low["account_epoch"] = None
+        result = self.run_tick({"anthropic.five_hour": low}, T0 + timedelta(hours=12, minutes=1))
+        self.assertEqual(result["rejected"]["anthropic.five_hour"], "missing_identity")
+        self.assertEqual(self.sent, [])
+
+    def test_no_observed_decrease_does_not_alert(self):
+        reset = T0 + timedelta(minutes=10)
+        self.run_tick({"anthropic.five_hour": reading(0, T0, reset)}, T0 + timedelta(minutes=1))
+        self.run_tick({"anthropic.five_hour": reading(0, T0 + timedelta(minutes=15), reset + timedelta(hours=5))}, T0 + timedelta(minutes=16))
+        self.assertEqual(self.sent, [])
+
     def test_missing_identity_bad_window_and_future_or_stale_reading_fail_closed(self):
         reset = T0 + timedelta(minutes=10)
         bad = reading(90, T0, reset, epoch=None)
-        self.run_tick({"anthropic.five_hour": bad}, T0 + timedelta(minutes=1))
-        self.run_tick({"anthropic.five_hour": reading(90, T0, reset, minutes=10080)}, T0 + timedelta(minutes=1))
+        result = self.run_tick({"anthropic.five_hour": bad}, T0 + timedelta(minutes=1))
+        self.assertEqual(result["rejected"]["anthropic.five_hour"], "missing_identity")
+        result = self.run_tick({"anthropic.five_hour": reading(90, T0, reset, minutes=10080)}, T0 + timedelta(minutes=1))
+        self.assertEqual(result["rejected"]["anthropic.five_hour"], "unsupported_window")
         self.run_tick({"anthropic.five_hour": reading(10 ** 1000, T0, reset)}, T0 + timedelta(minutes=1))
         self.run_tick({"anthropic.five_hour": reading(90, T0, reset)}, T0 + timedelta(hours=1))
         self.run_tick({"anthropic.five_hour": reading(90, T0 + timedelta(minutes=5), reset)}, T0)
@@ -172,9 +216,25 @@ class MonitorTest(unittest.TestCase):
         changed = {"anthropic.five_hour": reading(2, T0 + timedelta(minutes=15), reset + timedelta(hours=5), source="new parser")}
         self.run_tick(changed, T0 + timedelta(minutes=16))
         self.assertEqual(self.sent, [])
+        returned = {"anthropic.five_hour": reading(1, T0 + timedelta(minutes=20), reset + timedelta(hours=10))}
+        self.run_tick(returned, T0 + timedelta(minutes=21))
+        self.assertEqual(self.sent, [])  # never reuse source A's earlier high baseline
         much_later = {"anthropic.five_hour": reading(1, T0 + timedelta(hours=7), reset + timedelta(hours=10))}
         self.run_tick(much_later, T0 + timedelta(hours=7, minutes=1))
         self.assertEqual(self.sent, [])
+
+    def test_return_to_old_account_epoch_is_a_new_baseline(self):
+        reset = T0 + timedelta(minutes=10)
+        self.run_tick({"openai.secondary": reading(90, T0, reset)}, T0 + timedelta(minutes=1))
+        self.run_tick({"openai.secondary": reading(5, T0 + timedelta(minutes=15), reset + timedelta(hours=5), epoch="epoch-b")}, T0 + timedelta(minutes=16))
+        self.run_tick({"openai.secondary": reading(4, T0 + timedelta(minutes=20), reset + timedelta(hours=10))}, T0 + timedelta(minutes=21))
+        self.assertEqual(self.sent, [])
+
+    def test_source_cannot_create_second_event_id_for_one_reset(self):
+        reset = T0 + timedelta(minutes=10)
+        a = monitor.valid_reading("anthropic.five_hour", reading(1, T0 + timedelta(minutes=15), reset + timedelta(hours=5), source="A"), T0 + timedelta(minutes=16))
+        b = monitor.valid_reading("anthropic.five_hour", reading(1, T0 + timedelta(minutes=15), reset + timedelta(hours=5), source="B"), T0 + timedelta(minutes=16))
+        self.assertEqual(monitor.event_key(a), monitor.event_key(b))
 
     def test_concurrent_invocations_send_one_event(self):
         reset = T0 + timedelta(minutes=10)
@@ -182,8 +242,9 @@ class MonitorTest(unittest.TestCase):
         low = {"openai.secondary": reading(1, T0 + timedelta(minutes=15), reset + timedelta(hours=5))}
         self.run_tick(high, T0 + timedelta(minutes=1))
         log = Path(self.temp.name) / "notifications.log"
+        barrier = multiprocessing.Barrier(2)
         processes = [multiprocessing.Process(target=concurrent_tick,
-                     args=(low, self.state, log, T0 + timedelta(minutes=16))) for _ in range(2)]
+                     args=(low, self.state, log, T0 + timedelta(minutes=16), barrier)) for _ in range(2)]
         for child in processes:
             child.start()
         for child in processes:
@@ -197,11 +258,14 @@ def mutation_check():
     global monitor
     source = Path(monitor.__file__).read_text(encoding="utf-8")
     mutants = {
-        "freshness": ("now - observed > FRESH_FOR", "False"),
+        "freshness": ("or now - observed > FRESH_FOR or reset <= observed", "or False or reset <= observed"),
         "reset crossing": ("prior_reset <= observed and reset > prior_reset", "reset > prior_reset"),
-        "drop": ("previous[\"used_percent\"] - item[\"used_percent\"] >= MIN_DROP", "True"),
+        "drop": ("previous[\"used_percent\"] > item[\"used_percent\"]", "True"),
         "durable intent": ("save_state(state_path, state)  # durable intent precedes the call", "pass  # removed durable intent"),
         "event dedup": ("if eid in state[\"events\"]:", "if False:"),
+        "source transition": ("previous[\"identity\"] != identity", "False"),
+        "window duration": ("type(window) is not int or window != minutes", "type(window) is not int"),
+        "sender lock": ("fcntl.flock(lock, fcntl.LOCK_EX)", "pass  # removed sender lock"),
     }
     for label, (before, after) in mutants.items():
         if source.count(before) != 1:

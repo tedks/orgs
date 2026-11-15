@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -20,7 +21,6 @@ from pathlib import Path
 
 UTC = timezone.utc
 FRESH_FOR = timedelta(minutes=20)
-MIN_DROP = 5.0  # percentage points; tiny corrections are not reset evidence
 WINDOWS = {
     "openai": ("openai", 10080),
     "openai.secondary": ("openai", 300),
@@ -86,6 +86,25 @@ def valid_reading(name, raw, now):
     }
 
 
+def rejection_reason(name, raw, now):
+    """Small operator signal; raw provider/account values never enter logs."""
+    if not isinstance(raw, dict):
+        return "invalid_record"
+    if not all(isinstance(raw.get(k), str) and raw[k] and raw[k] == raw[k].strip()
+               for k in ("account_scope", "account_epoch")):
+        return "missing_identity"
+    if type(raw.get("window_minutes")) is not int or raw["window_minutes"] != WINDOWS[name][1]:
+        return "unsupported_window"
+    observed = timestamp(raw.get("observed"))
+    if observed is None:
+        return "invalid_observed"
+    if observed > now:
+        return "future_observation"
+    if now - observed > FRESH_FOR:
+        return "stale_observation"
+    return "invalid_meter"
+
+
 def load_state(path):
     try:
         with path.open(encoding="utf-8") as stream:
@@ -120,12 +139,14 @@ def save_state(path, state):
 
 
 def series_key(item):
-    return json.dumps([item["provider"], item["account_scope"],
-                       item["account_epoch"], item["name"], item["source"]], separators=(",", ":"))
+    # One active baseline per meter. Old source/account identities cannot be
+    # resurrected by switching away and back; event dedup remains permanent.
+    return item["name"]
 
 
 def event_key(item):
-    raw = json.dumps([series_key(item), item["reset_at"]], separators=(",", ":"))
+    raw = json.dumps([item["provider"], item["name"], item["account_scope"],
+                      item["account_epoch"], item["reset_at"]], separators=(",", ":"))
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -141,34 +162,39 @@ def process(meters, state_path, sender, now=None):
     now = now.astimezone(UTC)
     state_path = Path(state_path)
     state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if stat.S_IMODE(state_path.parent.stat().st_mode) & 0o077:
+        raise ValueError("state directory must be private (mode 0700 or stricter)")
     lock_path = state_path.with_name(state_path.name + ".lock")
-    counts = {"accepted": 0, "unknown": 0, "detected": 0}
+    counts = {"accepted": 0, "unknown": 0, "detected": 0, "rejected": {}}
     with lock_path.open("a+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         state = load_state(state_path)
         for name in WINDOWS:
             item = valid_reading(name, meters.get(name), now)
             if item is None:
+                if name in meters:
+                    counts["rejected"][name] = rejection_reason(name, meters[name], now)
                 continue
             key = series_key(item)
             previous = state["series"].get(key)
-            if previous is not None and item["observed"] <= previous["observed"]:
+            if previous is not None and timestamp(item["observed"]) <= timestamp(previous["observed"]):
                 continue
+            identity = [item["account_scope"], item["account_epoch"], item["source"]]
+            if previous is not None and previous["identity"] != identity:
+                previous = None  # scope, epoch or source transition: baseline only
             observed = timestamp(item["observed"])
             reset = timestamp(item["reset_at"])
             if previous is None:
                 current = {"observed": item["observed"], "reset_at": item["reset_at"],
-                           "used_percent": item["used_percent"]}
+                           "used_percent": item["used_percent"], "identity": identity}
                 event = None
             else:
                 prior_reset = timestamp(previous["reset_at"])
-                prior_observed = timestamp(previous["observed"])
-                enough_drop = previous["used_percent"] - item["used_percent"] >= MIN_DROP
-                recent_pair = observed - prior_observed <= timedelta(minutes=item["window_minutes"])
+                decreased = previous["used_percent"] > item["used_percent"]
                 crossed = prior_reset <= observed and reset > prior_reset
-                event = item if crossed and enough_drop and recent_pair else None
+                event = item if crossed and decreased else None
                 current = {"observed": item["observed"], "reset_at": item["reset_at"],
-                           "used_percent": item["used_percent"]}
+                           "used_percent": item["used_percent"], "identity": identity}
             state["series"][key] = current
             if event is None:
                 save_state(state_path, state)
@@ -178,7 +204,12 @@ def process(meters, state_path, sender, now=None):
                 save_state(state_path, state)
                 continue
             event = {**event, "id": eid, "previous_used_percent": previous["used_percent"],
-                     "previous_reset_at": previous["reset_at"]}
+                     "previous_observed": previous["observed"],
+                     "previous_reset_at": previous["reset_at"],
+                     "remaining_percent": 100.0 - event["used_percent"]}
+            event["message"] = (f"{event['provider']} {event['name']} quota replenishment observed since "
+                                f"{previous['observed']}; current observation {event['observed']}: "
+                                f"{event['remaining_percent']:g}% remaining.")
             state["events"][eid] = {"event": event, "delivery": "in_flight"}
             save_state(state_path, state)  # durable intent precedes the call
             counts["detected"] += 1
@@ -214,13 +245,13 @@ def main(argv=None):
             meters = json.loads(args.meters_file.read_text(encoding="utf-8"))
         else:
             result = subprocess.run(["token-usage", "meters", "--check", "--json"],
-                                    capture_output=True, text=True, check=False)
+                                    capture_output=True, text=True, timeout=60, check=False)
             if result.returncode:
                 print("quota-reset: token-usage meter check failed", file=sys.stderr)
                 return 2
             meters = json.loads(result.stdout)
         counts = process(meters, args.state_file, command_sender(args.notify_command))
-    except (ValueError, OSError, json.JSONDecodeError) as error:
+    except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         print(f"quota-reset: {error}", file=sys.stderr)
         return 2
     print(json.dumps(counts, sort_keys=True))
