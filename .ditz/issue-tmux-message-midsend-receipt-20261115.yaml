@@ -43,3 +43,26 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-15T18:51:38-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'First evidence checkpoint (private chronology held by the Lead): the original
+    review send''s exact sender result is now recovered. It returned ambiguous/mixed-input-after-paste
+    after an attempted paste with zero sender Enters and a preserved pending file;
+    no new application receipt was reported. The pending payload matches the exact
+    prefix of a single recipient user row submitted about 17 hours later after reported
+    human intervention. Two later watchdogs returned ambiguous/mixed-input-after-paste
+    with heartbeat_recorded=false. The sender''s durable UNCONFIRMED status was accurate
+    for the transport attempt; the controller repaired its roster after intervention.
+
+
+    The original post-paste screen rows, ANSI styling, cursor and fingerprints were
+    not retained in the sender result/transcript, and the identified recipient owner
+    has no existing capture pointer. The watchdog wrapper retained only rc/status/receipt/reason,
+    omitting Enter count and pending path; its present installed source is not proof
+    of its historical executable identity. Therefore the actual UI failure shape required
+    for a synthetic RED regression is missing. No reproducer, source fix, or old-delivery
+    claim is made. Keep the pending files read-only and the issue open. Related tmux-message-enters0-stranded-paste
+    describes Enter-count/status wording; spawn-agent-codex-0167-receipt-timeout describes
+    a distinct fresh receipt-reconciliation class. Neither is assumed to explain this
+    midsend failure.'
