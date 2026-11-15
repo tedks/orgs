@@ -45,3 +45,14 @@ log_events:
     and installed-wrapper contracts remain intact; token-usage production and the
     pending quota producer extension remain with the private configuration owner.
     No migration source or live rollout accepted yet.'
+- time: 2026-11-15T03:06:53-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Standalone collector child reached READY but source-owner audit found
+    a missing cancellation boundary: foreground per-host lock acquisition can defer
+    a waiting wrapper''s cancellation trap until the current holder exits. Merge held
+    for bounded interruptibility repair and a blocked-wait fixture; timeout policy
+    remains separately deferred. Existing scoped tests passed and no live collection
+    occurred. Sole migration lead owns the fix, exact-head gates/council and sanitized
+    snapshot refresh. Public Orgs PR54 remains a separate acceptance step. No host
+    activation or source-authority change.'
