@@ -59,3 +59,15 @@ log_events:
     duplicate suppression, does not promise guaranteed delivery, and must be tested
     on both crash sides. Do not silently accept automatic replay after an ambiguous
     send. Keep the implementation small; no generalized queue platform.'
+- time: 2026-11-15T01:39:54-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'First checkpoint reviewed at draft PR #53 head 659591a9a8a14d9915fe9e0c8411165cace3dee0.
+    Additive per-reading account scope/epoch bound at source ingestion is accepted;
+    no export-time relabeling. CTO requested removal or evidence-based justification
+    of the unrequested five-percentage-point detection threshold (positive low-usage
+    reset fixture), and return-to-source A/B/A coverage so source transitions cannot
+    resurrect an old baseline into a reset claim. Lead reports 10 behavior tests and
+    five killed mutations; exact final-head gates and formal council remain pending.
+    Notification destination remains an open question; no live send or deployment
+    claimed.'
