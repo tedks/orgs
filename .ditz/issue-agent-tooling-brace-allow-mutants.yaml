@@ -1,0 +1,23 @@
+id: agent-tooling-brace-allow-mutants
+title: Add focused allow-case mutants for recursive deletion brace parsing
+desc: The shared destructive-command guard's synthetic suite checks that quoted braces
+  and wholly literal brace alternatives remain allowed. The focused mutation map does
+  not yet target those allow cases, so a parser regression that treats quoted or comma-free
+  braces as expansion could pass the focused mutation gate. Add narrowly targeted
+  mutants for quoted braces and comma-free brace groups, and map the existing allow
+  fixtures to them. This is a test-coverage nit from Orgs PR54 council round4; the
+  current behavioral fixtures pass and the finding does not block that PR's clean
+  verdict. Preserve conservative blocking of dynamic/home/globbing brace alternatives.
+type: task
+component: skills
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T03:41:06-00:00
+references: []
+log_events:
+- time: 2026-11-15T03:41:06-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
