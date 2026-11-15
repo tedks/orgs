@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,8 @@ class Frame:
     x: int
     y: int
     history: str = ""
+    width: int = 0
+    height: int = 0
 
 
 @dataclass
@@ -71,6 +74,311 @@ class Input:
     def fingerprint(self):
         # Relative cursor: output scrolling above the input is not human typing.
         return self.kind, self.text, self.cursor, self.harness
+
+
+DIAGNOSTIC_SCHEMA = "tmux-message-structure-v1"
+DIAGNOSTIC_REASONS = frozenset({
+    "none",
+    "mixed-input-after-paste", "receipt-timeout", "paste-not-observed",
+    "input-changed-after-paste", "input-changed-before-enter", "modal-after-paste",
+    "modal", "human-typing", "existing-input", "unsupported-layout",
+    "unstable-composer", "input-changed-before-paste", "cursor-navigation-unverified",
+    "command-clear-unverified", "input-changed-after-clear", "image-placeholder",
+})
+DIAGNOSTIC_STYLES = frozenset({"bold", "dim", "italic", "underline", "inverse", "fg", "bg"})
+DIAGNOSTIC_MAX_ROWS = 12
+DIAGNOSTIC_MAX_CELLS = 160
+DIAGNOSTIC_MAX_SAMPLES = 16
+DIAGNOSTIC_MAX_BYTES = 65536
+
+
+def _diagnostic_sgr(flags, params):
+    """Normalize numeric SGR to a small vocabulary; never retain parameters."""
+    result = set(flags)
+    index = 0
+    while index < len(params):
+        code = params[index]
+        if code == 0:
+            result.clear()
+        elif code in (1, 2, 3, 4, 7):
+            result.add({1: "bold", 2: "dim", 3: "italic", 4: "underline", 7: "inverse"}[code])
+        elif code == 22:
+            result.difference_update(("bold", "dim"))
+        elif code in (23, 24, 27):
+            result.discard({23: "italic", 24: "underline", 27: "inverse"}[code])
+        elif code == 39:
+            result.discard("fg")
+        elif code == 49:
+            result.discard("bg")
+        elif code in (38, 48):
+            result.add("fg" if code == 38 else "bg")
+            # Extended RGB/index parameters are colors, not independent SGR
+            # style toggles. Keep neither their values nor their positions.
+            if index + 1 < len(params) and params[index + 1] == 5:
+                index += 2
+            elif index + 1 < len(params) and params[index + 1] == 2:
+                index += 4
+        elif 30 <= code <= 37 or 90 <= code <= 97:
+            result.add("fg")
+        elif 40 <= code <= 47 or 100 <= code <= 107:
+            result.add("bg")
+        index += 1
+    return sorted(result & DIAGNOSTIC_STYLES)
+
+
+def _diagnostic_row(raw):
+    """Return width-preserving placeholders and allowlisted style spans only."""
+    layout, spans, flags = [], [], []
+    cells = 0
+    index = 0
+    truncated = False
+    while index < len(raw):
+        char = raw[index]
+        if char == "\x1b":
+            match = re.match(r"\x1b\[([0-9;]{0,32})m", raw[index:])
+            if match is None:
+                return None
+            params = [int(part or "0") for part in match.group(1).split(";")]
+            flags = _diagnostic_sgr(flags, params)
+            index += len(match.group(0))
+            continue
+        if char == "\t":
+            replacement = "\t"
+            width = 1
+        elif char == " ":
+            replacement = " "
+            width = 1
+        elif unicodedata.category(char) in {"Mn", "Me"} or unicodedata.combining(char):
+            index += 1
+            continue
+        elif (unicodedata.category(char) in {"Cc", "Cf", "Cs", "Co", "Cn"}
+              or char in {"\u2028", "\u2029"}):
+            return None
+        elif char.isspace():
+            replacement = " "
+            width = 1
+        else:
+            width = max(1, min(2, styles.cell_width(char)))
+            replacement = "#" * width
+        if cells + width > DIAGNOSTIC_MAX_CELLS:
+            truncated = True
+            break
+        layout.append(replacement)
+        if flags:
+            if spans and spans[-1]["end"] == cells and spans[-1]["flags"] == flags:
+                spans[-1]["end"] += width
+            else:
+                spans.append({"start": cells, "end": cells + width, "flags": list(flags)})
+        cells += width
+        index += 1
+    return {"layout": "".join(layout), "styles": spans}, truncated
+
+
+def structural_sample(frame, inp, phase, elapsed_ms):
+    """Sanitize an already sampled composer; never store raw pane text/escapes."""
+    kind = inp.kind if inp.kind in {"empty", "text", "suggestion", "modal", "unknown"} else "unknown"
+    harness = inp.harness if inp.harness in {"codex", "claude"} else "unknown"
+    width = frame.width if isinstance(frame.width, int) and 0 <= frame.width <= 1000 else 0
+    height = frame.height if isinstance(frame.height, int) and 0 <= frame.height <= 1000 else 0
+    cursor = [min(1000, max(0, value)) if isinstance(value, int) else 0 for value in inp.cursor[:2]]
+    sample = {"phase": phase, "elapsed_ms": min(600000, max(0, int(elapsed_ms))),
+              "dimensions": [width, height], "cursor": cursor, "kind": kind,
+              "harness": harness, "structure": "unavailable", "rows": [],
+              "markers": [], "predicates": {}}
+    if kind in {"unknown", "modal"} or not 0 <= inp.start < inp.end:
+        return sample
+    # composer() uses splitlines(). If control characters change that row
+    # count, refuse structure rather than indexing a different raw region.
+    split = frame.raw.splitlines()
+    newline_rows = frame.raw.split("\n")
+    if newline_rows and newline_rows[-1] == "":
+        newline_rows.pop()
+    if (len(split) != len(newline_rows)
+            or len(styles.strip_ansi(frame.raw).splitlines()) != len(split)
+            or inp.end > len(split)):
+        return sample
+    raw_rows = split[inp.start:inp.end]
+    first = styles.strip_ansi(raw_rows[0])
+    expected_prompt = "›" if harness == "codex" else "❯" if harness == "claude" else ""
+    if (not expected_prompt or not (first.startswith(expected_prompt + " ")
+                                or first.startswith(expected_prompt + "\u00a0"))):
+        return sample
+    truncated = len(raw_rows) > DIAGNOSTIC_MAX_ROWS
+    for raw in raw_rows[:DIAGNOSTIC_MAX_ROWS]:
+        result = _diagnostic_row(raw)
+        if result is None:
+            sample["rows"] = []
+            return sample
+        row, cut = result
+        sample["rows"].append(row)
+        truncated |= cut
+    if not sample["rows"]:
+        return sample
+    sample["structure"] = "truncated" if truncated else "available"
+    # Marker names and bounded numeric counts are protocol structure, not text.
+    if harness in {"codex", "claude"}:
+        sample["markers"].append({"type": harness + "_prompt", "count": 1})
+    for name, pattern in (
+        ("pasted_content", r"\[Pasted Content ([0-9]{1,7}) chars\]"),
+        ("pasted_text", r"\[Pasted text #[0-9]{1,7} \+([0-9]{1,7}) lines\]"),
+        ("image", r"\[Image #([0-9]{1,7})\]"),
+    ):
+        for index, match in enumerate(re.finditer(pattern, inp.text, re.I)):
+            if index >= 4:
+                break
+            sample["markers"].append({"type": name, "count": min(100000, int(match.group(1)))})
+    return sample
+
+
+class StructuralDiagnostic:
+    """Bounded sanitized observations in memory; no disk access until finish."""
+    def __init__(self, clock=time.monotonic):
+        self.clock, self.started = clock, clock()
+        self.pre_paste = None
+        self.post_paste = []
+        self.events = []
+        self.truncated = False
+
+    def observe(self, frame, inp, phase):
+        try:
+            sample = structural_sample(frame, inp, phase, (self.clock() - self.started) * 1000)
+        except Exception:
+            sample = {"phase": phase, "elapsed_ms": 0, "dimensions": [0, 0],
+                      "cursor": [0, 0], "kind": "unknown", "harness": "unknown",
+                      "structure": "unavailable", "rows": [], "markers": [], "predicates": {}}
+        if phase == "post_paste":
+            self.post_paste.append(sample)
+            if len(self.post_paste) > DIAGNOSTIC_MAX_SAMPLES:
+                self.post_paste.pop(0)
+                self.truncated = True
+        else:
+            self.pre_paste = sample
+
+    def predicate(self, name, value):
+        if name not in {"input_evidence", "pre_enter_ownership", "receipt_new", "ready"}:
+            return
+        sample = self.post_paste[-1] if self.post_paste else self.pre_paste
+        if sample is not None:
+            sample["predicates"][name] = bool(value)
+
+    def event(self, name):
+        if name in {"paste", "enter"} and len(self.events) < 8:
+            self.events.append({"type": name, "elapsed_ms": min(600000, max(0, int((self.clock() - self.started) * 1000)))})
+
+    def to_bytes(self, outcome, reason, input_method, enters):
+        record = {"schema": DIAGNOSTIC_SCHEMA,
+                  "outcome": outcome if outcome in {"delivered", "ambiguous", "deferred"} else "other",
+                  "reason": reason if reason in DIAGNOSTIC_REASONS else "other",
+                  "input_method": input_method if input_method in {"paste", "typed"} else "other",
+                  "enters": min(2, max(0, int(enters))), "pre_paste": self.pre_paste,
+                  "post_paste": list(self.post_paste), "events": list(self.events),
+                  "truncated": self.truncated}
+        while True:
+            data = json.dumps(record, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+            if len(data) + 1 <= DIAGNOSTIC_MAX_BYTES:
+                return data + b"\n"
+            if record["post_paste"]:
+                record["post_paste"].pop(0)
+                record["truncated"] = True
+            else:
+                record["pre_paste"] = None
+                record["truncated"] = True
+
+
+class DiagnosticFile:
+    """A pre-reserved owner-only file; cleanup is bound to its inode."""
+    def __init__(self, directory_fd, fd, name):
+        self.directory_fd, self.fd, self.name = directory_fd, fd, name
+        identity = os.fstat(fd)
+        self.identity = (identity.st_dev, identity.st_ino)
+        self.closed = False
+
+    @classmethod
+    def reserve(cls, path):
+        if not isinstance(path, Path) or not path.is_absolute() or len(path.parts) < 3:
+            raise ValueError("unsafe-diagnostic-path")
+        parts = path.parts[1:]
+        if any(part in {"", ".", ".."} for part in parts):
+            raise ValueError("unsafe-diagnostic-path")
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        directory_fd = os.open("/", flags)
+        try:
+            for part in parts[:-1]:
+                next_fd = os.open(part, flags, dir_fd=directory_fd)
+                os.close(directory_fd)
+                directory_fd = next_fd
+            mode = os.fstat(directory_fd)
+            if (mode.st_uid != os.getuid() or not stat.S_ISDIR(mode.st_mode)
+                    or stat.S_IMODE(mode.st_mode) != 0o700):
+                raise ValueError("unsafe-diagnostic-path")
+            fd = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=directory_fd)
+            try:
+                reserved = cls(directory_fd, fd, parts[-1])
+            except Exception:
+                os.close(fd)
+                raise
+            try:
+                os.fchmod(fd, 0o600)
+            except OSError:
+                reserved.abort()
+                raise
+            return reserved
+        except Exception:
+            try:
+                os.close(directory_fd)
+            except OSError:
+                pass
+            raise
+
+    def _name_is_own(self):
+        try:
+            now = os.stat(self.name, dir_fd=self.directory_fd, follow_symlinks=False)
+            return (now.st_dev, now.st_ino) == self.identity
+        except OSError:
+            return False
+
+    def _remove_if_own_name(self):
+        if self._name_is_own():
+            try:
+                os.unlink(self.name, dir_fd=self.directory_fd)
+            except OSError:
+                pass
+
+    def abort(self):
+        if self.closed:
+            return
+        self.closed = True
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+        self._remove_if_own_name()
+        try:
+            os.close(self.directory_fd)
+        except OSError:
+            pass
+
+    def finish(self, diagnostic, outcome, reason, input_method, enters):
+        try:
+            data = diagnostic.to_bytes(outcome, reason, input_method, enters)
+            if not self._name_is_own():
+                raise OSError("diagnostic-name-changed")
+            offset = 0
+            while offset < len(data):
+                written = os.write(self.fd, data[offset:])
+                if written <= 0:
+                    raise OSError("diagnostic-write-failed")
+                offset += written
+            if not self._name_is_own():
+                raise OSError("diagnostic-name-changed")
+            os.close(self.fd)
+            os.close(self.directory_fd)
+            self.closed = True
+            return True
+        except Exception:
+            self.abort()
+            return False
 
 
 def composer(frame, expected_codex_text=None, expected_codex_footer=None):
@@ -357,7 +665,8 @@ class Tmux:
         if before != after or len(values) != 5 or values[-1] != "0":
             return Frame("", -1, -1)
         raw = "\n".join(history.splitlines()[-int(values[3]):]) + "\n"
-        return Frame(raw, int(values[0]), int(values[1]), history)
+        return Frame(raw, int(values[0]), int(values[1]), history,
+                     int(values[2]), int(values[3]))
 
     def keys(self, *keys):
         self.run("send-keys", "-t", self.pane, *keys)
@@ -423,9 +732,12 @@ def pane_lock(identity, timeout):
 
 
 class Sender:
-    def __init__(self, tmux, options, payload, path, clock=time.monotonic, sleep=time.sleep):
+    def __init__(self, tmux, options, payload, path, clock=time.monotonic, sleep=time.sleep,
+                 diagnostic=None):
         self.tmux, self.o, self.payload, self.path = tmux, options, payload, path
         self.clock, self.sleep = clock, sleep
+        self.diagnostic = diagnostic
+        self.diagnostic_phase = "readiness"
         self.pasted = False
         self.enters = 0
         self.typed = getattr(options, "typed_command", False)
@@ -474,9 +786,12 @@ class Sender:
 
     def sample(self):
         frame = self.tmux.frame()
-        return frame, composer(frame,
-                               self.expected if self.pasted and self.codex_fallback_footer else None,
-                               self.codex_fallback_footer)
+        inp = composer(frame,
+                       self.expected if self.pasted and self.codex_fallback_footer else None,
+                       self.codex_fallback_footer)
+        if self.diagnostic is not None:
+            self.diagnostic.observe(frame, inp, self.diagnostic_phase)
+        return frame, inp
 
     def at_end(self, inp):
         return inp.cursor == (2 + styles.cell_width(inp.text.rsplit("\n", 1)[-1]), inp.text.count("\n"))
@@ -544,6 +859,8 @@ class Sender:
                        or (probe_empty_credit and inp.kind == "empty"))
             if twice and settled:
                 if inp.kind == "empty":
+                    if self.diagnostic is not None:
+                        self.diagnostic.predicate("ready", True)
                     return frame, inp
                 if (inp.kind == "text" and (not self.typed or styles.command_draft(inp.text))
                         and not getattr(self.o, "literal_exit", False)
@@ -552,6 +869,8 @@ class Sender:
                         and (not styles.command_like(inp.text)
                              or (styles.command_draft(inp.text) and self.command_shape(frame, inp)))
                         and (self.at_end(inp) or ("\n" not in inp.text and inp.cursor == (2, 0)))):
+                    if self.diagnostic is not None:
+                        self.diagnostic.predicate("ready", True)
                     return frame, inp
                 # Retirement's literal exit permits only Claude's canonical
                 # idle suggestion at the input-start cursor, never draft text.
@@ -658,9 +977,15 @@ class Sender:
             before, check, self.original_draft, self.payload) if claude_co_submit else 0)
         if literal:
             self.pasted = True  # A failed input command can still change the composer.
+            self.diagnostic_phase = "post_paste"
+            if self.diagnostic is not None:
+                self.diagnostic.event("paste")
             self.tmux.keys("-l", self.payload)
         elif self.typed:
             self.pasted = True
+            self.diagnostic_phase = "post_paste"
+            if self.diagnostic is not None:
+                self.diagnostic.event("paste")
             self.tmux.type_command(self.payload)
         else:
             if self.stale_draft_length:
@@ -669,9 +994,15 @@ class Sender:
                     append.write(("\n" + self.payload).encode("utf-8"))
                     append.flush()
                     self.pasted = True
+                    self.diagnostic_phase = "post_paste"
+                    if self.diagnostic is not None:
+                        self.diagnostic.event("paste")
                     self.tmux.paste(Path(append.name))
             else:
                 self.pasted = True
+                self.diagnostic_phase = "post_paste"
+                if self.diagnostic is not None:
+                    self.diagnostic.event("paste")
                 self.tmux.paste(self.path)
         start = self.clock()
         deadline = start + self.o.render_wait + self.o.submit_delay + self.o.receipt_wait
@@ -688,6 +1019,8 @@ class Sender:
                 break
             receipt = records(frame, current, strict_claude_submitted=claude_co_submit,
                               archived_codex_status=self.codex_fallback_footer)
+            if self.diagnostic is not None:
+                self.diagnostic.predicate("receipt_new", False)
             if literal and self.enters == 1 and current.kind == "unknown":
                 resumed = resume_records(frame)
                 fresh = [session for session, count in resumed.items() if count > resume_before[session]]
@@ -701,16 +1034,22 @@ class Sender:
             # in this attempt's input. Existing marker history is in baseline.
             for kind in ("submitted", "queued"):
                 if not literal and self.enters and any(receipt[(kind, form)] > baseline[(kind, form)] for form in accepted_forms):
+                    if self.diagnostic is not None:
+                        self.diagnostic.predicate("receipt_new", True)
                     return {"status": "delivered", "receipt": kind, "enters": self.enters}
             if (claude_co_submit and self.enters
                     and claude_combined_receipts(frame, current, self.original_draft, self.payload)
                     > claude_receipt_baseline):
+                if self.diagnostic is not None:
+                    self.diagnostic.predicate("receipt_new", True)
                 return {"status": "delivered", "receipt": "submitted", "enters": self.enters}
             if current.kind == "modal":
                 raise DeliveryError("modal-after-paste", 3)
             if owned is not None and current.kind == "empty":
                 input_disappeared = True
             evidence = self.input_evidence(current)
+            if self.diagnostic is not None:
+                self.diagnostic.predicate("input_evidence", evidence)
             if evidence:
                 fp = current.fingerprint()
                 if owned is not None and fp != owned and (self.enters or claude_co_submit):
@@ -730,9 +1069,15 @@ class Sender:
                         if not literal and self.enters and any(fresh[(kind, form)] > baseline[(kind, form)] for form in accepted_forms):
                             return {"status": "delivered", "receipt": kind, "enters": self.enters}
                     if live.fingerprint() != owned or not self.input_evidence(live):
+                        if self.diagnostic is not None:
+                            self.diagnostic.predicate("pre_enter_ownership", False)
                         raise DeliveryError("input-changed-before-enter", 3)
+                    if self.diagnostic is not None:
+                        self.diagnostic.predicate("pre_enter_ownership", True)
                     self.tmux.keys("Enter")
                     self.enters += 1
+                    if self.diagnostic is not None:
+                        self.diagnostic.event("enter")
                     last_enter = self.clock()
             elif current.kind in {"text", "suggestion"} and (owned is not None or now - start >= self.o.render_wait):
                 raise DeliveryError("mixed-input-after-paste", 3)
@@ -748,6 +1093,8 @@ def options(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("target")
     p.add_argument("--prompt-file", "-f", type=Path)
+    p.add_argument("--diagnostic-file", type=Path,
+                   help="write one owner-only structural record for this send attempt")
     p.add_argument("--typed-command", action="store_true", help="type one single-line slash command with literal keys; retain all composer/receipt guards")
     p.add_argument("--stable-window", "--stable-wait", dest="stable_wait", type=float, default=None, help="composer settle window; default: submit-delay")
     for name, default in (("max-wait", 10), ("submit-delay", 8),
@@ -784,10 +1131,30 @@ def main():
     except (OSError, UnicodeError, ValueError) as e:
         print(str(e), file=sys.stderr)
         return 1
-    pending = Path(tempfile.mkdtemp(prefix="tmux-message-"))
-    path = pending / "message"
-    path.write_bytes(payload.encode("utf-8"))
-    path.chmod(0o600)
+    diagnostic_file = None
+    if o.diagnostic_file is not None:
+        try:
+            diagnostic_file = DiagnosticFile.reserve(o.diagnostic_file)
+        except (OSError, ValueError):
+            print(json.dumps({"status": "error", "reason": "unsafe-diagnostic-path"}), file=sys.stderr)
+            return 1
+    pending = None
+    try:
+        pending = Path(tempfile.mkdtemp(prefix="tmux-message-"))
+        path = pending / "message"
+        path.write_bytes(payload.encode("utf-8"))
+        path.chmod(0o600)
+    except OSError:
+        if diagnostic_file is not None:
+            diagnostic_file.abort()
+        if pending is not None:
+            try:
+                (pending / "message").unlink(missing_ok=True)
+                pending.rmdir()
+            except OSError:
+                pass
+        print(json.dumps({"status": "error", "reason": "pending-file-failed"}), file=sys.stderr)
+        return 1
     sender = None
     def interrupted(signum, _frame):
         raise DeliveryError("signal-" + str(signum), 128 + signum)
@@ -795,10 +1162,15 @@ def main():
         signal.signal(sig, interrupted)
     try:
         tmux = Tmux(o.target)
-        sender = Sender(tmux, o, payload, path)
+        sender = Sender(tmux, o, payload, path,
+                        diagnostic=StructuralDiagnostic() if diagnostic_file is not None else None)
         with pane_lock(tmux.identity, o.max_wait):
             result = sender.deliver()
         result["pane"] = tmux.pane
+        if diagnostic_file is not None:
+            written = diagnostic_file.finish(sender.diagnostic, result["status"], "none",
+                                             result["input_method"], sender.enters)
+            result["diagnostic_status"] = "written" if written else "write-failed"
         print(json.dumps(result))
         path.unlink()
         pending.rmdir()
@@ -823,6 +1195,13 @@ def main():
             if sender.stale_draft_length:
                 result["stale_draft_length"] = sender.stale_draft_length
             result["pane"] = sender.tmux.pane
+        if diagnostic_file is not None and not diagnostic_file.closed:
+            if sender is None:
+                diagnostic_file.abort()
+            else:
+                written = diagnostic_file.finish(sender.diagnostic, result["status"], reason,
+                                                 result["input_method"], sender.enters)
+                result["diagnostic_status"] = "written" if written else "write-failed"
         print(json.dumps(result), file=sys.stderr)
         return code
 

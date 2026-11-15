@@ -2211,7 +2211,16 @@ class DiagnosticTests(unittest.TestCase):
                 patch.object(m, 'pane_lock', return_value=nullcontext()), \
                 redirect_stdout(out), redirect_stderr(err):
             rc = m.main()
-        return rc, json.loads((out if rc == 0 else err).getvalue())
+        result = json.loads((out if rc == 0 else err).getvalue())
+        # This invocation created the synthetic pending file; remove exactly it.
+        pending = result.get('pending_file')
+        if pending:
+            path = Path(pending)
+            self.assertEqual(path.name, 'message')
+            self.assertTrue(path.parent.name.startswith('tmux-message-'))
+            path.unlink()
+            path.parent.rmdir()
+        return rc, result
 
     def test_opt_in_mixed_capture_is_useful_and_text_free(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2241,16 +2250,41 @@ class DiagnosticTests(unittest.TestCase):
             self.assertEqual(data['post_paste'][-1]['kind'], 'text')
             self.assertEqual(data['post_paste'][-1]['dimensions'], [80, 24])
             self.assertTrue(data['post_paste'][-1]['rows'])
+            self.assertEqual(data['post_paste'][-1]['structure'], 'available')
+            self.assertTrue(data['post_paste'][-1]['rows'][0]['layout'].startswith('# '))
             encoded = artifact.read_text()
+            self.assertNotIn('Any model', encoded)
             for secret in ('OUTGOING_SECRET', 'HUMAN_SECRET', '秘密', '🙂', 'é'):
                 self.assertNotIn(secret, encoded)
+            self.assertEqual(set(data), {'schema', 'outcome', 'reason', 'input_method', 'enters',
+                                         'pre_paste', 'post_paste', 'events', 'truncated'})
+            for sample in [data['pre_paste']] + data['post_paste']:
+                self.assertEqual(set(sample), {'phase', 'elapsed_ms', 'dimensions', 'cursor',
+                                               'kind', 'harness', 'structure', 'rows',
+                                               'markers', 'predicates'})
+                self.assertIn(sample['phase'], {'readiness', 'post_paste'})
+                self.assertIn(sample['kind'], {'empty', 'text', 'suggestion', 'modal', 'unknown'})
+                self.assertIn(sample['harness'], {'codex', 'claude', 'unknown'})
+                self.assertTrue(all(re.fullmatch(r'[ #\t]*', row['layout']) for row in sample['rows']))
+                for row in sample['rows']:
+                    self.assertEqual(set(row), {'layout', 'styles'})
+                    for span in row['styles']:
+                        self.assertEqual(set(span), {'start', 'end', 'flags'})
+                        self.assertTrue(set(span['flags']) <= {'bold', 'dim', 'italic', 'underline', 'inverse', 'fg', 'bg'})
+                self.assertTrue(all(set(marker) == {'type', 'count'} for marker in sample['markers']))
+            self.assertTrue(any(sample['predicates'].get('input_evidence') is False for sample in data['post_paste']))
 
     def test_opt_out_and_unsafe_symlink_do_not_create_artifact_or_send(self):
         with tempfile.TemporaryDirectory() as tmp:
             private = Path(tmp) / 'private'
             private.mkdir(mode=0o700)
-            rc, result = self.invoke(Terminal(payload='synthetic'))
+            with patch.object(m, 'StructuralDiagnostic', wraps=m.StructuralDiagnostic) as constructor, \
+                    patch.object(m, 'structural_sample', wraps=m.structural_sample) as sampler:
+                rc, result = self.invoke(Terminal(payload='synthetic'))
+                constructor.assert_not_called()
+                sampler.assert_not_called()
             self.assertEqual((rc, result['status']), (0, 'delivered'))
+            self.assertNotIn('diagnostic_status', result)
             self.assertEqual(list(private.iterdir()), [])
             link = Path(tmp) / 'link'
             link.symlink_to(private, target_is_directory=True)
@@ -2259,6 +2293,181 @@ class DiagnosticTests(unittest.TestCase):
             self.assertEqual(rc, 1)
             self.assertEqual(t.actions, [])
             self.assertFalse((private / 'unsafe.json').exists())
+
+    def test_sgr_unicode_control_and_unknown_structure_are_safe(self):
+        raw = '\x1b[1m›\x1b[0m e\u0301 界\n\n  footer\n'
+        frame = m.Frame(raw, 6, 0, width=80, height=24)
+        inp = m.Input('text', 'e\u0301 界', 0, 1, (6, 0), 'codex')
+        sample = m.structural_sample(frame, inp, 'post_paste', 30)
+        self.assertEqual(sample['structure'], 'available')
+        self.assertEqual(sample['rows'][0]['layout'], '# # ##')
+        self.assertEqual(sample['rows'][0]['styles'], [{'start': 0, 'end': 1, 'flags': ['bold']}])
+        self.assertNotIn('footer', json.dumps(sample))
+        for poison in ('\x1b]8;;https://OSC_SECRET\x07', '\x1b]0;OSC_SECRET\x1b\\',
+                       '\x1bPPRIVATE_CONTROL\x1b\\', '\x1b[1;MALFORMED_SECRETm',
+                       '\u202eBIDI_SECRET'):
+            bad = m.Frame('› ' + poison + ' HUMAN_SECRET\n\n  footer\n', 3, 0, width=80, height=24)
+            result = m.structural_sample(bad, m.Input('text', poison + ' HUMAN_SECRET', 0, 1, (3, 0), 'codex'), 'post_paste', 30)
+            self.assertEqual(result['structure'], 'unavailable')
+            self.assertEqual(result['rows'], [])
+            for secret in ('OSC_SECRET', 'PRIVATE_CONTROL', 'MALFORMED_SECRET', 'BIDI_SECRET', 'HUMAN_SECRET'):
+                self.assertNotIn(secret, json.dumps(result))
+        result = m.structural_sample(frame, m.Input('unknown'), 'post_paste', 30)
+        self.assertEqual(result['rows'], [])
+        marked = m.structural_sample(m.Frame('› [Pasted Content 17 chars]\n', 2, 0),
+                                     m.Input('text', '[Pasted Content 17 chars]', 0, 1, (2, 0), 'codex'),
+                                     'post_paste', 30)
+        self.assertEqual(marked['markers'], [{'type': 'codex_prompt', 'count': 1},
+                                             {'type': 'pasted_content', 'count': 17}])
+
+    def test_structure_bounds(self):
+        rows = ['› ' + 'x' * 1000] + ['  ' + 'y' * 1000 for _ in range(30)]
+        frame = m.Frame('\n'.join(rows) + '\n', 3, 0, width=5000, height=5000)
+        inp = m.Input('text', 'x' * 1000, 0, len(rows), (3, 0), 'codex')
+        sample = m.structural_sample(frame, inp, 'post_paste', 99999999)
+        self.assertEqual(sample['structure'], 'truncated')
+        self.assertLessEqual(len(sample['rows']), 12)
+        self.assertTrue(all(len(row['layout']) <= 160 for row in sample['rows']))
+        self.assertEqual(sample['dimensions'], [0, 0])
+        self.assertEqual(sample['elapsed_ms'], 600000)
+        recorder = m.StructuralDiagnostic(clock=lambda: 0)
+        for _ in range(30):
+            recorder.observe(frame, inp, 'post_paste')
+        self.assertEqual(len(recorder.post_paste), 16)
+        self.assertTrue(recorder.truncated)
+        self.assertLessEqual(len(recorder.to_bytes('ambiguous', 'mixed-input-after-paste', 'paste', 0)), 65536)
+
+    def test_on_off_send_actions_and_transport_results_match(self):
+        def terminal(case):
+            t = Terminal(payload='synthetic')
+            if case == 'mixed':
+                original = t.paste
+                def paste(path):
+                    original(path)
+                    t.draft += ' human'
+                t.paste = paste
+            elif case == 'typing':
+                original = t.frame
+                calls = 0
+                def frame():
+                    nonlocal calls
+                    calls += 1
+                    if calls >= 2:
+                        t.draft = 'human'
+                    return original()
+                t.frame = frame
+            elif case == 'modal':
+                t.frame = lambda: m.Frame('Quick safety check\n', 0, 0)
+            return t
+        for case in ('delivered', 'mixed', 'typing', 'modal'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                private = Path(tmp) / 'private'
+                private.mkdir(mode=0o700)
+                off, on = terminal(case), terminal(case)
+                off_rc, off_result = self.invoke(off)
+                on_rc, on_result = self.invoke(on, private / 'record.json')
+                self.assertEqual(on_rc, off_rc)
+                self.assertEqual(on.actions, off.actions)
+                self.assertEqual({k: v for k, v in on_result.items() if k not in {'diagnostic_status', 'pending_file'}},
+                                 {k: v for k, v in off_result.items() if k != 'pending_file'})
+                self.assertEqual(on_result['diagnostic_status'], 'written')
+                self.assertTrue((private / 'record.json').exists())
+
+    def test_late_write_and_serialization_failure_preserve_transport(self):
+        for failure in ('write', 'serialize', 'replace'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+                private = Path(tmp) / 'private'
+                private.mkdir(mode=0o700)
+                artifact = private / 'record.json'
+                t = Terminal(payload='synthetic')
+                if failure == 'serialize':
+                    patcher = patch.object(m.StructuralDiagnostic, 'to_bytes', side_effect=ValueError('PRIVATE_EXCEPTION'))
+                else:
+                    def fail_write(_fd, _data):
+                        if failure == 'replace':
+                            artifact.rename(private / 'original-moved')
+                            artifact.write_text('UNRELATED_FILE')
+                        raise OSError('PRIVATE_EXCEPTION')
+                    patcher = patch.object(m.os, 'write', side_effect=fail_write)
+                with patcher:
+                    rc, result = self.invoke(t, artifact)
+                self.assertEqual((rc, result['status'], result['receipt'], result['enters']), (0, 'delivered', 'submitted', 1))
+                self.assertEqual(result['diagnostic_status'], 'write-failed')
+                self.assertEqual(t.actions, ['paste', 'Enter'])
+                if failure == 'replace':
+                    self.assertEqual(artifact.read_text(), 'UNRELATED_FILE')
+                else:
+                    self.assertFalse(artifact.exists())
+                self.assertNotIn('PRIVATE_EXCEPTION', json.dumps(result))
+
+    def test_replaced_reserved_name_is_not_removed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp) / 'private'
+            private.mkdir(mode=0o700)
+            artifact = private / 'record.json'
+            reserved = m.DiagnosticFile.reserve(artifact)
+            artifact.rename(private / 'original-moved')
+            artifact.write_text('UNRELATED_FILE')
+            reserved.abort()
+            self.assertEqual(artifact.read_text(), 'UNRELATED_FILE')
+            self.assertTrue((private / 'original-moved').exists())
+
+    def test_replacement_before_write_reports_safe_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp) / 'private'
+            private.mkdir(mode=0o700)
+            artifact = private / 'record.json'
+            original = m.StructuralDiagnostic.to_bytes
+            def replaced(diag, *args):
+                data = original(diag, *args)
+                artifact.rename(private / 'original-moved')
+                artifact.write_text('UNRELATED_FILE')
+                return data
+            t = Terminal(payload='synthetic')
+            with patch.object(m.StructuralDiagnostic, 'to_bytes', replaced):
+                rc, result = self.invoke(t, artifact)
+            self.assertEqual((rc, result['status'], result['receipt'], result['enters']), (0, 'delivered', 'submitted', 1))
+            self.assertEqual(result['diagnostic_status'], 'write-failed')
+            self.assertEqual(t.actions, ['paste', 'Enter'])
+            self.assertEqual(artifact.read_text(), 'UNRELATED_FILE')
+            self.assertEqual((private / 'original-moved').read_bytes(), b'')
+
+    def test_unsafe_parent_mode_and_existing_file_stop_before_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp) / 'private'
+            private.mkdir(mode=0o700)
+            private.chmod(0o770)
+            t = Terminal(payload='synthetic')
+            rc, result = self.invoke(t, private / 'record.json')
+            self.assertEqual((rc, result['reason'], t.actions), (1, 'unsafe-diagnostic-path', []))
+            private.chmod(0o700)
+            (private / 'record.json').write_text('UNRELATED_FILE')
+            t = Terminal(payload='synthetic')
+            rc, result = self.invoke(t, private / 'record.json')
+            self.assertEqual((rc, result['reason'], t.actions), (1, 'unsafe-diagnostic-path', []))
+            self.assertEqual((private / 'record.json').read_text(), 'UNRELATED_FILE')
+
+    def test_ambiguous_write_failure_preserves_original_result_and_actions(self):
+        def terminal():
+            t = Terminal(payload='synthetic')
+            original = t.paste
+            def paste(path):
+                original(path)
+                t.draft += ' human'
+            t.paste = paste
+            return t
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp) / 'private'
+            private.mkdir(mode=0o700)
+            off, on = terminal(), terminal()
+            off_rc, off_result = self.invoke(off)
+            with patch.object(m.StructuralDiagnostic, 'to_bytes', side_effect=OSError('PRIVATE_EXCEPTION')):
+                on_rc, on_result = self.invoke(on, private / 'record.json')
+            self.assertEqual((on_rc, on.actions), (off_rc, off.actions))
+            self.assertEqual({k: v for k, v in on_result.items() if k not in {'pending_file', 'diagnostic_status'}},
+                             {k: v for k, v in off_result.items() if k != 'pending_file'})
+            self.assertEqual(on_result['diagnostic_status'], 'write-failed')
+            self.assertFalse((private / 'record.json').exists())
 
 
 def typed_mutations():
@@ -2277,6 +2486,11 @@ def typed_mutations():
          'return paste_evidence(inp, self.payload)'),
         ('claude_dim_suggestion_guard', '(end == idx + 1 and styles.dim_span(raw[idx], first))',
          '(end == idx + 1)'),
+        ('diagnostic_opt_in', 'diagnostic=StructuralDiagnostic() if diagnostic_file is not None else None',
+         'diagnostic=StructuralDiagnostic()'),
+        ('diagnostic_redaction', 'replacement = "#" * width', 'replacement = char * width'),
+        ('diagnostic_useful_structure', 'sample["rows"].append(row)',
+         'sample["rows"].append({"layout": "", "styles": []})'),
     ]
     with tempfile.TemporaryDirectory(prefix='tmux-message-mutations-') as tmp:
         target = Path(tmp)
