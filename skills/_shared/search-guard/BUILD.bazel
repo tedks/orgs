@@ -1,0 +1,17 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+exports_files(["search_guard.py"])
+
+sh_test(
+    name = "classifier_test",
+    srcs = ["tests/test-classifier-bazel.sh"],
+    data = ["search_guard.py", "tests/test_search_guard.py"],
+    tags = ["no-remote"],
+)
+
+sh_test(
+    name = "wrapper_test",
+    srcs = ["tests/test-search-wrapper.sh"],
+    data = ["search-wrapper", "search_guard.py"],
+    tags = ["no-remote"],
+)

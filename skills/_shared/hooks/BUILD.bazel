@@ -13,3 +13,10 @@ sh_test(
     data = ["test-block-destructive-mutations.py", "block-destructive.sh", "test-block-destructive.sh"],
     tags = ["no-remote"],
 )
+
+sh_test(
+    name = "search_guard_hook_test",
+    srcs = ["test-search-guard-hook.sh"],
+    data = ["search-guard.sh", "//skills/_shared/search-guard:search_guard.py"],
+    tags = ["no-remote"],
+)

@@ -1,0 +1,124 @@
+#!/bin/sh
+# search-wrapper — installed as ~/.bin/rg, ~/.bin/find and ~/.bin/grep.
+#
+# Runs the real binary, except when an AGENT asks for an unbounded walk of a
+# broad root (~, ~/Projects, /, /home, /nix, /tmp ...): then it refuses with
+# exit 2, a one-line hint, and a line in ~/.local/state/search-guard/log.
+# search_guard.py beside this file holds the rules; this file only decides
+# whether to ask it.
+#
+# This sits in front of every find and grep a script on this host runs with
+# ~/.bin on PATH, so it is POSIX sh and its common path costs no fork: when no
+# agent marker is set, or a human is at a terminal, or SEARCH_UNBOUNDED=1, it
+# execs the real binary straight away. Python runs only for an agent command
+# that names a broad root, `..`, or none at all from a broad cwd.
+#
+# "Agent" means: an agent harness marker in the environment AND (checked in
+# Python) the search was typed by the agent: its parent is the harness, or a
+# chain of `sh -c` shells up to the harness. Anything else in between -- a
+# script, make, npm, python, xargs, git -- passes, so the guard cannot break a
+# build.
+#
+# Every failure is an allow: no python3, a crash, an unreadable /proc.
+
+name=${SEARCH_GUARD_WRAPPED_NAME:-${0##*/}}
+case "$name" in find|grep|rg) ;; *) echo "search-wrapper: unsupported tool name" >&2; exit 2 ;; esac
+
+# The next binary of the same name on PATH that is not a search-wrapper. -ef
+# compares device and inode after following links, so this file is skipped
+# however it is spelled. A second COPY of the wrapper (a feature worktree's
+# .bin on PATH) is a different inode: each wrapper records itself in
+# _SEARCH_GUARD_SEEN before exec'ing the next, and skips what is recorded, so
+# two copies cannot exec each other forever. The variable also reaches the
+# real tool's children (find -exec, rg --pre); a wrapper there skips its
+# decision, which is moot -- their parent is find or rg, not an agent shell.
+_seen=${_SEARCH_GUARD_SEEN:-}
+real=
+_ifs=$IFS
+IFS=:
+set -f
+for _d in $PATH; do
+    [ -n "$_d" ] || _d=.
+    _c="$_d/$name"
+    [ -x "$_c" ] && [ ! -d "$_c" ] || continue
+    [ "$_c" -ef "$0" ] && continue
+    _skip=
+    for _s in $_seen; do
+        [ -n "$_s" ] && [ "$_c" -ef "$_s" ] && { _skip=1; break; }
+    done
+    [ -n "$_skip" ] && continue
+    real=$_c
+    break
+done
+set +f
+IFS=$_ifs
+if [ -z "$real" ]; then
+    echo "search-wrapper: no $name on PATH besides $0" >&2
+    exit 127
+fi
+
+run() {
+    _SEARCH_GUARD_SEEN="$_seen:$0"
+    export _SEARCH_GUARD_SEEN
+    exec "$real" "$@"
+}
+
+# Another wrapper already decided for this name: do not decide twice.
+case ":$_seen" in
+    */"$name"|*/"$name":*) run "$@" ;;
+esac
+
+[ "${SEARCH_UNBOUNDED:-}" = 1 ] && run "$@"
+[ -t 0 ] && [ -t 1 ] && run "$@"
+if [ -z "${CLAUDECODE:-}${CODEX_THREAD_ID:-}${CODEX_SESSION_ID:-}${GEMINI_CLI:-}${OPENCODE:-}${SEARCH_GUARD_FORCE:-}" ]; then
+    run "$@"
+fi
+
+# grep that is not recursive reads only the files it names: nothing to walk.
+if [ "$name" = grep ]; then
+    _rec=
+    for _a in "$@"; do
+        case "$_a" in
+            --recursive|--dereference-recursive|--directories=recurse|--directories) _rec=1; break ;;
+            --*) ;;
+            -*[rRd]*) _rec=1; break ;;
+        esac
+    done
+    [ -n "$_rec" ] || run "$@"
+fi
+
+# Cheap prefilter: does anything here name a broad root (in any spelling that
+# is not already canonical: //, /., /./), climb with `..`, or leave the root to
+# the cwd while the cwd is broad? Keep the list in step with broad_roots() in
+# search_guard.py (test-search-wrapper.sh checks it).
+_suspect=
+_home=${HOME%/}
+_broad() {
+    case "${1%/}" in
+        ''|/home|/nix|/nix/store|/tmp|/var/tmp) return 0 ;;
+    esac
+    [ -n "$_home" ] && { [ "${1%/}" = "$_home" ] || [ "${1%/}" = "$_home/Projects" ]; } && return 0
+    return 1
+}
+_broad "$PWD" && _suspect=1
+if [ -z "$_suspect" ]; then
+    for _a in "$@"; do
+        case "$_a" in
+            ..|../*|*/..|*/../*|*//*|*/.|*/./*) _suspect=1; break ;;
+        esac
+        if _broad "$_a"; then
+            # '' is the stripped spelling of '/'; a literal empty argument is not.
+            [ -n "$_a" ] && { _suspect=1; break; }
+        fi
+    done
+fi
+[ -n "$_suspect" ] || run "$@"
+
+command -v python3 >/dev/null 2>&1 || run "$@"
+_self=$(readlink -f "$0" 2>/dev/null) || run "$@"
+[ -f "${_self%/*}/search_guard.py" ] || run "$@"
+python3 "${_self%/*}/search_guard.py" wrap "$PPID" -- "$name" "$@"
+# 97 is search_guard.REFUSE_EXIT. Anything else -- 0, a python error, a
+# missing script (python exits 2 for that) -- runs the search.
+[ $? -eq 97 ] && exit 2
+run "$@"
