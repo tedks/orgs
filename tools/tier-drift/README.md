@@ -41,6 +41,8 @@ list. Set `TIER_DRIFT_CONFIG` to a JSON file with `hosts`, `ssh_suffix`, and
 Optional `TIER_DRIFT_OUT`, `TIER_DRIFT_SRC`, and `TIER_DRIFT_SSH_TIMEOUT`
 override the output directory, collector source, and per-host timeout. Positional
 host arguments select a subset; without them, the configured hosts are used.
+Host names are single safe DNS-style labels or aliases (letters, numbers,
+periods, underscores and hyphens), without a `user@` prefix or path separator.
 Each successful host gets an aggregate; an unreachable host gets an explicit
 status. A collector error archives any previous aggregate and fails the run,
 leaving that host out of the report input until collection succeeds.

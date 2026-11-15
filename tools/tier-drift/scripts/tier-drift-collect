@@ -58,7 +58,8 @@ try:
     if not isinstance(document.get("ssh_suffix", ""), str):
         raise ValueError("ssh_suffix must be a string")
 except (OSError, KeyError, ValueError, TypeError) as exc:
-    raise SystemExit(f"tier-drift-collect: invalid config: {exc}")
+    print(f"tier-drift-collect: invalid config: {exc}", file=sys.stderr)
+    raise SystemExit(2)
 PY
 
 field() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1])).get(sys.argv[2], ""); print("\n".join(v) if isinstance(v, list) else v)' "$config" "$1"; }
@@ -78,6 +79,14 @@ for host in "${hosts[@]}"; do
     exit 2
   fi
 done
+
+# Output validation needs the matching local report schema. Check this before
+# creating files or contacting any host, including when SRC is overridden.
+if [[ ! -r $here/../src/tier_drift/aggregate.py ]] ||
+   ! python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import tier_drift.aggregate' "$here/../src" 2>/dev/null; then
+  echo 'tier-drift-collect: matching tier_drift.aggregate package is unavailable beside the launcher' >&2
+  exit 2
+fi
 
 mkdir -p "$out"
 self=$(hostname -s)
@@ -158,6 +167,7 @@ for host in "${hosts[@]}"; do
     rm -f -- "$out/$host.unreachable.json"
     [[ ! -s $err ]] || cat "$err" >&2
     rm -f -- "$err"
+    err=''
     echo "$host -> $out/$host.json"
   else
     rc=$?
@@ -212,6 +222,7 @@ PY
       collector_failed=$((collector_failed + 1))
     fi
     rm -f -- "$tmp" "$err"
+    tmp='' err=''
   fi
   flock -u "$host_lock"
   exec {host_lock}>&-

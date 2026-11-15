@@ -51,5 +51,6 @@ py_test(
     name = "test_tier_drift_collect",
     srcs = ["tests/test_tier_drift_collect.py"],
     main = "tests/test_tier_drift_collect.py",
-    data = ["scripts/tier-drift-collect"] + glob(["src/tier_drift/*.py"]),
+    data = ["scripts/tier-drift-collect"],
+    deps = [":tier_drift_lib"],
 )

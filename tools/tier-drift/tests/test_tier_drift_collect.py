@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -64,6 +65,7 @@ class CollectorWrapperTests(unittest.TestCase):
         self.source.write_text("# test source\n")
         self.out = self.root / "out"
         self.out.mkdir()
+        (self.root / "home").mkdir()
         (self.bin / "hostname").write_text("#!/bin/sh\nprintf 'test-runner\\n'\n")
         (self.bin / "ssh").write_text(
             "#!/usr/bin/env python3\n"
@@ -106,12 +108,9 @@ class CollectorWrapperTests(unittest.TestCase):
         for path in self.bin.iterdir():
             path.chmod(0o755)
         self.base_env = {
-            **{
-                key: value
-                for key, value in os.environ.items()
-                if not key.startswith(("CODEX_", "CLAUDE_", "GEMINI_", "XDG_"))
-            },
             "PATH": f"{self.bin}:{os.environ['PATH']}",
+            "HOME": str(self.root / "home"),
+            "LANG": "C.UTF-8",
             "TIER_DRIFT_CONFIG": str(self.config),
             "TIER_DRIFT_SRC": str(self.source),
             "TIER_DRIFT_OUT": str(self.out),
@@ -154,9 +153,29 @@ class CollectorWrapperTests(unittest.TestCase):
             )
         )
         result = self.run_collector("../outside")
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.returncode, 2)
         self.assertIn("safe host names", result.stderr)
         self.assertFalse((self.root / "outside.json").exists())
+
+    def test_bare_launcher_refuses_before_archiving_good_output(self):
+        bare = self.root / "bare"
+        bare.mkdir()
+        launcher = bare / "tier-drift-collect"
+        shutil.copy2(SCRIPT, launcher)
+        old = self.out / "node-a.json"
+        original = json.dumps(aggregate("node-a"))
+        old.write_text(original)
+        result = subprocess.run(
+            [str(launcher), "node-a"],
+            cwd=bare,
+            env=self.base_env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("package is unavailable", result.stderr)
+        self.assertEqual(old.read_text(), original)
 
     def test_zero_exit_invalid_output_is_not_published(self):
         old = self.out / "node-a.json"
@@ -181,7 +200,7 @@ class CollectorWrapperTests(unittest.TestCase):
 
     def test_default_source_is_the_checkout_collector(self):
         empty_home = self.root / "home"
-        empty_home.mkdir()
+        empty_home.mkdir(exist_ok=True)
         self.config.write_text(
             json.dumps(
                 {

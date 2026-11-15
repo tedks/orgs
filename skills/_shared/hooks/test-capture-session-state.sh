@@ -109,6 +109,8 @@ echo "case: a real PreToolUse payload writes session state"
 HOME1="$WORK/home1"
 REPO1="$WORK/repo1"
 mkdir -p "$HOME1" "$REPO1"
+mkdir -p "$HOME1/.claude/session-state"
+chmod 755 "$HOME1/.claude/session-state"
 init_repo() {
   (cd "$1" && git init -q && git config user.email t@example.com \
     && git config user.name test && git commit -q --allow-empty -m init)
@@ -118,9 +120,11 @@ init_repo "$REPO1"
 SID1="11111111-1111-1111-1111-111111111111"
 PAYLOAD1="$(jq -n --arg sid "$SID1" --arg cwd "$REPO1" \
   '{session_id: $sid, cwd: $cwd, hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: {command: "echo hi"}}')"
-if run_hook "$HOME1" "$PAYLOAD1"; then ok "hook exits 0"; else bad "hook exits 0"; fi
+if (umask 022; run_hook "$HOME1" "$PAYLOAD1"); then ok "hook exits 0"; else bad "hook exits 0"; fi
 SF1="$(state_file "$HOME1" "$SID1")"
 assert "state file was written" test -f "$SF1"
+assert "existing state directory is private" test "$(stat -c %a "$HOME1/.claude/session-state")" = 700
+assert "state file is private under inherited umask 022" test "$(stat -c %a "$SF1")" = 600
 assert "state file records the session id" \
   test "$(jq -r .session_id "$SF1")" = "$SID1"
 assert "state file records the payload's cwd, not the hook's own \$PWD" \
@@ -129,6 +133,7 @@ assert "state file records the git branch of that cwd" \
   test "$(jq -r .git_branch "$SF1")" = "feature-x"
 assert "a per-PID pointer file was written" has_pointer_file "$HOME1"
 CLAUDE1="$(last_claude_pid)"
+assert "pointer file is private under inherited umask 022" test "$(stat -c %a "$(pointer_file "$HOME1" "$CLAUDE1")")" = 600
 assert "the pointer is keyed by the claude process, not the sh wrapper (\$PPID), and carries its start time" \
   test "$(pointer_value "$HOME1" "$CLAUDE1")" = "$SID1 $(last_claude_start) $BOOT"
 assert "exactly one pointer was written (nothing keyed on the wrapper's pid)" \

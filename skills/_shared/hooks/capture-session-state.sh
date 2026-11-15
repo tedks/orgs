@@ -36,7 +36,11 @@ launch_dir="$(jq -r '.cwd // empty' <<< "$input" 2>/dev/null)"
 STATE_DIR="$HOME/.claude/session-state"
 STATE_FILE="$STATE_DIR/$session_id.json"
 
-mkdir -p "$STATE_DIR"
+# Session identifiers, launch paths and process pointers are private even
+# when the calling shell inherited a permissive umask. Tighten an existing
+# directory before reading or writing state beneath it.
+umask 077
+mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR" || exit 0
 
 # Boot id, read once and with a fallback: it goes into the pointer below so a
 # stale pointer from before a reboot (same pid, same tick count -- ticks reset
