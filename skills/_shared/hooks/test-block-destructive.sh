@@ -230,6 +230,8 @@ deletion_case quoted_home ALLOW "rm -rf '~'"
 deletion_case escaped_home ALLOW 'rm -rf \~'
 deletion_case else_rm BLOCK 'if false; then :; else rm -rf "$dir"; fi'
 deletion_case brace_rm BLOCK '{ rm -rf "$dir"; }'
+deletion_case brace_expansion_glob BLOCK 'rm -rf {a,*}'
+deletion_case brace_expansion_dot_glob BLOCK 'rm -rf ./{*,}'
 deletion_case bang_rm BLOCK '! rm -rf "$dir"'
 deletion_case time_rm BLOCK 'time rm -rf "$dir"'
 deletion_case timeout_rm BLOCK 'timeout 5 rm -rf "$dir"'

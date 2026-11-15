@@ -71,11 +71,11 @@ def words(source):
             started = True
             i += 1
             continue
-        if not quote and (c.isspace() or c in ';|&()<>{}'):
+        if not quote and (c.isspace() or c in ';|&()<>'):
             if started:
                 yield token(text, globs, home)
                 text, globs, started, home = '', [], False, False
-            if c == '\n' or c in ';|&(){}':
+            if c == '\n' or c in ';|&()':
                 yield None
             elif c in '<>':
                 # Redirection targets aren't rm operands. The command remains
@@ -166,7 +166,7 @@ def deletion_reason(segment):
     while i < len(segment):
         name = segment[i][0]
         if re.match(r'^[A-Za-z_][A-Za-z_0-9]*=', name) or name in (
-                'do', 'then', 'else', 'elif', 'if', 'while', 'until', '!', 'time'):
+                'do', 'then', 'else', 'elif', 'if', 'while', 'until', '!', 'time', '{', '}'):
             i += 1
         elif name == 'timeout' and i + 1 < len(segment):
             i += 2  # GNU timeout's simple DURATION COMMAND form.

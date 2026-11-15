@@ -45,7 +45,7 @@ run() {
     shift 3
     local -a envs=(HOME="$H" PATH="$SYSPATH" XDG_STATE_HOME="$STATE" PWD="$cwd")
     [ -n "$marker" ] && envs+=("$marker")
-    OUT="$(cd "$cwd" && env -i "${envs[@]}" "$@" "$HARNESS" "$script" </dev/null 2>"$TMP/err")"
+    OUT="$(cd "$cwd" && timeout 5s env -i "${envs[@]}" "$@" "$HARNESS" "$script" </dev/null 2>"$TMP/err")"
     RC=$?
     ERR="$(cat "$TMP/err")"
 }
