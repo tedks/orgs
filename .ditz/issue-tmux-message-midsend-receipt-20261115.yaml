@@ -89,3 +89,11 @@ log_events:
     and payloads preserved privately; no replay/clearing. Lane retained only to reconcile
     outstanding evidence responses; next checkpoint on responses or scheduled standup,
     with explicit unknowns.'
+- time: 2026-11-15T19:49:34-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Separate diagnostic source accepted and normally merged in PR55 at39832602f8bb1c91df37fcdeb7bd937fa6db6993.
+    This issue remains OPEN: original post-paste frame is unavailable, no actual-shape
+    historical reproducer/parser fix, no live observation yet. Optional structural
+    diagnostics are default off; future observations need explicit selection and remain
+    private. Source rollout is a separate owner action. No old payload replay.'
