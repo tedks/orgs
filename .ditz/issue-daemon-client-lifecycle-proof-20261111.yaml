@@ -63,6 +63,16 @@ log_events:
     shells collected. Existing retire-agent automation still does not implement this
     path. Preserve these distinct proofs in any proposed tool support; neither a disconnect
     notice alone nor a transport timeout establishes task lifecycle.'
+- time: 2026-11-15T23:17:36-00:00
+  who: Ted Smith
+  what: commented
+  comment: '2026-11-15 fleet Fable transition (dotfiles controller %161): seven CTO
+    sources on framework0 are daemon-attached Codex clients launched without --no-daemon
+    (breadmatter %1, diy-hrt %20, harbor %139, lang-weave %68, orgs %74, predictionbook
+    %79, storage %91). Canonical observe_native_session returns codex_rollout_unavailable/ambiguous_or_missing_live_rollout
+    for each; retire-agent --handoff therefore cannot bind, offer, or prove exit.
+    All remain PENDING with custody retained by the source CTO. This issue is the
+    blocking dependency for their migration; no alternate path was improvised.'
 file_refs:
 - path: docs/research/diy-hrt-retirement-retro-20261111.md
   line:
