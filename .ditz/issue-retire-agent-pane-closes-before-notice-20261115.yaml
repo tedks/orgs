@@ -1,0 +1,25 @@
+id: retire-agent-pane-closes-before-notice-20261115
+title: 'retire-agent: exit notice unobservable when pane root is the harness and remain-on-exit
+  is off'
+desc: '2026-11-15 fleet transition (dotfiles controller %161): Chaos %133 and PureSky
+  %131 Codex --no-daemon CTOs ran as the tmux pane root process (no shell). After
+  verified shard publication the guarded /exit ended the process, tmux closed the
+  pane, and the sender reported tmux-operation-failed. The required fresh native exit
+  notice ("codex resume UUID") could therefore never be read; retire.py stays ''requesting''
+  and only process end is provable. Fix candidates: set pane remain-on-exit on before
+  exit input (and restore after collection), or capture the notice from another witness.
+  Old receipts for events 23a33a32 and c573b7f1 are preserved as pending-native-notice,
+  not fully verified.'
+type: bugfix
+component: lifecycle
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T23:35:57-00:00
+references: []
+log_events:
+- time: 2026-11-15T23:35:57-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
