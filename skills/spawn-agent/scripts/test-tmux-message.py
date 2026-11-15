@@ -2195,6 +2195,72 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
         self.assertEqual(t.actions, ['Space', 'BSpace'])
 
 
+class DiagnosticTests(unittest.TestCase):
+    """Owned terminal frames only; no live pane or private incident content."""
+
+    def invoke(self, terminal, diagnostic_file=None):
+        terminal.identity = '0:%1'
+        args = ['tmux-message.py', '%1', '--stable-window', '0', '--submit-delay', '0',
+                '--max-wait', '1', '--render-wait', '.03', '--receipt-wait', '.03',
+                '--poll-interval', '.01']
+        if diagnostic_file is not None:
+            args += ['--diagnostic-file', str(diagnostic_file)]
+        args += [terminal.payload]
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(sys, 'argv', args), patch.object(m, 'Tmux', return_value=terminal), \
+                patch.object(m, 'pane_lock', return_value=nullcontext()), \
+                redirect_stdout(out), redirect_stderr(err):
+            rc = m.main()
+        return rc, json.loads((out if rc == 0 else err).getvalue())
+
+    def test_opt_in_mixed_capture_is_useful_and_text_free(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp) / 'private'
+            private.mkdir(mode=0o700)
+            artifact = private / 'one-attempt.json'
+            t = Terminal(payload='OUTGOING_SECRET_秘密🙂')
+            original_paste = t.paste
+            def paste(path):
+                original_paste(path)
+                t.draft += ' HUMAN_SECRET_é'
+            t.paste = paste
+            original_frame = t.frame
+            def frame():
+                result = original_frame()
+                result.width, result.height = 80, 24
+                return result
+            t.frame = frame
+            rc, result = self.invoke(t, artifact)
+            self.assertEqual((rc, result['status'], result['reason']), (3, 'ambiguous', 'mixed-input-after-paste'))
+            self.assertEqual(t.actions, ['paste'])
+            self.assertTrue(artifact.is_file())
+            self.assertEqual(artifact.stat().st_mode & 0o777, 0o600)
+            data = json.loads(artifact.read_text())
+            self.assertEqual(data['schema'], 'tmux-message-structure-v1')
+            self.assertEqual(data['enters'], 0)
+            self.assertEqual(data['post_paste'][-1]['kind'], 'text')
+            self.assertEqual(data['post_paste'][-1]['dimensions'], [80, 24])
+            self.assertTrue(data['post_paste'][-1]['rows'])
+            encoded = artifact.read_text()
+            for secret in ('OUTGOING_SECRET', 'HUMAN_SECRET', '秘密', '🙂', 'é'):
+                self.assertNotIn(secret, encoded)
+
+    def test_opt_out_and_unsafe_symlink_do_not_create_artifact_or_send(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp) / 'private'
+            private.mkdir(mode=0o700)
+            rc, result = self.invoke(Terminal(payload='synthetic'))
+            self.assertEqual((rc, result['status']), (0, 'delivered'))
+            self.assertEqual(list(private.iterdir()), [])
+            link = Path(tmp) / 'link'
+            link.symlink_to(private, target_is_directory=True)
+            t = Terminal(payload='synthetic')
+            rc, result = self.invoke(t, link / 'unsafe.json')
+            self.assertEqual(rc, 1)
+            self.assertEqual(t.actions, [])
+            self.assertFalse((private / 'unsafe.json').exists())
+
+
 def typed_mutations():
     """Compile-valid changes must fail assertions, not merely fail to import."""
     subprocess.run([sys.executable, __file__], check=True, timeout=30)
