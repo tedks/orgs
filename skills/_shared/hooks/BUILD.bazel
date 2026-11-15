@@ -1,0 +1,31 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+sh_test(
+    name = "block_destructive_test",
+    srcs = ["test-block-destructive.sh"],
+    data = ["block-destructive.sh"],
+    tags = ["no-remote"],
+)
+
+sh_test(
+    name = "block_destructive_mutation_test",
+    srcs = ["test-block-destructive-mutations.sh"],
+    data = ["test-block-destructive-mutations.py", "block-destructive.sh", "test-block-destructive.sh"],
+    tags = ["no-remote"],
+)
+
+sh_test(
+    name = "search_guard_hook_test",
+    srcs = ["test-search-guard-hook.sh"],
+    data = ["search-guard.sh", "//skills/_shared/search-guard:search_guard.py"],
+    tags = ["no-remote"],
+)
+
+sh_test(
+    name = "capture_session_state_test",
+    srcs = ["test-capture-session-state.sh"],
+    data = ["capture-session-state.sh"],
+    tags = ["no-remote"],
+)
+
+exports_files(["capture-claude-status.sh"])
