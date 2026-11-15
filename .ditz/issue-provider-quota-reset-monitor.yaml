@@ -25,7 +25,7 @@ type: feature
 component: doctrine
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
+status: paused
 disposition:
 creation_time: 2026-11-15T01:25:25-00:00
 references: []
@@ -135,3 +135,7 @@ log_events:
     account/source binding and operator destination decision precede scheduling/state
     integration and live proof. Separate stale-short-window posture work is unchanged;
     migration consolidation does not duplicate the producer.'
+- time: 2026-11-15T23:35:19-00:00
+  who: Ted Smith
+  what: stopped
+  comment: ""
