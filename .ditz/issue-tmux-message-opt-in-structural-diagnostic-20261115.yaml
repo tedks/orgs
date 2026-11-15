@@ -1,0 +1,28 @@
+id: tmux-message-opt-in-structural-diagnostic-20261115
+title: Add opt-in single-attempt structural tmux-message diagnostic
+desc: Separate bounded assignment linked to tmux-message-midsend-receipt-20261115.
+  Historical post-paste frame/cursor evidence is unavailable, so the original incident
+  remains open and no parser repair is claimed. Add explicit opt-in diagnostics for
+  one pinned send invocation using only frames the shared sender already samples.
+  Write a bounded owner-only structural artifact with arbitrary text and raw control
+  payloads removed before disk; preserve dimensions, cursor, safe normalized styles,
+  row layout, recognized protocol-marker types/counts, timing, Enter and predicate
+  decisions. Never copy payload, history, native identifiers or human text. Reject
+  unsafe paths before sending; diagnostic write failure must not change transport
+  action/result. Default off, no live invocation or rollout. Synthetic privacy/structure
+  RED and positive tests, on/off behavioral twins, mutation checks, exact-head gates,
+  draft PR and council fixpoint required. Root owns merge and future live observation
+  authorization.
+type: feature
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T18:57:04-00:00
+references: []
+log_events:
+- time: 2026-11-15T18:57:04-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
