@@ -1,0 +1,15 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+sh_test(
+    name = "block_destructive_test",
+    srcs = ["test-block-destructive.sh"],
+    data = ["block-destructive.sh"],
+    tags = ["no-remote"],
+)
+
+sh_test(
+    name = "block_destructive_mutation_test",
+    srcs = ["test-block-destructive-mutations.sh"],
+    data = ["test-block-destructive-mutations.py", "block-destructive.sh", "test-block-destructive.sh"],
+    tags = ["no-remote"],
+)
