@@ -90,3 +90,16 @@ log_events:
     freshness cannot be established, baseline only. Add positive long-gap/fresh-post
     test paired with stale/offline and identity/source-transition negatives. Deployment/notification
     destination remains unapproved pending Ted''s channel choice.'
+- time: 2026-11-15T01:58:26-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Orgs consumer handoff: PR #53 is READY at pushed 988b9cdb840aae9b59fc53b035a4043f07edbfd1.
+    Formal council fixpoint reached on that head (OpenAI native and Anthropic Opus
+    clean; Google intentionally empty under renewal reserve). Exact-head Nix flake
+    check, harness build, Bazel portable suite including 14 behavioral tests and eight
+    guard mutations, public-source/config and listed helper tests passed; results
+    are on PR. TEST-only local adapter accepted one synthetic observed replenishment
+    and zero on repeat. This is implemented/reviewed, not merged or deployed. Dotfiles
+    producer account_scope/account_epoch extension, Ted''s destination choice, host
+    scheduling and real end-to-end notification proof remain outstanding; no live
+    route was activated. Council retention nit filed as quota-reset-state-retention.'
