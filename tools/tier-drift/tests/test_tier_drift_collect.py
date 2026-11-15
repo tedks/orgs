@@ -13,7 +13,7 @@ import time
 import unittest
 from datetime import datetime
 
-REPO = pathlib.Path(__file__).resolve().parents[1]
+REPO = pathlib.Path(__file__).absolute().parents[1]
 SCRIPT = REPO / "scripts/tier-drift-collect"
 
 
@@ -106,7 +106,11 @@ class CollectorWrapperTests(unittest.TestCase):
         for path in self.bin.iterdir():
             path.chmod(0o755)
         self.base_env = {
-            **os.environ,
+            **{
+                key: value
+                for key, value in os.environ.items()
+                if not key.startswith(("CODEX_", "CLAUDE_", "GEMINI_", "XDG_"))
+            },
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "TIER_DRIFT_CONFIG": str(self.config),
             "TIER_DRIFT_SRC": str(self.source),
@@ -133,9 +137,60 @@ class CollectorWrapperTests(unittest.TestCase):
         self.assertIn("TIER_DRIFT_CONFIG is required", result.stderr)
         self.assertFalse((self.out / "node-a.json").exists())
 
+    def test_unconfigured_host_is_rejected_before_ssh(self):
+        result = self.run_collector("other-host")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("host is not configured", result.stderr)
+        self.assertFalse((self.out / "other-host.json").exists())
+
+    def test_unsafe_host_cannot_escape_output_directory(self):
+        self.config.write_text(
+            json.dumps(
+                {
+                    "hosts": ["../outside"],
+                    "ssh_suffix": ".local",
+                    "collector": {},
+                }
+            )
+        )
+        result = self.run_collector("../outside")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("safe host names", result.stderr)
+        self.assertFalse((self.root / "outside.json").exists())
+
+    def test_zero_exit_invalid_output_is_not_published(self):
+        old = self.out / "node-a.json"
+        old.write_text(json.dumps(aggregate("node-a", "2026-10-28T00:00:00Z")))
+        bad = self.root / "bad-response.txt"
+        bad.write_text("login banner\n" + json.dumps(aggregate("node-a")))
+        result = self.run_collector("node-a", FAKE_SSH_RESPONSE=str(bad))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid collector output", result.stderr)
+        self.assertFalse(old.exists())
+        self.assertEqual(len(list(self.out.glob("node-a.json.stale-*"))), 1)
+        self.assertFalse((self.out / "node-a.unreachable.json").exists())
+
+    def test_zero_exit_wrong_schema_is_not_published(self):
+        wrong = aggregate("node-a")
+        wrong["schema"] = 99
+        response = self.response_file("wrong.json", wrong)
+        result = self.run_collector("node-a", FAKE_SSH_RESPONSE=str(response))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid collector output", result.stderr)
+        self.assertFalse((self.out / "node-a.json").exists())
+
     def test_default_source_is_the_checkout_collector(self):
         empty_home = self.root / "home"
         empty_home.mkdir()
+        self.config.write_text(
+            json.dumps(
+                {
+                    "hosts": ["test-runner"],
+                    "ssh_suffix": ".local",
+                    "collector": {},
+                }
+            )
+        )
         result = self.run_collector("test-runner", TIER_DRIFT_SRC="", HOME=str(empty_home))
         self.assertEqual(result.returncode, 0, result.stderr)
         document = json.loads((self.out / "test-runner.json").read_text())
@@ -294,6 +349,15 @@ class CollectorWrapperTests(unittest.TestCase):
 
     def test_local_collector_exit_255_is_not_unreachable(self):
         self.source.write_text("raise SystemExit(255)\n")
+        self.config.write_text(
+            json.dumps(
+                {
+                    "hosts": ["test-runner"],
+                    "ssh_suffix": ".local",
+                    "collector": {},
+                }
+            )
+        )
 
         result = self.run_collector("test-runner")
 
