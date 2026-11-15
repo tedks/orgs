@@ -108,6 +108,16 @@ Results are JSON: exit 0 is `status=delivered` with a `submitted`, `queued`, or
 paste may have occurred. Failure reports include `reason`, `pending_file`,
 `pane` when resolved, and `needs_review`. The private file holds the actual
 outgoing message; it is never automatically replayed.
+For a future attempt explicitly selected for structural diagnosis, `send` accepts
+`--diagnostic-file ABSOLUTE_NEW_PATH`. It records bounded, redacted composer
+structure from that invocation's existing samples only. The parent directory
+must exist, be owned by the caller, have mode 0700, and contain no symlink in
+its path; the new file is mode 0600. The option is off by default and never
+changes paste, Enter, receipt, or recovery behavior. The artifact is private
+layout metadata, not an anonymous transcript; the caller owns its retention.
+Do not treat a diagnostic from a later send as evidence of an earlier ambiguous
+attempt. See [transport details](references/tmux-messaging.md) for fields and
+failure behavior.
 On a changed-footer Codex pane, a bold `›` row followed by a blank row and
 indented text may be an archived unsent composer. It is not a delivery receipt.
 `receipt-timeout` after an attempted paste means the message may have been
