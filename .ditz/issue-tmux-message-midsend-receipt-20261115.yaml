@@ -30,7 +30,7 @@ type: bugfix
 component: spawn-agent
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
+status: paused
 disposition:
 creation_time: 2026-11-15T18:43:06-00:00
 references: []
@@ -109,3 +109,7 @@ log_events:
     Root retained private structural/recovery evidence. This is a candidate for a
     separate synthetic regression, not proof of the historical failed sample; no diagnostic-file
     invocation occurred. Original incident remains unresolved.'
+- time: 2026-11-15T23:35:21-00:00
+  who: Ted Smith
+  what: stopped
+  comment: ""
