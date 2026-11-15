@@ -37,3 +37,12 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-15T02:04:58-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Reproduced during the accepted quota monitor source lead closeout on Codex:
+    event-specific DONE and private handoff publication verified, guarded typed exit
+    attempted once, original process ended and client-root pane disappeared before
+    fresh native notice retention. Formal retirement remains unverified; no replay/relaunch
+    or weakened exit guard. This confirms the issue affects both providers. Private
+    exact identity/event/blob receipts remain in the controller record.'
