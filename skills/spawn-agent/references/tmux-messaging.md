@@ -214,8 +214,8 @@ yields no row structure. No raw ANSI/OSC payload, arbitrary text, history,
 native identifier, pending payload, screenshot or text hash enters the file.
 The entire JSON is capped at 64 KiB; older post-paste samples are dropped if
 needed. This layout, cursor and timing metadata is still private and may
-reveal message lengths; only reviewed synthetic reconstruction belongs in
-public fixtures.
+reveal word boundaries and lengths, including those of any human draft. Only
+reviewed synthetic reconstruction belongs in public fixtures.
 
 Diagnostic serialization or writing happens after the transport decision. A
 late failure reports fixed `diagnostic_status=write-failed` while preserving

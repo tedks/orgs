@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import os
 import re
 from contextlib import redirect_stderr, redirect_stdout, nullcontext
 from unittest.mock import patch
@@ -2198,13 +2199,14 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
 class DiagnosticTests(unittest.TestCase):
     """Owned terminal frames only; no live pane or private incident content."""
 
-    def invoke(self, terminal, diagnostic_file=None):
+    def invoke(self, terminal, diagnostic_file=None, extra=()):
         terminal.identity = '0:%1'
         args = ['tmux-message.py', '%1', '--stable-window', '0', '--submit-delay', '0',
                 '--max-wait', '1', '--render-wait', '.03', '--receipt-wait', '.03',
                 '--poll-interval', '.01']
         if diagnostic_file is not None:
             args += ['--diagnostic-file', str(diagnostic_file)]
+        args += list(extra)
         args += [terminal.payload]
         out, err = io.StringIO(), io.StringIO()
         with patch.object(sys, 'argv', args), patch.object(m, 'Tmux', return_value=terminal), \
@@ -2279,13 +2281,14 @@ class DiagnosticTests(unittest.TestCase):
             private = Path(tmp) / 'private'
             private.mkdir(mode=0o700)
             with patch.object(m, 'StructuralDiagnostic', wraps=m.StructuralDiagnostic) as constructor, \
-                    patch.object(m, 'structural_sample', wraps=m.structural_sample) as sampler:
+                    patch.object(m, 'structural_sample', wraps=m.structural_sample) as sampler, \
+                    patch.object(m.DiagnosticFile, 'reserve', side_effect=AssertionError('opt-out wrote diagnostic')) as reserve:
                 rc, result = self.invoke(Terminal(payload='synthetic'))
                 constructor.assert_not_called()
                 sampler.assert_not_called()
+                reserve.assert_not_called()
             self.assertEqual((rc, result['status']), (0, 'delivered'))
             self.assertNotIn('diagnostic_status', result)
-            self.assertEqual(list(private.iterdir()), [])
             link = Path(tmp) / 'link'
             link.symlink_to(private, target_is_directory=True)
             t = Terminal(payload='synthetic')
@@ -2305,7 +2308,7 @@ class DiagnosticTests(unittest.TestCase):
         self.assertNotIn('footer', json.dumps(sample))
         for poison in ('\x1b]8;;https://OSC_SECRET\x07', '\x1b]0;OSC_SECRET\x1b\\',
                        '\x1bPPRIVATE_CONTROL\x1b\\', '\x1b[1;MALFORMED_SECRETm',
-                       '\u202eBIDI_SECRET'):
+                       '\u202eBIDI_SECRET', '\x1b[38;5m', '\x1b[38;2;1;2m'):
             bad = m.Frame('› ' + poison + ' HUMAN_SECRET\n\n  footer\n', 3, 0, width=80, height=24)
             result = m.structural_sample(bad, m.Input('text', poison + ' HUMAN_SECRET', 0, 1, (3, 0), 'codex'), 'post_paste', 30)
             self.assertEqual(result['structure'], 'unavailable')
@@ -2319,6 +2322,13 @@ class DiagnosticTests(unittest.TestCase):
                                      'post_paste', 30)
         self.assertEqual(marked['markers'], [{'type': 'codex_prompt', 'count': 1},
                                              {'type': 'pasted_content', 'count': 17}])
+        for escape in ('\x1b[38;5;1m', '\x1b[38;2;1;2;3m', '\x1b[48;5;2m'):
+            colored = m.structural_sample(m.Frame('› ' + escape + 'x\n', 2, 0),
+                                          m.Input('text', 'x', 0, 1, (2, 0), 'codex'),
+                                          'post_paste', 30)
+            flags = colored['rows'][0]['styles'][-1]['flags']
+            self.assertTrue(set(flags) <= {'fg', 'bg'})
+            self.assertTrue(flags)
 
     def test_structure_bounds(self):
         rows = ['› ' + 'x' * 1000] + ['  ' + 'y' * 1000 for _ in range(30)]
@@ -2329,7 +2339,15 @@ class DiagnosticTests(unittest.TestCase):
         self.assertLessEqual(len(sample['rows']), 12)
         self.assertTrue(all(len(row['layout']) <= 160 for row in sample['rows']))
         self.assertEqual(sample['dimensions'], [0, 0])
-        self.assertEqual(sample['elapsed_ms'], 600000)
+        self.assertEqual(sample['elapsed_ms'], 99999999)
+        self.assertEqual(m.structural_sample(frame, inp, 'post_paste', 9999999999)['elapsed_ms'], 2147483647)
+        alternating = ''.join(('\x1b[1m' if i % 2 else '\x1b[0m') + 'x' for i in range(120))
+        many_styles = m.structural_sample(m.Frame('› ' + alternating + '\n', 2, 0),
+                                          m.Input('text', 'x' * 120, 0, 1, (2, 0), 'codex'),
+                                          'post_paste', 30)
+        self.assertEqual(many_styles['structure'], 'truncated')
+        self.assertLessEqual(len(many_styles['rows'][0]['styles']), 32)
+        self.assertGreater(len(many_styles['rows'][0]['layout']), 2)
         recorder = m.StructuralDiagnostic(clock=lambda: 0)
         for _ in range(30):
             recorder.observe(frame, inp, 'post_paste')
@@ -2339,7 +2357,7 @@ class DiagnosticTests(unittest.TestCase):
 
     def test_on_off_send_actions_and_transport_results_match(self):
         def terminal(case):
-            t = Terminal(payload='synthetic')
+            t = ClaudeExitTerminal() if case == 'literal' else Terminal(payload='/status' if case == 'typed' else 'synthetic')
             if case == 'mixed':
                 original = t.paste
                 def paste(path):
@@ -2359,19 +2377,21 @@ class DiagnosticTests(unittest.TestCase):
             elif case == 'modal':
                 t.frame = lambda: m.Frame('Quick safety check\n', 0, 0)
             return t
-        for case in ('delivered', 'mixed', 'typing', 'modal'):
+        for case in ('delivered', 'mixed', 'typing', 'modal', 'typed', 'literal'):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
                 private = Path(tmp) / 'private'
                 private.mkdir(mode=0o700)
                 off, on = terminal(case), terminal(case)
-                off_rc, off_result = self.invoke(off)
-                on_rc, on_result = self.invoke(on, private / 'record.json')
+                extra = ('--typed-command',) if case == 'typed' else ('--literal-exit',) if case == 'literal' else ()
+                off_rc, off_result = self.invoke(off, extra=extra)
+                on_rc, on_result = self.invoke(on, private / 'record.json', extra=extra)
                 self.assertEqual(on_rc, off_rc)
                 self.assertEqual(on.actions, off.actions)
                 self.assertEqual({k: v for k, v in on_result.items() if k not in {'diagnostic_status', 'pending_file'}},
                                  {k: v for k, v in off_result.items() if k != 'pending_file'})
                 self.assertEqual(on_result['diagnostic_status'], 'written')
                 self.assertTrue((private / 'record.json').exists())
+                self.assertNotIn(ClaudeExitTerminal.session, (private / 'record.json').read_text())
 
     def test_late_write_and_serialization_failure_preserve_transport(self):
         for failure in ('write', 'serialize', 'replace'):
@@ -2447,6 +2467,20 @@ class DiagnosticTests(unittest.TestCase):
             self.assertEqual((rc, result['reason'], t.actions), (1, 'unsafe-diagnostic-path', []))
             self.assertEqual((private / 'record.json').read_text(), 'UNRELATED_FILE')
 
+    def test_tmux_frame_width_metadata_is_defensive(self):
+        tmux = m.Tmux.__new__(m.Tmux)
+        tmux.pane = '%1'
+        for width in ('80', 'unavailable'):
+            with self.subTest(width=width):
+                def run(*args):
+                    if args[0] == 'display-message':
+                        return '2:0:' + width + ':3:0\n'
+                    return '› synthetic\n\n  Any model · branch\n'
+                tmux.run = run
+                frame = tmux.frame()
+                self.assertEqual(frame.width, 80 if width == '80' else 0)
+                self.assertEqual((frame.x, frame.y), (2, 0))
+
     def test_ambiguous_write_failure_preserves_original_result_and_actions(self):
         def terminal():
             t = Terminal(payload='synthetic')
@@ -2468,6 +2502,57 @@ class DiagnosticTests(unittest.TestCase):
                              {k: v for k, v in off_result.items() if k != 'pending_file'})
             self.assertEqual(on_result['diagnostic_status'], 'write-failed')
             self.assertFalse((private / 'record.json').exists())
+
+    def test_interruption_during_sample_keeps_transport_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp) / 'private'
+            private.mkdir(mode=0o700)
+            off, on = Terminal(payload='synthetic'), Terminal(payload='synthetic')
+            original_frame = off.frame
+            def interrupted_frame():
+                if 'paste' in off.actions:
+                    raise m.DeliveryError('signal-15', 143)
+                return original_frame()
+            off.frame = interrupted_frame
+            off_rc, off_result = self.invoke(off)
+            original_sample = m.structural_sample
+            def interrupted_sample(frame, inp, phase, elapsed):
+                if phase == 'post_paste':
+                    raise m.DeliveryError('signal-15', 143)
+                return original_sample(frame, inp, phase, elapsed)
+            with patch.object(m, 'structural_sample', side_effect=interrupted_sample):
+                on_rc, on_result = self.invoke(on, private / 'record.json')
+            self.assertEqual((off_rc, on_rc), (143, 143))
+            self.assertEqual(off.actions, on.actions)
+            self.assertEqual({k: v for k, v in on_result.items() if k not in {'pending_file', 'diagnostic_status'}},
+                             {k: v for k, v in off_result.items() if k != 'pending_file'})
+            self.assertTrue((private / 'record.json').exists())
+
+    def test_unsafe_path_components_and_owner_stop_before_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp) / 'private'
+            private.mkdir(mode=0o700)
+            nested = private / 'nested'
+            nested.mkdir(mode=0o700)
+            middle = Path(tmp) / 'middle'
+            middle.symlink_to(private, target_is_directory=True)
+            paths = (Path('relative.json'), private / '..' / 'private' / 'dotdot.json',
+                     middle / 'nested' / 'symlink.json')
+            for path in paths:
+                with self.subTest(path=path):
+                    t = Terminal(payload='synthetic')
+                    rc, result = self.invoke(t, path)
+                    self.assertEqual((rc, result['reason'], t.actions), (1, 'unsafe-diagnostic-path', []))
+            original_fstat = m.os.fstat
+            def wrong_owner(fd):
+                state = original_fstat(fd)
+                if fd != 0 and state.st_ino == private.stat().st_ino:
+                    return SimpleNamespace(st_uid=os.getuid() + 1, st_mode=state.st_mode)
+                return state
+            with patch.object(m.os, 'fstat', side_effect=wrong_owner):
+                t = Terminal(payload='synthetic')
+                rc, result = self.invoke(t, private / 'owner.json')
+            self.assertEqual((rc, result['reason'], t.actions), (1, 'unsafe-diagnostic-path', []))
 
 
 def typed_mutations():
@@ -2491,6 +2576,8 @@ def typed_mutations():
         ('diagnostic_redaction', 'replacement = "#" * width', 'replacement = char * width'),
         ('diagnostic_useful_structure', 'sample["rows"].append(row)',
          'sample["rows"].append({"layout": "", "styles": []})'),
+        ('diagnostic_signal', 'except DeliveryError:\n            raise\n        except Exception:',
+         'except DeliveryError:\n            return\n        except Exception:'),
     ]
     with tempfile.TemporaryDirectory(prefix='tmux-message-mutations-') as tmp:
         target = Path(tmp)

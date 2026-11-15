@@ -90,6 +90,8 @@ DIAGNOSTIC_MAX_ROWS = 12
 DIAGNOSTIC_MAX_CELLS = 160
 DIAGNOSTIC_MAX_SAMPLES = 16
 DIAGNOSTIC_MAX_BYTES = 65536
+DIAGNOSTIC_MAX_ELAPSED_MS = 2147483647
+DIAGNOSTIC_MAX_STYLE_SPANS = 32
 
 
 def _diagnostic_sgr(flags, params):
@@ -115,9 +117,15 @@ def _diagnostic_sgr(flags, params):
             # Extended RGB/index parameters are colors, not independent SGR
             # style toggles. Keep neither their values nor their positions.
             if index + 1 < len(params) and params[index + 1] == 5:
+                if index + 2 >= len(params):
+                    return None
                 index += 2
             elif index + 1 < len(params) and params[index + 1] == 2:
+                if index + 4 >= len(params):
+                    return None
                 index += 4
+            else:
+                return None
         elif 30 <= code <= 37 or 90 <= code <= 97:
             result.add("fg")
         elif 40 <= code <= 47 or 100 <= code <= 107:
@@ -140,6 +148,8 @@ def _diagnostic_row(raw):
                 return None
             params = [int(part or "0") for part in match.group(1).split(";")]
             flags = _diagnostic_sgr(flags, params)
+            if flags is None:
+                return None
             index += len(match.group(0))
             continue
         if char == "\t":
@@ -163,6 +173,10 @@ def _diagnostic_row(raw):
         if cells + width > DIAGNOSTIC_MAX_CELLS:
             truncated = True
             break
+        if flags and (not spans or spans[-1]["end"] != cells or spans[-1]["flags"] != flags):
+            if len(spans) >= DIAGNOSTIC_MAX_STYLE_SPANS:
+                truncated = True
+                break
         layout.append(replacement)
         if flags:
             if spans and spans[-1]["end"] == cells and spans[-1]["flags"] == flags:
@@ -181,7 +195,7 @@ def structural_sample(frame, inp, phase, elapsed_ms):
     width = frame.width if isinstance(frame.width, int) and 0 <= frame.width <= 1000 else 0
     height = frame.height if isinstance(frame.height, int) and 0 <= frame.height <= 1000 else 0
     cursor = [min(1000, max(0, value)) if isinstance(value, int) else 0 for value in inp.cursor[:2]]
-    sample = {"phase": phase, "elapsed_ms": min(600000, max(0, int(elapsed_ms))),
+    sample = {"phase": phase, "elapsed_ms": min(DIAGNOSTIC_MAX_ELAPSED_MS, max(0, int(elapsed_ms))),
               "dimensions": [width, height], "cursor": cursor, "kind": kind,
               "harness": harness, "structure": "unavailable", "rows": [],
               "markers": [], "predicates": {}}
@@ -242,6 +256,8 @@ class StructuralDiagnostic:
     def observe(self, frame, inp, phase):
         try:
             sample = structural_sample(frame, inp, phase, (self.clock() - self.started) * 1000)
+        except DeliveryError:
+            raise
         except Exception:
             sample = {"phase": phase, "elapsed_ms": 0, "dimensions": [0, 0],
                       "cursor": [0, 0], "kind": "unknown", "harness": "unknown",
@@ -255,7 +271,7 @@ class StructuralDiagnostic:
             self.pre_paste = sample
 
     def predicate(self, name, value):
-        if name not in {"input_evidence", "pre_enter_ownership", "receipt_new", "ready"}:
+        if name not in {"input_evidence", "pre_enter_ownership", "receipt_new", "command_completion", "ready"}:
             return
         sample = self.post_paste[-1] if self.post_paste else self.pre_paste
         if sample is not None:
@@ -263,7 +279,8 @@ class StructuralDiagnostic:
 
     def event(self, name):
         if name in {"paste", "enter"} and len(self.events) < 8:
-            self.events.append({"type": name, "elapsed_ms": min(600000, max(0, int((self.clock() - self.started) * 1000)))})
+            self.events.append({"type": name, "elapsed_ms": min(DIAGNOSTIC_MAX_ELAPSED_MS,
+                                                                     max(0, int((self.clock() - self.started) * 1000)))})
 
     def to_bytes(self, outcome, reason, input_method, enters):
         record = {"schema": DIAGNOSTIC_SCHEMA,
@@ -377,6 +394,8 @@ class DiagnosticFile:
             self.closed = True
             return True
         except Exception:
+            # Transport has already decided its result. A late diagnostic
+            # failure, including an interruption here, cannot revise it.
             self.abort()
             return False
 
@@ -665,8 +684,12 @@ class Tmux:
         if before != after or len(values) != 5 or values[-1] != "0":
             return Frame("", -1, -1)
         raw = "\n".join(history.splitlines()[-int(values[3]):]) + "\n"
+        try:
+            width = int(values[2])
+        except ValueError:
+            width = 0  # Width was not required by the transport before diagnostics.
         return Frame(raw, int(values[0]), int(values[1]), history,
-                     int(values[2]), int(values[3]))
+                     width, int(values[3]))
 
     def keys(self, *keys):
         self.run("send-keys", "-t", self.pane, *keys)
@@ -1025,10 +1048,14 @@ class Sender:
                 resumed = resume_records(frame)
                 fresh = [session for session, count in resumed.items() if count > resume_before[session]]
                 if fresh:
+                    if self.diagnostic is not None:
+                        self.diagnostic.predicate("command_completion", True)
                     return {"status": "delivered", "receipt": "command", "command": "claude-exit",
                             "resume_session_id": fresh[0], "enters": 1, "transport": "literal"}
             if (self.payload == "/compact" and self.enters and current.kind == "empty"
                     and styles.strip_ansi(frame.history or frame.raw).count("• Context compacted") > compact_before):
+                if self.diagnostic is not None:
+                    self.diagnostic.predicate("command_completion", True)
                 return {"status": "delivered", "receipt": "command", "enters": self.enters}
             # A collapsed receipt is usable only if the same marker was seen
             # in this attempt's input. Existing marker history is in baseline.
@@ -1067,6 +1094,8 @@ class Sender:
                                     archived_codex_status=self.codex_fallback_footer)
                     for kind in ("submitted", "queued"):
                         if not literal and self.enters and any(fresh[(kind, form)] > baseline[(kind, form)] for form in accepted_forms):
+                            if self.diagnostic is not None:
+                                self.diagnostic.predicate("receipt_new", True)
                             return {"status": "delivered", "receipt": kind, "enters": self.enters}
                     if live.fingerprint() != owned or not self.input_evidence(live):
                         if self.diagnostic is not None:
@@ -1145,6 +1174,8 @@ def main():
         path.write_bytes(payload.encode("utf-8"))
         path.chmod(0o600)
     except OSError:
+        if diagnostic_file is None:
+            raise  # Preserve the pre-existing opt-out setup failure path.
         if diagnostic_file is not None:
             diagnostic_file.abort()
         if pending is not None:
