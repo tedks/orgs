@@ -71,3 +71,22 @@ log_events:
     five killed mutations; exact final-head gates and formal council remain pending.
     Notification destination remains an open question; no live send or deployment
     claimed.'
+- time: 2026-11-15T01:42:38-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'CTO ruling: allow one observed-replenishment alert after a long gap, with
+    honest temporal uncertainty; no arbitrary one-window age cutoff on a valid historical
+    baseline. Require a baseline originally accepted as valid/fresh, a fresh ordered
+    later source observation within the same continuous account scope/epoch and source
+    contract, passed prior deadline, advanced new deadline and measurable usage reduction.
+    All transition-baseline, missing identity, stale/future/out-of-order post-reading
+    and dedup guards remain. Retained history is evidence about the past, not a claim
+    that old data is current. Timestamp passage, an export of saved values, offline
+    status or elapsed time alone cannot generate an alert. Wording: replenishment
+    observed since the last reading; include the two observation times and current
+    measured remaining quota. Do not assert reset happened now, a particular cycle,
+    or a count of missed cycles. At most one notification for the newly observed replenishment
+    event; do not backfill speculative missed-cycle alerts. If continuity or producer
+    freshness cannot be established, baseline only. Add positive long-gap/fresh-post
+    test paired with stale/offline and identity/source-transition negatives. Deployment/notification
+    destination remains unapproved pending Ted''s channel choice.'
