@@ -124,3 +124,14 @@ log_events:
     PR243 review/install remains separately owned and pending; main outcome stays
     in_progress. Migration consolidation does not absorb or duplicate this producer/consumer
     work.'
+- time: 2026-11-15T02:14:14-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Deployment owner reports both consumer and producer source installed and
+    verified on three reachable hosts. Producer returns identity fields but remains
+    unbound; no account relabeling or monitoring activation. Monitor is not scheduled.
+    Notification destination, end-to-end route/test acceptance and genuine observed-reset
+    proof remain absent. Two other host names remain unresolved. Keep outcome in progress:
+    account/source binding and operator destination decision precede scheduling/state
+    integration and live proof. Separate stale-short-window posture work is unchanged;
+    migration consolidation does not duplicate the producer.'
