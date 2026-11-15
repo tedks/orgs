@@ -1,0 +1,21 @@
+id: agent-tooling-guard-wrapper-grammar
+title: Broaden documented destructive guard wrapper grammar
+desc: 'Follow up on the public destructive-command guard grammar after agent-tooling
+  PR54: recognize common command-position wrappers such as timeout options (-s, --foreground),
+  time -p, nohup and nice without treating brace expansion inside operands as separators.
+  Keep accidental-action scope explicit; add synthetic deny/allow cases and focused
+  mutation checks. Current simple timeout DURATION form is documented and tested;
+  this is a nonblocking council nit.'
+type: task
+component: default
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T03:23:59-00:00
+references: []
+log_events:
+- time: 2026-11-15T03:23:59-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
