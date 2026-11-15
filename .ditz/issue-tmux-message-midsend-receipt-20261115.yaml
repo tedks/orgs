@@ -97,3 +97,15 @@ log_events:
     historical reproducer/parser fix, no live observation yet. Optional structural
     diagnostics are default off; future observations need explicit selection and remain
     private. Source rollout is a separate owner action. No old payload replay.'
+- time: 2026-11-15T19:51:55-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'New distinct observation during PR55 landing relay: ordinary send returned
+    mixed-input-after-paste with zero Enters. Two subsequent shared reads eight seconds
+    apart showed the exact owned outgoing message, expanded and wrapped in the live
+    composer, unchanged target identity/cursor and no unrelated draft or modal. Pending
+    bytes matched owned outgoing payload. A single authorized Enter-only recovery
+    (no repaste) produced a new submitted row and attributable recipient acknowledgement.
+    Root retained private structural/recovery evidence. This is a candidate for a
+    separate synthetic regression, not proof of the historical failed sample; no diagnostic-file
+    invocation occurred. Original incident remains unresolved.'
