@@ -22,7 +22,7 @@ type: bugfix
 component: spawn-agent
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: in_progress
+status: paused
 disposition:
 creation_time: 2026-11-10T19:29:47-00:00
 references: []
@@ -78,3 +78,7 @@ log_events:
     should be validated against these labels. Any verifier needs independently labelled
     cases, e.g. synthetic sends with unique markers, before its positive target can
     be set.'
+- time: 2026-11-15T23:35:20-00:00
+  who: Ted Smith
+  what: stopped
+  comment: ""
