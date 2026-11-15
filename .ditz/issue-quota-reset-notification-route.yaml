@@ -1,0 +1,24 @@
+id: quota-reset-notification-route
+title: Choose human quota-reset notification destination and receipt semantics
+desc: 'Decision owner: Ted. Existing-route audit found no verified approved cross-host/mobile
+  human notification destination. Options: desktop notification on the primary workstation,
+  with best-effort session-local acceptance; or a named mobile/cross-host service
+  and destination with its documented delivery receipts. Recommendation: choose a
+  reachable existing human channel if available; never treat service acceptance as
+  human read acknowledgement. No route is adopted yet. Blocks live notification activation
+  and end-to-end acceptance, not detector implementation or isolated adapter tests.
+  The detector must remain independent of notification transport; no new messaging
+  service, credentials or live test destinations are implied. Parent work: provider-quota-reset-monitor.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-15T01:28:39-00:00
+references: []
+log_events:
+- time: 2026-11-15T01:28:39-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
