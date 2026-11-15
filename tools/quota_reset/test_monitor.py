@@ -260,8 +260,9 @@ class MonitorTest(unittest.TestCase):
         low = {"openai.secondary": reading(1, T0 + timedelta(minutes=15), reset + timedelta(hours=5))}
         self.run_tick(high, T0 + timedelta(minutes=1))
         log = Path(self.temp.name) / "notifications.log"
-        barrier = multiprocessing.Barrier(2)
-        processes = [multiprocessing.Process(target=concurrent_tick,
+        context = multiprocessing.get_context("fork")
+        barrier = context.Barrier(2)
+        processes = [context.Process(target=concurrent_tick,
                      args=(low, self.state, log, T0 + timedelta(minutes=16), barrier)) for _ in range(2)]
         for child in processes:
             child.start()
