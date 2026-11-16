@@ -1,0 +1,43 @@
+id: harness-control-get-usage-posture-malformed-20261116
+title: harness-control get_usage reports token_usage_posture_malformed while token-usage
+  posture --no-scan succeeds
+desc: 'Observed 2026-11-16 in a Claude Code session with the installed harness-control
+  MCP: get_usage returned provider windows normally but posture = {"state": "unavailable",
+  "reason": "token_usage_posture_malformed"}. In the same minute `token-usage posture
+  --no-scan` exited 0 and printed a well-formed one-line posture (preferred provider,
+  per-provider used percentage, score, reset, a staleness field rendered as a Python
+  dict literal, and a reason).
+
+
+  Notable shape details in the CLI line that the parser may not accept: one provider''s
+  score is the literal `null`; the staleness field is a Python-repr dict with single
+  quotes and `True`; the reason text contains semicolon-free prose with parentheses.
+
+
+  Effect: ROLES.md tells CTOs to read posture at boundaries "or get_usage for posture"
+  and to choose the provider from it. The MCP path silently yields no posture, so
+  a CTO relying on it has no provider preference and must know to fall back to the
+  CLI.
+
+
+  Not established: which side is wrong (the installed producer''s output format, or
+  the consumer''s parser), or whether the installed immutable package predates a format
+  change. Check the packaged version against the current source before changing either.
+  Add a fixture from a real current posture line (sanitized) with a positive twin.
+
+
+  Related: the stale five-hour-meter posture defect is tracked on the producer side
+  elsewhere; this issue is only the consumer''s "malformed" result.'
+type: bugfix
+component: harness-control
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-16T04:13:49-00:00
+references: []
+log_events:
+- time: 2026-11-16T04:13:49-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
