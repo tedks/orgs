@@ -1,0 +1,67 @@
+id: cto-reseat-authority-not-in-artifacts-20261116
+title: Cold-start audit cannot reconstruct a CEO re-seat after a retire-only shard
+  from committed artifacts
+desc: 'Found by the incoming Orgs CTO (Claude Fable 5.2) during its cold-start audit
+  on 2026-11-16.
+
+
+  Observed: the predecessor CTO''s retirement shard and its committed private pause
+  checkpoint both record an ordinary pause-and-retire closeout with "no successor;
+  resumption requires the CEO". A new CTO was then seated from that same shard under
+  a later direct CEO instruction relayed by the lifecycle controller. The instruction
+  itself (who, when, scope, that recorded pauses stay in force) existed only in the
+  launch brief and in a controller-local, unversioned record. Nothing in the shard,
+  the private remote or this repository carried it.
+
+
+  Why it is a protocol defect:
+
+  1. ROLES.md (CTO, first ten minutes) and the glossary define the cold-start audit
+  as reconstructing current state and the next authorized action from the shard and
+  committed artifacts alone. The audit reconstructed the paused state correctly, but
+  the artifacts say no seat is authorized; the authority for the seat is only reachable
+  through the live controller''s brief, which the audit is told not to rely on.
+
+  2. DOCTRINE.md says a model/provider migration is the only case where an open package''s
+  shard can brief a successor, and that an ordinary retirement shard "does not ask
+  anyone to resume that work". A CEO re-seat of a role after a retire-only closeout
+  is a third case the text does not name. CEO rulings are first in precedence, so
+  the act is valid, but a cold reader following the text concludes the launch was
+  unauthorized.
+
+
+  No work was blocked: the incoming CTO verified the shard bytes on the private remote,
+  treated the seat as CEO-authorized on the controller''s relayed record, kept every
+  recorded pause in force, and started no product phase.
+
+
+  Proposed fix (text plus one controller step, to be reviewed when doctrine work is
+  unpaused):
+
+  - Name the case: the CEO may re-seat a role after a pause-or-retire closeout; the
+  prior shard is then a state record for the new owner, pauses and holds carry over
+  unchanged, and no package authority transfers without a fresh assignment.
+
+  - Before launching the new seat, the controller commits a short private record of
+  the ruling (ruling id, date, scope, "pauses unchanged") next to the shard on the
+  private remote and names it in the brief, so the audit can verify the authority
+  from committed artifacts.
+
+  - The cold-start audit checklist adds: verify the authority for your own seat from
+  a committed record, and file a defect if it is only in the brief.
+
+
+  Related: doctrine-binding-lag-self-migration-20261115, records-dir-not-versioned.'
+type: bugfix
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-16T04:13:49-00:00
+references: []
+log_events:
+- time: 2026-11-16T04:13:49-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
