@@ -57,3 +57,15 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-17T20:24:55-00:00
+  who: Ted Smith
+  what: commented
+  comment: Independent recurrence during the PredictionBook backlog lead cutover.
+    The committed private roster, backlog brief, assessment, and verified retirement
+    receipts recovered the mission and pause, but the roster stopped before the new
+    owner was recorded. The successor also could not independently reconstruct the
+    last gate and worker dispositions because the shard pointed to live control-directory
+    files without immutable references. A direct assignment from the approving authority
+    established current ownership after the audit. Preserve the assignment and a compact
+    gate/receipt index on the private control remote so a later cold reader can recover
+    both authority and the next bounded action.
