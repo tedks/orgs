@@ -1,26 +1,31 @@
 id: cold-start-upgrade-tooling-evidence-20261117
 title: Upgrade-tooling closeout cannot be verified from committed handoff evidence
-desc: 'During a cold-start audit of a paused upgrade-tooling lane, the retirement
-  shard and commit graph established the pause, merged changes, and boundary against
-  further action. The tracked execution diagnostic still reported an outcome of pending.
-  The closeout summarized exact-head gates, live rehearsal and recovery, and resource
-  release, but referenced host-local receipts and an external review round rather
-  than a committed evidence index. A clean reader could repeat the claims but could
-  not verify the evidence-to-head mapping, current decision links, or custody disposition
-  from the committed handoff. The shard also called the final review delta test-only
-  even though it relocated an image-certificate check in production code and changed
-  refusal diagnostics. The runtime rehearsal applies to its earlier exact revision.
+desc: 'A cold-start audit of the paused upgrade-tooling lane reconstructed the pause,
+  merged changes and the boundary against further action. The product repository''s
+  committed execution diagnostic still listed an outcome of pending. In a separate
+  private controller repository, committed closeout notes corroborated the gate and
+  rehearsal totals, custody disposition and roster pause. The committed prerequisites
+  plan also matched the shard''s digest and named follow-up issues. The shard itself
+  pointed to host-local copies, requiring the reader to rediscover the committed controller
+  artifacts.
 
 
-  Acceptance: publish a private committed closeout and evidence index, with sanitized
-  receipt artifacts or immutable committed references and exact tested versus merged
-  revisions. Update the tracked outcome or give it an immutable pointer to the final
-  disposition, and include the roster disposition, owner of each remaining decision,
-  and exact tracker links. A fresh reader using only the shard and committed artifacts
-  should distinguish rehearsal results from static gates and reconstruct the pause
-  and the next authorized action. Keep session identifiers, raw receipts with private
-  paths, and custody details in private storage. The existing pause remains in force
-  and an audit does not assign the package.
+  The remaining evidence gap is independent receipt verification: the underlying gate/council,
+  rehearsal readback and resource-release records were cited through local paths,
+  partial hashes or an external PR round. The final delta was called test-only in
+  the shard even though it relocated an image-certificate check in production code
+  and changed refusal diagnostics. The live rehearsal was on the earlier exact revision.
+
+
+  Acceptance: the next closeout points from the shard to the existing private controller
+  commit and final prerequisites plan, and indexes sanitized receipt artifacts or
+  immutable committed references for the exact static and live heads and cleanup.
+  Update the tracked diagnostic outcome or give it an immutable pointer to the final
+  disposition. Include the roster disposition and decision owners and tracker links.
+  A fresh reader using only the shard and committed artifacts should be able to check
+  the evidence-to-head mapping and reconstruct authorized action. Keep session identifiers
+  and raw receipts with private paths or custody details private. The pause remains
+  in force and the audit itself assigns no package.
 
 
   Related: records-dir-not-versioned (general backing policy) and cold-start-successor-authority-not-in-artifacts-20261116
@@ -37,4 +42,8 @@ log_events:
 - time: 2026-11-17T19:45:24-00:00
   who: Ted Smith
   what: created
+  comment: ""
+- time: 2026-11-17T19:47:14-00:00
+  who: Ted Smith
+  what: updated description
   comment: ""
