@@ -1,0 +1,58 @@
+id: spawn-agent-usage-review-disposition-20261117
+title: Decide disposition of the 2026-11-16 spawn-agent usage review findings
+desc: 'Question: what should happen with the findings of the read-only spawn-agent
+  usage review run on 2026-11-16 at the CEO''s request?
+
+
+  Context (sanitized): the review found no recent break in spawn-agent. It found chronic
+  false negatives in tmux-message receipt detection (a submitted message containing
+  a blank line can never match, so multi-paragraph task sends report receipt-timeout
+  although they arrive), a misleading mixed-input-after-paste result for messages
+  queued to a busy Claude recipient, an undocumented sender-busy result whose lock
+  wait shares the short --max-wait budget, no documented Codex session layout or resume
+  path (callers searched date folders and read the CLI help), and an unhinted workspace-trust
+  dialog on launch. The live checkout works on tmux 3.6a only through an uncommitted
+  local patch that draft PR #46 would land. The private report is partial: five of
+  eleven cases are fully recorded.
+
+
+  Options:
+
+  - A. File each new finding as its own sanitized issue now; fix nothing while the
+  product pause stands.
+
+  - B. A, and also authorize two fixes despite the pause: the blank-row receipt match
+  (with a fixture and mutation check) and review/landing of draft PR #46.
+
+  - C. First run a fresh narrow read-only lane to recover the six unrecorded cases,
+  then choose A or B.
+
+  - D. Leave as recorded; revisit when the pause is lifted.
+
+
+  Recommendation (outgoing Orgs CTO): B. Those two changes account for nearly every
+  observed failure, and false receipt-timeouts are what push callers into improvised
+  retries.
+
+
+  Who decides: the CEO.
+
+
+  What it blocks: any tracker or source follow-up from the review. Related: spawn-agent-codex-0167-receipt-timeout
+  (Codex half of the receipt defect).
+
+
+  Record it came from: the Orgs CTO''s private lane record of 2026-11-16/17.'
+type: task
+component: open-questions
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-17T20:11:27-00:00
+references: []
+log_events:
+- time: 2026-11-17T20:11:27-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
