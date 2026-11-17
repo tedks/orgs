@@ -1,0 +1,28 @@
+id: retire-codex-offer-always-ambiguous-20261117
+title: retire.sh offer to a Codex lane returns ambiguous every time, then completes
+  on --resume
+desc: 'Observed by the Goals CTO (Claude Fable 5.2) on 2026-11-16/17 retiring four
+  gpt-6-sol Codex lanes spawned by agent-spawn.sh with --no-alt-screen: every first
+  retire.sh %PANE --retire exited 2 with reason "offer ambiguous; exact payload preserved",
+  and a single --resume on the same event then reached handoff-verified and, where
+  remain-on-exit was set on the pane, status retired (events 8a1e454d, 1f6ed6e7, e5032a70).
+  Without remain-on-exit the pane closes with the process and the receipt stays pending-exit
+  (event 7a4c93bd). agent-spawn.sh task delivery to a fresh Codex pane likewise returned
+  ambiguous receipt-timeout on all four spawns while the brief was in fact submitted.
+  Nothing was replayed. Asks: (1) recognise the Codex submitted-receipt shape these
+  sends produce, so the first offer and the spawn brief report delivered; (2) have
+  retire.sh set remain-on-exit on the target pane itself before the exit, or say so
+  in the skill text.'
+type: bugfix
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-17T18:51:09-00:00
+references: []
+log_events:
+- time: 2026-11-17T18:51:09-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
