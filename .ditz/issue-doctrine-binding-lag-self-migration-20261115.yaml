@@ -41,3 +41,13 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-17T20:05:02-00:00
+  who: Ted Smith
+  what: commented
+  comment: '2026-11-17, Orgs CTO: a framework model directive from the CEO now sets
+    the role mapping to gpt-6.2-astra for CTO/controller seats and gpt-6.2-sol for
+    leads and workers, with no new lanes on earlier models. The tier tables in bindings/claude-code.md
+    and bindings/codex-cli.md (dated 2026-09-26) still name the earlier models, so
+    an agent that picks a model from the binding would spawn an old-model lane. Until
+    the tables are refreshed, rosters and briefs must name the model explicitly. Text
+    change only; not made here because doctrine work is paused.'
