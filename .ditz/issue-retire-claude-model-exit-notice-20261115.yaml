@@ -28,3 +28,12 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-18T20:38:46-00:00
+  who: Ted Smith
+  what: commented
+  comment: Reconfirmed on a single-pane Claude Opus lane with remain-on-exit on. The
+    native footer has the expected two lines and exact session UUID, but inserts --model
+    opus before --resume. The original process ended and the tmux pane retained exit
+    status 0; the helper had verified and published the private recovery shard, then
+    left exit pending. Kept the dead pane for verification when the matcher supports
+    this form.
