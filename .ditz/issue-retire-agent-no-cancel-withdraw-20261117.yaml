@@ -1,0 +1,51 @@
+id: retire-agent-no-cancel-withdraw-20261117
+title: retire-agent has no cancel or withdraw for a pending event, so a withdrawn
+  handoff blocks every later retirement of the same process
+desc: 'Observed 2026-11-17. A controller opened a retirement event for a live CTO
+  pane in handoff mode; the agent wrote its shard and emitted the completion marker.
+  The CEO then withdrew that handoff and had the CTO launch its own successor, which
+  was to retire the CTO in plain retire mode.
+
+
+  Result: the event stays in status "requesting", pinned to the CTO''s process. A
+  new `--retire` for the same pane is refused ("existing attempt requires --resume").
+  `--resume` with a different mode is refused ("resume pane/mode differs"). `--resume`
+  in the recorded mode would continue the withdrawn handoff and launch a second successor.
+  The installed skill has no cancel, withdraw or abandon operation, and the protocol
+  reference describes none. Both the original controller and the new successor stopped
+  correctly without editing state.
+
+
+  Effect: once any event is opened for a process, the only tool-supported outcomes
+  are completing it in its original mode or leaving the process unretirable by the
+  tool. A changed decision (wrong controller, wrong mode, cancelled migration) cannot
+  be expressed. The lane fell back to the doctrine''s manual path (own shard file
+  pushed to the private remote, peer-verified bytes, requested exit, observed process
+  end), which leaves the stale event registered against a process that no longer exists.
+
+
+  Proposed fix (when retire-agent work is unpaused): add an explicit `--withdraw PATH`
+  (or `--resume PATH --withdraw`) that requires the pinned process to still match,
+  records who withdrew and why in the private event log, marks the event terminal
+  without publishing, exiting or spawning, and leaves the shard file in place for
+  reuse; then a new event may be opened for the same process. Add a test that a withdrawn
+  event no longer blocks `--retire`, and a mutation check that withdraw never sends
+  input to the pane. Document in the skill what to do when a mode must change. Also
+  decide how the tool should treat a terminally stale event whose pinned process has
+  ended.
+
+
+  Related: retire-script-legacy-records (manual fallback), cto-reseat-authority-not-in-artifacts-20261116.'
+type: bugfix
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-18T04:54:54-00:00
+references: []
+log_events:
+- time: 2026-11-18T04:54:54-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
