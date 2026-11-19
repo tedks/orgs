@@ -58,20 +58,23 @@ the task's existing transport receipt.
 - For ordinary lanes, supply the brief in the combined launch as prompt text
   or with `--prompt-file` when you can establish both identity and delivery.
   Confirm the live identity and a fresh submitted or queued receipt before
-  reporting successful dispatch. If identity is unverified or mismatched, report the assignment
-  as unfulfilled and state the observed delivery outcome separately, even
-  if the task has a receipt. Preserve the child and alert the accountable
-  lead promptly to decide whether to steer or stop it.
+  reporting successful dispatch. If identity is unverified or mismatched,
+  report the assignment as unfulfilled and state the observed delivery
+  outcome separately, even if the task has a receipt. Preserve the child
+  and alert the accountable lead promptly to decide whether to steer or
+  stop it.
 - For migrations and explicit identity-first requests, launch without the
   brief, verify the live identity, then send the brief with `tmux-message`
   and verify its fresh receipt. Withhold the brief and alert the
-  accountable lead if identity is unverified or mismatched.
+  accountable lead if identity is unverified or mismatched. Record the
+  brief as withheld.
 
-Report a blocked launch and an existing child with unconfirmed delivery
-as distinct outcomes. Preserve and inspect any existing child in its window
-before further action. Keep the original attempt for inspection without
-replaying the task or launching a duplicate. Use the receipt from the actual
-brief. Keep the window available for independent inspection and steering.
+If the requested launch is blocked, report the blocker. If a child exists
+and a brief attempt has no fresh receipt, report the child with delivery
+unconfirmed. Preserve and inspect any existing child in its window before
+further action. Keep the original attempt for inspection without replaying
+the task or launching a duplicate. Use the receipt from the actual brief.
+Keep the window available for independent inspection and steering.
 
 The same-provider council seat follows its native council route. The
 assigning lead or operator can explicitly authorize a bounded internal helper
