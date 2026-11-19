@@ -141,6 +141,27 @@ class Terminal:
                 self.draft = ''
 
 
+
+# Synthetic renderings from Codex's info and error cells. The transport
+# reference pins the renderer source and supported duration formats.
+COMPACT_COMPLETE = '\x1b[2m• \x1b[0mContext compacted'
+COMPACT_REFUSAL = "\x1b[31m■ '/compact' is disabled while a task is in progress.\x1b[0m"
+
+
+class CompactTerminal(Terminal):
+    identity = '0:%1'
+
+    def __init__(self, outcome=lambda elapsed: '', **kwargs):
+        super().__init__(payload='/compact', **kwargs)
+        self.outcome = outcome
+
+    def frame(self):
+        if self.accepted_at is None:
+            return super().frame()
+        rows = self.outcome(self.now - self.accepted_at)
+        return screen(self.draft, self.history + rows, harness=self.harness)
+
+
 class ClaudeExitTerminal(Terminal):
     session = '11111111-2222-3333-4444-555555555555'
 
@@ -2010,7 +2031,7 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
         with tempfile.TemporaryDirectory() as tmp:
             payload = Path(tmp) / 'payload'
             payload.write_bytes(b'one\rtwo')
-            o = SimpleNamespace(prompt_file=payload, message=None, literal_exit=False)
+            o = m.options(['%1', '--prompt-file', str(payload)])
             err = io.StringIO()
             with patch.object(m, 'options', return_value=o), patch.object(m, 'Tmux') as tmux, redirect_stderr(err):
                 self.assertEqual(m.main(), 1)
@@ -2604,6 +2625,238 @@ def typed_mutations():
                                     capture_output=True, text=True, timeout=30)
             assert result.returncode != 0 and 'FAIL:' in result.stderr and 'ERROR:' not in result.stderr, (name, result.stderr)
             print('killed:', name)
+
+
+
+class VerifyCompactTests(unittest.TestCase):
+    def send(self, terminal, *arguments):
+        out, err = io.StringIO(), io.StringIO()
+        argv = ['tmux-message.py', '%1', '--verify-compact', '--stable-window', '.25',
+                '--submit-delay', '.5', '--render-wait', '1', '--receipt-wait', '2',
+                '--max-wait', '2', '--poll-interval', '.25', *arguments]
+        sender_type = m.Sender
+
+        def sender(*args, **kwargs):
+            return sender_type(*args, clock=terminal.clock, sleep=terminal.sleep, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pending = Path(tmp) / 'pending'
+            pending.mkdir(mode=0o700)
+            with (patch.object(sys, 'argv', argv),
+                  patch.object(m, 'Tmux', return_value=terminal) as resolve,
+                  patch.object(m, 'Sender', side_effect=sender),
+                  patch.object(m, 'pane_lock', return_value=nullcontext()),
+                  patch.object(m.signal, 'signal'),
+                  patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)),
+                  redirect_stdout(out), redirect_stderr(err)):
+                code = m.main()
+            result = json.loads(out.getvalue() if code == 0 else err.getvalue())
+            if code == 1:
+                resolve.assert_not_called()
+                self.assertFalse((pending / 'message').exists())
+            elif code == 0:
+                self.assertFalse(pending.exists())
+            else:
+                payload = Path(result['pending_file'])
+                self.assertEqual(payload.read_text(), '/compact')
+                self.assertEqual(payload.stat().st_mode & 0o777, 0o600)
+            return code, result
+
+    def compact(self, terminal):
+        return self.send(terminal, '--typed-command', '/compact')
+
+    def assert_unknown(self, terminal, enters):
+        code, result = self.compact(terminal)
+        self.assertEqual(code, 3, result)
+        self.assertEqual(result['command_outcome'], 'unknown')
+        self.assertTrue(result['input_attempted'])
+        self.assertFalse(result['paste_attempted'])
+        self.assertTrue(result['needs_review'])
+        self.assertEqual(result['enters'], enters)
+        self.assertEqual(terminal.actions, ['typed:/compact'] + ['Enter'] * enters)
+
+    def test_fresh_completion_with_and_without_elapsed_time(self):
+        for duration in ('', ' · 14s', ' · 1m 04s', ' · 2h 01m 04s'):
+            with self.subTest(duration=duration):
+                terminal = CompactTerminal(lambda elapsed: COMPACT_COMPLETE + duration + '\n')
+                # A second occurrence can still prove freshness.
+                terminal.history = COMPACT_COMPLETE + '\n'
+                code, result = self.compact(terminal)
+                self.assertEqual(code, 0, result)
+                self.assertEqual(result['command_outcome'], 'completed')
+                self.assertEqual(result['receipt'], 'command')
+                self.assertEqual(terminal.actions, ['typed:/compact', 'Enter'])
+
+    def test_fresh_busy_refusal_is_distinct_even_when_command_remains(self):
+        class BusyTerminal(CompactTerminal):
+            def keys(self, *keys):
+                super().keys(*keys)
+                self.draft = '/compact'
+
+        terminal = BusyTerminal(lambda elapsed: COMPACT_REFUSAL + '\n')
+        terminal.history = COMPACT_COMPLETE + '\n'
+        code, result = self.compact(terminal)
+        self.assertEqual(code, 3, result)
+        self.assertEqual(result['command_outcome'], 'refused')
+        self.assertEqual(result['reason'], 'compact-refused')
+        self.assertEqual(terminal.draft, '/compact')
+        self.assertEqual(terminal.actions, ['typed:/compact', 'Enter'])
+
+    def test_pre_enter_notice_is_stale(self):
+        class NoticeDuringTyping(CompactTerminal):
+            def type_command(self, text):
+                super().type_command(text)
+                self.history += COMPACT_COMPLETE + '\n' + COMPACT_REFUSAL + '\n'
+
+        self.assert_unknown(NoticeDuringTyping(), enters=1)
+
+    def test_quiet_progress_ordinary_receipts_and_other_text_are_unknown(self):
+        for rows in ('', '• Compacting context (8s)\n', '› /compact\n',
+                     '• Messages to be submitted\n  ↳ /compact\n',
+                     '• Context compacted but the task is still running\n',
+                     '• The log contains: • Context compacted\n',
+                     "  ■ '/compact' is disabled while a task is in progress.\n"):
+            with self.subTest(rows=rows):
+                terminal = CompactTerminal(lambda elapsed: rows)
+                terminal.history = COMPACT_COMPLETE + '\n' + COMPACT_REFUSAL + '\n'
+                self.assert_unknown(terminal, enters=1)
+
+    def test_conflict_within_the_receipt_window_is_unknown(self):
+        terminal = CompactTerminal(lambda elapsed: (
+            COMPACT_COMPLETE if elapsed < 1 else COMPACT_REFUSAL) + '\n')
+        code, result = self.compact(terminal)
+        self.assertEqual(code, 3, result)
+        self.assertEqual(result['command_outcome'], 'unknown')
+        self.assertEqual(result['reason'], 'conflicting-command-evidence')
+        self.assertEqual(terminal.actions, ['typed:/compact', 'Enter'])
+
+    def test_evidence_at_or_after_deadline_is_outside_attempt(self):
+        self.assert_unknown(CompactTerminal(
+            lambda elapsed: COMPACT_COMPLETE + '\n' if elapsed >= 2 else ''), enters=1)
+
+    def test_late_capture_cannot_prove_completion(self):
+        terminal = CompactTerminal(lambda elapsed: COMPACT_COMPLETE + '\n')
+        frame = terminal.frame
+
+        def capture():
+            if terminal.enters:
+                terminal.sleep(2)
+            return frame()
+
+        terminal.frame = capture
+        self.assert_unknown(terminal, enters=1)
+
+    def test_unknown_rendering_cannot_prove_completion(self):
+        terminal = CompactTerminal(lambda elapsed: COMPACT_COMPLETE + '\n')
+        frame = terminal.frame
+
+        def capture():
+            captured = frame()
+            if terminal.enters:
+                captured.x = captured.y = -1
+            return captured
+
+        terminal.frame = capture
+        self.assert_unknown(terminal, enters=1)
+
+    def test_look_at_enter_rejects_lost_ownership(self):
+        for changed in ('cursor', 'mixed', 'unknown', 'empty', 'claude'):
+            with self.subTest(changed=changed):
+                terminal = CompactTerminal()
+                frame = terminal.frame
+                elapsed_at_submit = None
+
+                def capture():
+                    nonlocal elapsed_at_submit
+                    current = frame()
+                    if terminal.draft and terminal.now >= .75:
+                        if elapsed_at_submit != terminal.now:
+                            elapsed_at_submit = terminal.now
+                        else:
+                            if changed == 'cursor':
+                                current.x = 2
+                            elif changed == 'mixed':
+                                return screen('/compact human')
+                            elif changed == 'unknown':
+                                return m.Frame('', -1, -1)
+                            elif changed == 'empty':
+                                return screen()
+                            else:
+                                return screen('/compact', harness='claude')
+                    return current
+
+                terminal.frame = capture
+                self.assert_unknown(terminal, enters=0)
+
+    def test_dropped_enter_is_never_retried(self):
+        terminal = CompactTerminal(dropped=1)
+        self.assert_unknown(terminal, enters=1)
+        self.assertEqual(terminal.draft, '/compact')
+
+    def test_typing_or_enter_transport_failure_is_unknown(self):
+        for phase, enters in (('type_command', 0), ('keys', 1)):
+            with self.subTest(phase=phase):
+                terminal = CompactTerminal()
+                action = getattr(terminal, phase)
+
+                def fail(*args):
+                    action(*args)
+                    raise OSError('synthetic tmux operation failed')
+
+                setattr(terminal, phase, fail)
+                self.assert_unknown(terminal, enters=enters)
+
+    def test_ineligible_route_or_argument_never_resolves_a_pane(self):
+        for arguments in (('/compact',), ('--typed-command', '/compact now'),
+                          ('--typed-command', '/compact '), ('--typed-command', ' /compact'),
+                          ('--typed-command', '/compact\n'), ('--typed-command', '/status'),
+                          ('--typed-command', '--literal-exit', '/compact'),
+                          ('--typed-command', '--prompt-file', '/unknown'),
+                          ('--typed-command', '--prompt-file', '/unknown', '/compact'),
+                          ('--typed-command',)):
+            with self.subTest(arguments=arguments):
+                terminal = CompactTerminal()
+                code, result = self.send(terminal, *arguments)
+                self.assertEqual(code, 1, result)
+                self.assertNotIn('command_outcome', result)
+                self.assertEqual(terminal.actions, [])
+
+    def test_only_a_verified_empty_codex_composer_can_be_typed_into(self):
+        for draft, harness, reason in (('human draft', 'codex', 'existing-input'),
+                                        ('/status', 'codex', 'existing-input'),
+                                        ('/compact', 'codex', 'existing-input'),
+                                        ('', 'claude', 'compact-requires-codex'),
+                                        ('Try "draft"', 'claude', 'compact-requires-codex'),
+                                        ('', 'unknown', 'unsupported-layout'),
+                                        ('', 'modal', 'modal')):
+            with self.subTest(draft=draft, harness=harness):
+                terminal = CompactTerminal(draft=draft)
+                terminal.harness = harness
+                if harness == 'unknown':
+                    terminal.frame = lambda: m.Frame('shell $', 7, 0)
+                elif harness == 'modal':
+                    terminal.frame = lambda: m.Frame('Would you like to proceed?\n› yes\n', 2, 1)
+                elif draft.startswith('Try '):
+                    terminal.frame = lambda: m.Frame(screen(draft, harness='claude').raw, 2, 1)
+                code, result = self.compact(terminal)
+                self.assertEqual(code, 2, result)
+                self.assertEqual(result['reason'], reason)
+                self.assertNotIn('command_outcome', result)
+                self.assertFalse(result['input_attempted'])
+                self.assertEqual(terminal.actions, [])
+                self.assertEqual(terminal.draft, draft)
+
+    def test_unselected_compact_still_uses_ordinary_receipt_and_route(self):
+        for typed in (True, False):
+            for harness in ('codex', 'claude'):
+                with self.subTest(typed=typed, harness=harness):
+                    terminal = Terminal(payload='/compact', dropped=1)
+                    terminal.harness = harness
+                    result = deliver(terminal, typed_command=typed)
+                    self.assertEqual(result['receipt'], 'submitted')
+                    self.assertNotIn('command_outcome', result)
+                    input_action = 'typed:/compact' if typed else 'paste'
+                    self.assertEqual(terminal.actions, [input_action, 'Enter', 'Enter'])
 
 
 if __name__ == '__main__':
