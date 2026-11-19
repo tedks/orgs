@@ -6,7 +6,7 @@ that's the portability claim the cold-start audit tests.
 
 | Protocol concept | Claude Code primitive |
 |---|---|
-| CTO session | Interactive session or background job in the project worktree. |
+| CTO session | A named operational CTO lane follows [named lane dispatch](../skills/spawn-agent/SKILL.md#named-lane-dispatch). CTO work outside a named lane can run interactively or as a background job in the project worktree. |
 | Named operational lead, implementer or expressly requested audit lane | [Named lane dispatch](../skills/spawn-agent/SKILL.md#named-lane-dispatch) via `agent-spawn.sh SESSION:WINDOW claude DIR --model MODEL`, with its own named interactive window and assigned worktree. |
 | Scoped internal helper | With explicit authorization from the assigning lead or operator, use an `Agent` tool subagent for a bounded task. Select `model` for the task and use the result as evidence for that task alone. |
 | Huddle attendance (carry your own context) | the attending agent forks **itself** — `subagent_type: "fork"` inherits the forker's full context (and runs on the forker's model; a `model` override is ignored). Correct here: a huddle needs the attendee's context, not a tier change. |
