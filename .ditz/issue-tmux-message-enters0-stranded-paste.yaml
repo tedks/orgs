@@ -69,3 +69,10 @@ log_events:
     or infer receiver state from Enter count. A bounded lane owns private causal evidence
     and a measured-shape synthetic regression before minimal repair. Existing pending
     payloads remain preserved; no replay or clearing.'
+- time: 2026-11-19T08:46:50-00:00
+  who: Ted Smith
+  what: commented
+  comment: "November 18\u201319 field report: immediately after a Codex turn ended,
+    two cited cases left a paste unsent in the composer with mixed-input-after-paste
+    and enters=0. The reported composer observation establishes the unsent state in
+    these cases; the Enter count alone cannot establish it."
