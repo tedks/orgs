@@ -267,18 +267,23 @@ tmux-message send %PANE --typed-command --verify-compact /compact
 
 `--verify-compact` requires `--typed-command` with the exact positional
 argument `/compact`. Other arguments, prompt files, paste, and
-`--literal-exit` combinations exit 1 before resolving the pane. A draft
-detected in the composer, a known non-Codex harness, or an unverified
-composer defers with exit 2 without sending keys. The sender types once
+`--literal-exit` combinations exit 1 before resolving the pane. Malformed
+timing options use argparse's pre-input usage exit 2. A detected draft, a
+known non-Codex harness, or an unverified composer defers with exit 2
+without sending keys. The sender types once
 only after verifying the canonical empty cursor position and a single
 blank separator before the footer. A dim Codex placeholder at that position
 classifies as empty. The separate suggestion state applies to Claude.
 Visible whitespace in the prompt or extra blank rows defer even when the
 parsed text is empty. A space-only draft whose cells are absent from the
 capture can be indistinguishable from empty input if its cursor is at Home.
-The sender checks the exact command text and end cursor before submitting.
-Lost ownership preserves the input and sends no Enter. The attempt sends
-at most one Enter.
+After typing and again immediately before Enter, the sender requires the
+untrimmed single-line command, the empty separator, and the cursor at the
+end of the command. Visible trailing spaces or an extra blank row stop
+submission even if the cursor moves back to the command end. Trailing spaces
+omitted by capture can be indistinguishable if the cursor returns to that
+position. Lost ownership preserves the input and sends no Enter. The attempt
+sends at most one Enter.
 
 The last pre-Enter capture establishes the baseline. The sender looks for
 either full, flush-left row above a recognized Codex composer. It strips
@@ -296,9 +301,12 @@ and [history row prefixes](https://github.com/openai/codex/blob/29eb79e9866b3262
 A distinct notice can establish freshness. A full-screen repaint can copy
 an identical old notice into scrollback, so extra scrollback copies leave
 its freshness unknown. An identical notice can count if a single visible
-frame contains more copies than the entire baseline capture. If a receipt
-frame has a different measured pane width than the baseline, verification
-ends with `unknown`. Reflow can turn a wrapped old notice into an exact row.
+frame contains more copies than the entire baseline capture. The baseline
+and receipt frames require a positive measured pane width. A missing or
+non-positive baseline width stops the attempt before Enter with `unknown`.
+A receipt width that is non-positive or differs from the baseline also
+ends verification with `unknown`. Reflow can turn a wrapped old notice
+into an exact row.
 
 The `--receipt-wait` window starts after the synchronous Enter call returns.
 A completion or refusal normally takes the full window to report, even when
@@ -311,6 +319,8 @@ Once input is attempted, the result has `command_outcome`.
 | `completed` | `delivered` with `receipt=command` | 0 |
 | `refused` | `refused` | 3 |
 | `unknown` | `ambiguous` | 3 |
+
+A refusal can leave `/compact` in the composer.
 
 Existing history, ordinary submit or queue receipts, progress, and silence
 cannot establish an outcome. Conflicting notices, unsupported layouts with no

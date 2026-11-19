@@ -511,14 +511,20 @@ def composer(frame, expected_codex_text=None, expected_codex_footer=None):
     return Input("unknown")
 
 
-def compact_input_is_empty(frame, inp):
-    # The shared parser trims whitespace. For /compact, also check the cursor
-    # and the one blank separator between the prompt and its footer.
-    if inp.kind != "empty" or inp.cursor != (2, 0) or inp.end != inp.start + 2:
-        return False
+def compact_prompt_row(frame, inp):
+    # The shared parser trims whitespace. Keep the prompt row untrimmed and
+    # require exactly one empty separator between that row and its footer.
+    if inp.end != inp.start + 2:
+        return None
     rows = styles.strip_ansi(frame.raw).splitlines()
-    prompt_text = PROMPT.match(rows[inp.start]).group(2)
-    return not prompt_text.isspace() and not rows[inp.start + 1]
+    return rows[inp.start] if not rows[inp.start + 1] else None
+
+
+def compact_input_is_empty(frame, inp):
+    if inp.kind != "empty" or inp.cursor != (2, 0):
+        return False
+    row = compact_prompt_row(frame, inp)
+    return row is not None and not PROMPT.match(row).group(2).isspace()
 
 
 def records(frame, inp, strict_claude_submitted=False, archived_codex_status=None):
@@ -980,8 +986,9 @@ class Sender:
             self.diagnostic.event("paste")
         self.tmux.type_command(self.payload)
 
-    def owns_compact(self, inp):
-        return (inp.harness == "codex" and self.input_evidence(inp) and self.at_end(inp))
+    def owns_compact(self, frame, inp):
+        return (inp.harness == "codex" and self.input_evidence(inp) and self.at_end(inp)
+                and compact_prompt_row(frame, inp) == f"› {self.payload}")
 
     def deliver_compact(self):
         self.type_payload()
@@ -989,11 +996,11 @@ class Sender:
         deadline = start + self.o.render_wait + self.o.submit_delay
         owned_since = None
         while self.clock() < deadline:
-            _, inp = self.sample()
+            frame, inp = self.sample()
             now = self.clock()
             if now >= deadline:
                 break
-            owned = self.owns_compact(inp)
+            owned = self.owns_compact(frame, inp)
             if self.diagnostic is not None:
                 self.diagnostic.predicate("input_evidence", owned)
             if owned:
@@ -1001,7 +1008,7 @@ class Sender:
                     owned_since = now
                 if now >= start + self.o.submit_delay and now - owned_since >= self.o.poll_interval:
                     before, live = self.sample()
-                    owns_live = self.owns_compact(live)
+                    owns_live = self.owns_compact(before, live)
                     if self.diagnostic is not None:
                         self.diagnostic.predicate("pre_enter_ownership", owns_live)
                     if not owns_live or self.clock() >= deadline:
@@ -1018,6 +1025,8 @@ class Sender:
         raise DeliveryError("paste-not-observed", 3)
 
     def submit_compact(self, before, live):
+        if before.width <= 0:
+            raise DeliveryError("unsupported-layout", 3)
         baseline, _ = compact_records(before, live)
         self.enters = 1  # Count the attempt even if the tmux operation fails.
         if self.diagnostic is not None:
@@ -1036,7 +1045,8 @@ class Sender:
             if frame.width > 0 and frame.width != before.width:
                 # Reflow can make a wrapped baseline notice look like new text.
                 raise DeliveryError("pane-width-changed", 3)
-            if inp.kind == "modal" or (inp.harness and inp.harness != "codex"):
+            if (frame.width <= 0 or inp.kind == "modal"
+                    or (inp.harness and inp.harness != "codex")):
                 raise DeliveryError("unsupported-layout", 3)
             if inp.harness == "codex":
                 notices, visible_notices = compact_records(frame, inp)

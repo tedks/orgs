@@ -21,14 +21,15 @@ sys.modules[spec.name] = m
 spec.loader.exec_module(m)
 
 
-def screen(text='', history='', harness='codex', footer='  Any model · branch', prefix=''):
+def screen(text='', history='', harness='codex', footer='  Any model · branch', prefix='', width=0):
     if harness == 'claude':
         raw = prefix + '──────────────\n❯\u00a0' + text + '\n──────────────\n'
         y = len(prefix.splitlines()) + 1 + text.count('\n')
     else:
         raw = prefix + '› ' + text + '\n\n' + footer + '\n'
         y = len(prefix.splitlines()) + text.count('\n')
-    return m.Frame(raw, 2 + m.styles.cell_width(text.rsplit('\n', 1)[-1]), y, history + raw)
+    return m.Frame(raw, 2 + m.styles.cell_width(text.rsplit('\n', 1)[-1]),
+                   y, history + raw, width=width)
 
 
 CO_SUBMIT_FIXTURES = Path(__file__).with_name('fixtures') / 'claude-send'
@@ -150,6 +151,7 @@ COMPACT_REFUSAL = "\x1b[31m■ '/compact' is disabled while a task is in progres
 
 class CompactTerminal(Terminal):
     identity = '0:%1'
+    width = 100
 
     def __init__(self, outcome=lambda elapsed: '', **kwargs):
         super().__init__(payload='/compact', **kwargs)
@@ -157,16 +159,17 @@ class CompactTerminal(Terminal):
         self.visible_history = ''
 
     def frame(self):
-        if self.accepted_at is None:
-            if self.draft == '/compact':
-                # The exact match menu sits above the editable command.
-                menu = '\x1b[1;7m› /compact  summarize conversation to prevent hitting the context limit\x1b[0m\n\n'
-                return screen(self.draft, self.history, harness=self.harness,
-                              prefix=self.visible_history + menu)
-            return super().frame()
-        rows = self.outcome(self.now - self.accepted_at)
+        if self.accepted_at is not None:
+            rows = self.outcome(self.now - self.accepted_at)
+        elif self.draft == '/compact':
+            # The exact match menu sits above the editable command.
+            rows = '\x1b[1;7m› /compact  summarize conversation to prevent hitting the context limit\x1b[0m\n\n'
+        else:
+            frame = super().frame()
+            frame.width = self.width
+            return frame
         return screen(self.draft, self.history, harness=self.harness,
-                      prefix=self.visible_history + rows)
+                      prefix=self.visible_history + rows, width=self.width)
 
 
 class ClaudeExitTerminal(Terminal):
@@ -2685,6 +2688,7 @@ class VerifyCompactTests(unittest.TestCase):
         self.assertTrue(result['needs_review'])
         self.assertEqual(result['enters'], enters)
         self.assertEqual(terminal.actions, ['typed:/compact'] + ['Enter'] * enters)
+        return result
 
     def test_fresh_completion_with_and_without_elapsed_time(self):
         for duration in ('', ' · 14s', ' · 1m 04s', ' · 2h 01m 04s'):
@@ -2709,6 +2713,7 @@ class VerifyCompactTests(unittest.TestCase):
         code, result = self.compact(terminal)
         self.assertEqual(code, 3, result)
         self.assertEqual(result['command_outcome'], 'refused')
+        self.assertEqual(result['status'], 'refused')
         self.assertEqual(result['reason'], 'compact-refused')
         self.assertEqual(terminal.draft, '/compact')
         self.assertEqual(terminal.actions, ['typed:/compact', 'Enter'])
@@ -2743,6 +2748,28 @@ class VerifyCompactTests(unittest.TestCase):
 
                     terminal.frame = capture
                     self.assert_unknown(terminal, enters=1)
+
+    def test_non_positive_width_cannot_verify_compact(self):
+        for phase in ('baseline', 'receipt'):
+            for width in (0, -1):
+                with self.subTest(phase=phase, width=width):
+                    terminal = CompactTerminal(lambda elapsed: COMPACT_COMPLETE + '\n')
+                    frame = terminal.frame
+
+                    def capture():
+                        current = frame()
+                        if phase == 'baseline' and terminal.draft and not terminal.enters:
+                            current.width = width
+                        if phase == 'receipt' and terminal.enters:
+                            current.width = width
+                        return current
+
+                    terminal.frame = capture
+                    enters = 0 if phase == 'baseline' else 1
+                    result = self.assert_unknown(terminal, enters=enters)
+                    self.assertEqual(result['reason'], 'unsupported-layout')
+                    if phase == 'baseline':
+                        self.assertEqual(terminal.draft, '/compact')
 
     def test_widening_cannot_make_wrapped_old_refusal_fresh(self):
         terminal = CompactTerminal()
@@ -2842,9 +2869,11 @@ class VerifyCompactTests(unittest.TestCase):
                     if layout == 'modal':
                         if terminal.now - terminal.accepted_at < .5:
                             return frame()
-                        return screen(prefix=COMPACT_COMPLETE + '\nWould you like to proceed?\n')
+                        return screen(prefix=COMPACT_COMPLETE + '\nWould you like to proceed?\n',
+                                      width=terminal.width)
                     if layout == 'claude':
-                        return screen(harness='claude', prefix=COMPACT_COMPLETE + '\n')
+                        return screen(harness='claude', prefix=COMPACT_COMPLETE + '\n',
+                                      width=terminal.width)
                     captured = frame()
                     captured.x = captured.y = -1
                     return captured
@@ -2870,15 +2899,57 @@ class VerifyCompactTests(unittest.TestCase):
                         current.x = 2
                         return current
                     if changed == 'mixed':
-                        return screen('/compact human')
+                        return screen('/compact human', width=terminal.width)
                     if changed == 'unknown':
-                        return m.Frame('', -1, -1)
+                        return m.Frame('', -1, -1, width=terminal.width)
                     if changed == 'empty':
-                        return screen()
-                    return screen('/compact', harness='claude')
+                        return screen(width=terminal.width)
+                    return screen('/compact', harness='claude', width=terminal.width)
 
                 terminal.frame = capture
                 self.assert_unknown(terminal, enters=0)
+
+    def test_raw_whitespace_after_typing_is_preserved(self):
+        cases = (
+            ('blank continuation', '\n', ''),
+            ('trailing space', ' ', ''),
+            ('space in separator', '', ' '),
+        )
+        for phase in ('post-type', 'pre-enter'):
+            for shape, suffix, separator in cases:
+                with self.subTest(phase=phase, shape=shape):
+                    terminal = CompactTerminal()
+                    frame = terminal.frame
+                    last_poll = None
+                    changed = None
+
+                    def capture():
+                        nonlocal last_poll, changed
+                        if not terminal.draft or terminal.enters:
+                            return frame()
+                        if changed is not None:
+                            return changed
+                        current = frame()
+                        final_capture = terminal.now == last_poll
+                        last_poll = terminal.now
+                        if phase == 'post-type' or final_capture:
+                            terminal.draft += suffix
+                            changed = screen(terminal.draft, width=terminal.width)
+                            changed.x, changed.y = current.x, 0
+                            if separator:
+                                changed.raw = changed.raw.replace('\n\n', f'\n{separator}\n')
+                                changed.history = changed.raw
+                            self.assertEqual(m.composer(changed).fingerprint(),
+                                             m.composer(current).fingerprint())
+                            return changed
+                        return current
+
+                    terminal.frame = capture
+                    result = self.assert_unknown(terminal, enters=0)
+                    reason = ('input-changed-after-paste' if phase == 'post-type'
+                              else 'input-changed-before-enter')
+                    self.assertEqual(result['reason'], reason)
+                    self.assertEqual(terminal.draft, '/compact' + suffix)
 
     def test_dropped_enter_is_never_retried(self):
         terminal = CompactTerminal(dropped=1)
@@ -3009,9 +3080,19 @@ class VerifyCompactTests(unittest.TestCase):
                          ('codex', 'empty', '', (2, 0)))
         self.assertTrue(m.styles.dim_span(idle.raw.splitlines()[inp.start],
                                           'Ask Codex to do anything'))
+        typed = codex_fixture_frame('codex-fork-compact')
         terminal = CompactTerminal(lambda elapsed: COMPACT_COMPLETE + '\n')
+        idle.width = typed.width = terminal.width
         frame = terminal.frame
-        terminal.frame = lambda: frame() if terminal.actions else idle
+
+        def capture():
+            if not terminal.actions:
+                return idle
+            if not terminal.enters:
+                return typed
+            return frame()
+
+        terminal.frame = capture
         code, result = self.compact(terminal)
         self.assertEqual(code, 0, result)
         self.assertEqual(result['command_outcome'], 'completed')
