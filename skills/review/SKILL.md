@@ -65,8 +65,9 @@ this does not replace this skill's fresh-context whole-diff lead review.
   explicit authorization from the accountable project owner or a delegate
   with authority over the run. Verify and record the permitted method,
   purpose, target, and bounds. If authorization is missing or denied, or a
-  project restriction bars the step, omit it, record why, and continue the
-  available ordinary checks.
+  project restriction bars the step, omit it. Record why and any open
+  question the diagnostic was meant to answer, then continue the available
+  ordinary checks.
 - Attach the authorization and diagnostic observations to the reviewed
   revision. Identify the run that produced each observation. Count
   diagnostic evidence toward a gate only if it satisfies the established
