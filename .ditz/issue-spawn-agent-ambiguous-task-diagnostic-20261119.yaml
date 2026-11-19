@@ -1,0 +1,21 @@
+id: spawn-agent-ambiguous-task-diagnostic-20261119
+title: Make launcher output distinguish unconfirmed brief delivery from a failed launch
+desc: "In three of three reported launches on November 18\u201319, agent-spawn.sh
+  printed \u201Ctask transport failed; child remains\u201D while the launched child
+  received the brief and was working. A second reporter saw the same wording on November
+  16. Preserve the ambiguous transport result and live child identity in the diagnostic,
+  and direct the caller to inspect that child before any retry. Related parser issue:
+  spawn-agent-codex-0167-receipt-timeout."
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-19T08:46:47-00:00
+references: []
+log_events:
+- time: 2026-11-19T08:46:47-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
