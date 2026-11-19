@@ -62,25 +62,52 @@ scripts/agent-spawn.sh project:api-impl codex ./api-impl --model MODEL \
   --prompt-file /path/to/brief
 ```
 
-Check that the reported live pane is in the chosen session and new window
-on the reported socket. A different session or window is an identity
-mismatch. Match the live provider, selected model and worktree to the
-assignment. Track that identity evidence separately from the task's
-existing transport receipt.
+Verify that the live pane is in the chosen session and new window on the
+selected socket. A different session or window is an identity mismatch.
+Match the live provider, selected model and worktree to the assignment.
+Track that identity evidence separately from the task's transport receipt.
 
-- For ordinary lanes, supply the brief in the combined launch as prompt text
-  or with `--prompt-file` when you can establish both identity and delivery.
-  Confirm the live identity and a fresh submitted or queued receipt before
-  reporting successful dispatch. If identity is unverified or mismatched,
-  report the assignment as unfulfilled and state the observed delivery
-  outcome separately, even if the task has a receipt. Preserve the child
-  and alert the accountable lead promptly to decide whether to steer or
-  stop it.
-- For migrations and explicit identity-first requests, launch without the
-  brief, verify the live identity, then send the brief with `tmux-message`
-  and verify its fresh receipt. Withhold the brief and alert the
-  accountable lead if identity is unverified or mismatched. Record the
-  brief as withheld.
+Choose the briefing path before sending the brief. Use identity-first for
+migrations, explicit identity-first requests, and cases where a combined
+call cannot establish the required live identity.
+
+**Combined.** For ordinary lanes, supply the brief in the launch as prompt
+text or with `--prompt-file` when you can establish both identity and
+delivery. Confirm the live identity for the returned pane and a fresh
+submitted or queued receipt before reporting successful dispatch. If
+identity is unverified or mismatched, report the assignment as unfulfilled
+and state the observed delivery outcome separately, even if the task has a
+receipt. Preserve the child and alert the accountable lead promptly to
+decide whether to steer or stop it.
+
+**Identity-first.**
+
+1. Resolve the selected server to an absolute socket path. On a running
+   server, run the tmux command selected by `scripts/tmux-info.sh` with
+   `display-message -p '#{socket_path}'`. Pin that socket with
+   `SPAWN_TMUX_SOCKET` for the launcher and sender and use
+   `tmux -S "$socket"` for direct inspection. If there is no server for an
+   authorized new session, select an explicit absolute socket path first.
+2. Choose a fresh window name. Check the intended session by exact name
+   with `tmux -S "$socket" list-windows -t "=$session" -F '#{window_name}'`
+   and verify the name is absent before launch. To create a session on a
+   running server, confirm its exact name is absent in the session inventory.
+   If the inventory cannot establish the precondition, report the blocker.
+   Launch without a brief or migration shard using
+   `SPAWN_TMUX_SOCKET="$socket" scripts/agent-spawn.sh "$session:$window" "$agent" "$worktree" --model "$model"`.
+3. The unbriefed launcher prints the window and directory. Resolve the pane
+   from tmux on the pinned socket. List the exact session's windows with
+   `list-windows -t "=$session" -F '#{window_id} #{window_name}'`. Require
+   exactly one match for the window name, then use
+   `list-panes -t "$window_id" -F '#{pane_id}'` with that `@WINDOW_ID`.
+   Require one pane and verify it is live and matches the requested
+   provider, model and worktree. If identity mismatches or remains
+   unverifiable, withhold the brief, report the blocker and alert the
+   accountable lead. Record the brief as withheld and preserve any child.
+4. After verification, and after the [migration authority and shard checks](../../doctrine/ROLES.md#handoff-and-migration-any-hat)
+   when applicable, send the brief on the same socket. Use
+   `SPAWN_TMUX_SOCKET="$socket" scripts/tmux-message.sh send "$pane_id" --prompt-file "$brief"`
+   and verify a fresh receipt.
 
 If the requested launch is blocked, report the blocker. If a child exists
 and a brief attempt has no fresh receipt, report the child with delivery

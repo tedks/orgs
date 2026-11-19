@@ -25,7 +25,7 @@ Codex / literal Claude exits. Configure `off_duty.path`, optional expected `off_
 `doctrine.roles_path` in the [shared configuration](../_shared/configuration.md).
 The generic handoff path is `<projects_root>/agent-handoffs`; the existing
 repository must have a verified private `origin` with `master`. No remote is
-invented or cloned. Handoff mode requires a configured roles file or `--roles`.
+invented or cloned.
 
 The controller resolves the pinned peer's provider-native session ID before
 sending the offer and supplies that ID with the assigned shard path. The agent
@@ -49,10 +49,15 @@ or process-end proof to make the procedure finish.
   verify the private remote copy, then request exit.
 - `scripts/retire.sh %PANE --waiting`: the same sequence, with the pending
   human decision and its owner named in the shard.
-- `scripts/retire.sh %PANE --handoff AGENT MODEL`: retire, then spawn a fresh
-  successor through spawn-agent's published launcher. Its brief is the shard
-  plus the orgs doctrine's ROLES.md. Reconstruct state from artifacts alone
-  and write the first durable record before acting.
+
+For a migration, follow the [authority and shard rules](../../doctrine/ROLES.md#handoff-and-migration-any-hat)
+and the separate [identity-first launch](../spawn-agent/SKILL.md#named-lane-dispatch).
+The legacy `retire.sh --handoff` wrapper attaches the shard to the launch
+prompt before the controller can verify the live successor. Use the separate
+launch without a task, verify the live identity and the exact shard bytes
+from a fresh fetch of the approved private remote, then brief. Record the
+new owner before the successor acts. The successor reconstructs from
+artifacts and writes its first durable record before acting.
 
 Offer the waiting-list message to **every** agent, including Utility. An agent
 may decline or report DONE without leaving a shard. In either case the caller
@@ -67,8 +72,9 @@ Do not invent an agent's own-word thanks. Personal thanks are separate from
 operational recovery. Off-duty is not authorization to resume product work.
 
 The published launcher supports explicit model selection for Claude and
-Codex. agy model-specific handoffs fail before retirement because its shared
-task delivery is unsupported; do not improvise a second spawn mechanism.
+Codex. Shared task delivery for agy is unsupported. Report a blocked
+migration when the requested route cannot supply the required identity and
+receipt.
 
 ## Evidence and limits
 
