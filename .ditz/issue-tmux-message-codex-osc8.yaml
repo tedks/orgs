@@ -1,0 +1,21 @@
+id: tmux-message-codex-osc8
+title: Handle terminal hyperlinks during Codex tmux message verification
+desc: Codex 0.170.0 can render a URL in its live composer with OSC 8 hyperlink sequences.
+  tmux capture-pane -e exposes those sequences, and tmux-message can report mixed-input-after-paste
+  before Enter on a verified single-message composer. Test a synthetic URL with paired
+  OSC 8 open and close sequences in the input and receipt, preserve extra visible
+  text checks, and handle malformed or unbalanced sequences conservatively. The fix
+  belongs in the shared transport.
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-19T23:52:57-00:00
+references: []
+log_events:
+- time: 2026-11-19T23:52:57-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
