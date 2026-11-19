@@ -45,41 +45,56 @@ def _harness(comm):
                  if comm == name or re.fullmatch(name + r'-[0-9].*', comm)), None)
 
 
-def discover(pid=None, proc=Path('/proc')):
-    """Nearest harness owns the MCP. Stop there even when it has no tmux."""
+def _nearest_harness(pid, proc):
     pid = os.getpid() if pid is None else pid
     seen = set()
+    for _ in range(64):
+        if pid <= 1 or pid in seen:
+            break
+        seen.add(pid)
+        parent, start = process(pid, proc)
+        comm = (proc / str(pid) / 'comm').read_text().strip()
+        # Linux comm truncates at 15 bytes; recognize known version suffixes.
+        harness = _harness(comm)
+        if harness:
+            return harness, pid, start
+        pid = parent
+    raise IdentityError('no supported harness in process ancestry')
+
+
+def calling_harness(pid=None, proc=Path('/proc')):
+    """Identify the nearest harness family without establishing pane ownership."""
+    try:
+        harness, pid, start = _nearest_harness(pid, proc)
+        if process(pid, proc)[1] != start:
+            raise IdentityError('harness changed during discovery')
+        return harness
+    except (OSError, UnicodeError) as exc:
+        raise IdentityError('cannot read own harness ancestry') from exc
+
+
+def discover(pid=None, proc=Path('/proc')):
+    """Nearest harness owns the MCP. Stop there even when it has no tmux."""
     try:
         boot = (proc / 'sys/kernel/random/boot_id').read_text().strip()
         if not boot:
             raise IdentityError('boot identity unavailable')
-        for _ in range(64):
-            if pid <= 1 or pid in seen:
-                break
-            seen.add(pid)
-            base = proc / str(pid)
-            parent, start = process(pid, proc)
-            comm = (base / 'comm').read_text().strip()
-            # Linux comm truncates at 15 bytes; support the native binary and
-            # known version suffixes, not arbitrary names beginning "codex".
-            harness = _harness(comm)
-            if harness:
-                env = dict(item.split('=', 1) for item in
-                           (base / 'environ').read_bytes().decode('utf-8', 'surrogateescape').split('\0')
-                           if '=' in item)
-                pane = env.get('TMUX_PANE', '')
-                tmux = env.get('TMUX', '').rsplit(',', 2)
-                if (not re.fullmatch(r'%[0-9]+', pane) or len(tmux) != 3
-                        or not tmux[0].startswith('/') or not all(x.isdigit() for x in tmux[1:])):
-                    raise IdentityError('nearest harness is outside tmux or lacks a valid tmux identity')
-                cwd = os.readlink(base / 'cwd')
-                if process(pid, proc)[1] != start:
-                    raise IdentityError('harness changed during discovery')
-                return Identity(harness, pid, start, boot, tmux[0], pane, cwd)
-            pid = parent
+        harness, pid, start = _nearest_harness(pid, proc)
+        base = proc / str(pid)
+        env = dict(item.split('=', 1) for item in
+                   (base / 'environ').read_bytes().decode('utf-8', 'surrogateescape').split('\0')
+                   if '=' in item)
+        pane = env.get('TMUX_PANE', '')
+        tmux = env.get('TMUX', '').rsplit(',', 2)
+        if (not re.fullmatch(r'%[0-9]+', pane) or len(tmux) != 3
+                or not tmux[0].startswith('/') or not all(x.isdigit() for x in tmux[1:])):
+            raise IdentityError('nearest harness is outside tmux or lacks a valid tmux identity')
+        cwd = os.readlink(base / 'cwd')
+        if process(pid, proc)[1] != start:
+            raise IdentityError('harness changed during discovery')
+        return Identity(harness, pid, start, boot, tmux[0], pane, cwd)
     except (OSError, UnicodeError) as exc:
         raise IdentityError('cannot read own harness ancestry') from exc
-    raise IdentityError('no supported harness in process ancestry')
 
 
 def same_process(identity, proc=Path('/proc')):
@@ -96,6 +111,28 @@ def same_process(identity, proc=Path('/proc')):
         raise IdentityError('cannot verify process identity')
     except OSError as exc:
         raise IdentityError('cannot verify process identity') from exc
+
+
+def codex_terminal_process(identity, proc=Path('/proc')):
+    """Check the pinned Codex process can represent a terminal client.
+
+    Managed daemons detach from their controlling terminal. A manually
+    launched app-server can keep one, so also exclude that CLI subcommand.
+    This check does not establish pane or rollout ownership.
+    """
+    base = proc / str(identity.pid)
+    try:
+        raw = (base / 'stat').read_text()
+        fields = raw[raw.rindex(')') + 2:].split()
+        if int(fields[4]) == 0:  # tty_nr (stat field 7)
+            return False
+        with (base / 'cmdline').open('rb') as stream:
+            argv = stream.read(1024 * 1024 + 1)
+        return (len(argv) <= 1024 * 1024 and argv.endswith(b'\0')
+                and b'app-server' not in argv.split(b'\0')[1:]
+                and same_process(identity, proc))
+    except (IdentityError, OSError, ValueError, IndexError):
+        return False
 
 
 def verify_pane(identity, proc=Path('/proc')):

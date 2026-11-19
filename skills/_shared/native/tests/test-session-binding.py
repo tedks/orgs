@@ -108,7 +108,13 @@ class BindingTests(unittest.TestCase):
                 self.assertEqual(self.observe('codex')['state'], 'unavailable')
 
     def test_codex_requires_pinned_home(self):
-        (self.proc / '123/environ').write_bytes(b'')
+        environment = self.proc / '123/environ'
+        (self.proc / '123/fd').mkdir()
+        for home in (self.root, self.root / 'other-home'):
+            environment.write_bytes(f'HOME={home}\0'.encode())
+            proof = self.observe('codex')
+            self.assertEqual(proof['observation']['reason'], 'ambiguous_or_missing_live_rollout')
+        environment.write_bytes(b'')
         with patch('codex_status.read_codex_status') as reader:
             self.assertEqual(self.observe('codex')['reason'], 'pinned_codex_home_unavailable')
         reader.assert_not_called()
