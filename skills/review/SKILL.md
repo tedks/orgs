@@ -55,6 +55,24 @@ pushed head, gate commands/results, council record, exceptions and unresolved
 items before merge. The executive selectively spot-checks and resolves holes;
 this does not replace this skill's fresh-context whole-diff lead review.
 
+## Verification scope
+
+- Run ordinary gates through the product's normal execution path using the
+  project's established checks. A request to run ordinary gates covers those
+  checks. Apply project-specific restrictions throughout verification.
+- Treat added tooling that attaches to a process, intercepts execution, or
+  materially alters observable behavior as a diagnostic. Before use, confirm
+  explicit authorization from the accountable project owner or a delegate
+  with authority over the run. Verify and record the permitted method,
+  purpose, target, and bounds. If authorization is missing or denied, or a
+  project restriction bars the step, omit it. Record why and any open
+  question the diagnostic was meant to answer, then continue the available
+  ordinary checks.
+- Attach the authorization and diagnostic observations to the reviewed
+  revision. Identify the run that produced each observation. Count
+  diagnostic evidence toward a gate only if it satisfies the established
+  acceptance criteria for that gate.
+
 ## Rules that cost us to learn
 
 - **A silent seat is not a CLEAN seat.** Wait for a *received* CLEAN; never
