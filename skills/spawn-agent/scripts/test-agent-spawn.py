@@ -63,6 +63,9 @@ from pathlib import Path
 root=Path(os.environ['TEST_ROOT'])
 with (root/'tmux.jsonl').open('a') as out: out.write(json.dumps(sys.argv[1:])+'\\n')
 if sys.argv[1]=='new-window':
+    if os.environ.get('FAIL_LAUNCH'):
+        print('new-window failed', file=sys.stderr)
+        sys.exit(3)
     (root/'launch').write_text(sys.argv[-1])
     for arg in shlex.split(sys.argv[-1]):
         if arg.startswith('experimental_compact_prompt_file='):
@@ -77,10 +80,14 @@ from pathlib import Path
 root=Path(os.environ['TEST_ROOT']);args=sys.argv[1:]
 text=Path(args[args.index('--prompt-file')+1]).read_text() if '--prompt-file' in args else args[-1]
 with (root/'messages.jsonl').open('a') as out: out.write(json.dumps({'args':args,'text':text})+'\\n')
-status=int(os.environ.get('SEND_STATUS','0'))
-if text=='/compact' and not status and not os.environ.get('NO_COMPACTION'):
+is_compact = text == '/compact'
+status = int(os.environ.get('COMPACT_SEND_STATUS' if is_compact else 'SEND_STATUS', '0'))
+if is_compact and not status and not os.environ.get('NO_COMPACTION'):
     with Path(os.environ['TEST_ROLLOUT']).open('a') as out:
         out.write(json.dumps({'type':'event_msg','payload':{'type':'context_compacted'}})+'\\n')
+if status and not is_compact:
+    print('sender stdout')
+    print('sender stderr', file=sys.stderr)
 sys.exit(status)
 ''')
 
@@ -132,13 +139,41 @@ sys.exit(status)
         self.assertEqual(self.launch('agy',task=False).returncode,0)
         self.assertEqual(self.messages(),[])
 
-    def test_transport_failure_preserved_without_retry(self):
-        for status in [2,3,1]:
-            self.log.unlink(missing_ok=True)
-            result=self.launch(env={'SEND_STATUS':str(status)})
-            self.assertEqual(result.returncode,status,result.stderr)
-            self.assertEqual(len(self.messages()),1)
-            self.assertNotIn('task transport sent',result.stdout)
+    def test_unconfirmed_task_preserves_sender_result_without_retry(self):
+        fork = ('--fork-session', PARENT, '--compact-prompt-file', str(self.policy))
+        tmux_log = self.root / 'tmux.jsonl'
+        task = self.task.read_text()
+        for status, extra, expected_sends in (
+            (2, (), [task]),
+            (3, (), [task]),
+            (1, (), [task]),
+            (3, fork, ['/compact', task]),
+        ):
+            with self.subTest(status=status, fork=bool(extra)):
+                self.log.unlink(missing_ok=True)
+                tmux_log.unlink(missing_ok=True)
+                result = self.launch(extra=extra, env={'SEND_STATUS': str(status)})
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual(result.stdout, 'sender stdout\n')
+                commands = [json.loads(line)[0] for line in tmux_log.read_text().splitlines()]
+                self.assertEqual(commands.count('new-window'), 1)
+                messages = self.messages()
+                self.assertEqual([message['text'] for message in messages], expected_sends)
+                self.assertEqual(messages[-1]['args'][:2], ['send', '%88'])
+                sender_stderr, diagnostic = result.stderr.splitlines()[-2:]
+                self.assertEqual(sender_stderr, 'sender stderr')
+                self.assertRegex(
+                    diagnostic,
+                    r'^Child launched; task delivery unconfirmed\b.*test:worker \(%88\)'
+                    r'.*Inspect that pane before retrying\.',
+                )
+
+    def test_launch_failure_preserves_tmux_result_without_sending_task(self):
+        result = self.launch(env={'FAIL_LAUNCH': '1'})
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertEqual(result.stdout, '')
+        self.assertEqual(result.stderr, 'new-window failed\n')
+        self.assertEqual(self.messages(), [])
 
     def test_fork_snapshot_and_compaction_before_task(self):
         original=self.task.read_text()
@@ -183,7 +218,7 @@ sys.exit(status)
 
     def test_compact_transport_failure_never_sends_task(self):
         result=self.launch(extra=['--fork-session',PARENT,'--compact-prompt-file',str(self.policy)],
-                           env={'SEND_STATUS':'3'})
+                           env={'COMPACT_SEND_STATUS':'3'})
         self.assertEqual(result.returncode,3)
         self.assertEqual([item['text'] for item in self.messages()],['/compact'])
 
