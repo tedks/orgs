@@ -1,0 +1,27 @@
+id: spawned-lane-dispatch-20261119
+title: Make requested lanes independently visible and steerable
+desc: 'An explicitly requested audit lane and an assigned engineering lead were dispatched
+  as internal subagents. They lacked independent tmux windows for operator inspection
+  and steering. A one-shot CLI task also lacks that interface. The current Codex binding
+  describes both native and spawned workers while the CTO/lead and lean-mode sections
+  require interactive sessions. Make the selection rule consistent at points of dispatch:
+  launch named operational leads, implementers, and explicitly requested audit lanes
+  through spawn-agent in a named tmux window with the requested model and appropriate
+  worktree, and verify the resulting pane and task delivery. Preserve the mandated
+  native same-provider council seat and distinguish an expressly requested internal
+  helper. An unavailable or ambiguous launch should leave a truthful status with no
+  silent substitution or duplicate launch. Exercise representative dispatch choices
+  at the instruction/skill boundary. No new coordination log required.'
+type: bugfix
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-19T17:01:39-00:00
+references: []
+log_events:
+- time: 2026-11-19T17:01:39-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
