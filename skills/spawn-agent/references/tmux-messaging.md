@@ -55,8 +55,9 @@ explicitly for single-line slash commands; ordinary messages retain bracketed pa
 New receipt means an additional matching record compared with the pre-paste
 history. A collapsed receipt can match a marker observed in this attempt's
 input; a marker found only in history is insufficient. Ordinary assistant prose
-is not a receipt. `/compact` may instead be confirmed by a new visible
-`Context compacted` completion event. Receipt and task completion remain distinct.
+is not a receipt. The ordinary `/compact` route can also accept a new visible
+`Context compacted` notice as a command receipt. Use the opt-in mode below
+when the caller needs the rendered command outcome.
 Claude can show a flush-left `❯` payload row followed by
 `  ctrl+x ctrl+s to send now`, then a busy spinner and live composer. Plain
 screen text cannot distinguish that queue row from a transcript copy with the
@@ -253,10 +254,83 @@ Use `input_attempted` to determine whether outgoing input may have occurred.
 Either `clear_attempted` or `input_attempted` indicates possible composer mutation;
 `paste_attempted` applies to bracketed paste, except that the legacy
 `--literal-exit` mode retains its compatibility meaning of any input attempt.
-Both literal modes report `input_method: "typed"`. Signals retain conventional 128+signal exit
-codes. Unsuccessful attempts retain the outgoing message in a private temporary
+Both literal modes report `input_method: "typed"`. Signals retain conventional
+128+signal exit codes except for the selected compaction mode after input. Unsuccessful attempts retain the outgoing message in a private temporary
 directory (700) with a private file (600). Remove that file/directory after
 resolving it. No human draft or pane contents are logged automatically.
+
+## Verify a typed Codex compaction
+
+```bash
+tmux-message send %PANE --typed-command --verify-compact /compact
+```
+
+`--verify-compact` requires `--typed-command` with the exact positional
+argument `/compact`. Other arguments, prompt files, paste, and
+`--literal-exit` combinations exit 1 before resolving the pane. Malformed
+timing options use argparse's pre-input usage exit 2. A detected draft, a
+known non-Codex harness, or an unverified composer defers with exit 2
+without sending keys. The sender types once
+only after verifying the canonical empty cursor position and a single
+blank separator before the footer. A dim Codex placeholder at that position
+classifies as empty. The separate suggestion state applies to Claude.
+Visible whitespace in the prompt or extra blank rows defer even when the
+parsed text is empty. A space-only draft whose cells are absent from the
+capture can be indistinguishable from empty input if its cursor is at Home.
+After typing and again immediately before Enter, the sender requires the
+untrimmed single-line command, the empty separator, and the cursor at the
+end of the command. Visible trailing spaces or an extra blank row stop
+submission even if the cursor moves back to the command end. Trailing spaces
+omitted by capture can be indistinguishable if the cursor returns to that
+position. Lost ownership preserves the input and sends no Enter. The attempt
+sends at most one Enter.
+
+The last pre-Enter capture establishes the baseline. The sender looks for
+either full, flush-left row above a recognized Codex composer. It strips
+ANSI styling and terminal padding.
+
+- `• Context compacted`, optionally followed by a rendered elapsed time
+  such as ` · 14s`, ` · 1m 04s` or ` · 2h 01m 04s`.
+- `■ '/compact' is disabled while a task is in progress.`
+
+The shapes come from the Codex 0.170.0 renderer. [Completion](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/chatwidget/compaction.rs#L42-L55),
+[elapsed time](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/status_indicator_widget.rs#L75-L90),
+[active-turn refusal](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/chatwidget/slash_dispatch.rs#L187-L193)
+and [history row prefixes](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/history_cell/notices.rs#L334-L356).
+
+A distinct notice can establish freshness. A full-screen repaint can copy
+an identical old notice into scrollback, so extra scrollback copies leave
+its freshness unknown. An identical notice can count if a single visible
+frame contains more copies than the entire baseline capture. The baseline
+and receipt frames require a positive measured pane width. A missing or
+non-positive baseline width stops the attempt before Enter with `unknown`.
+A receipt width that is non-positive or differs from the baseline also
+ends verification with `unknown`. Reflow can turn a wrapped old notice
+into an exact row.
+
+The `--receipt-wait` window starts after the synchronous Enter call returns.
+A completion or refusal normally takes the full window to report, even when
+the notice appears immediately. The default is 15 seconds. Waiting through
+the window allows a contradictory notice to change the outcome to unknown.
+Once input is attempted, the result has `command_outcome`.
+
+| Outcome | Status | Exit |
+| --- | --- | --- |
+| `completed` | `delivered` with `receipt=command` | 0 |
+| `refused` | `refused` | 3 |
+| `unknown` | `ambiguous` | 3 |
+
+A refusal can leave `/compact` in the composer.
+
+Existing history, ordinary submit or queue receipts, progress, and silence
+cannot establish an outcome. Conflicting notices, unsupported layouts with no
+verifiable evidence, and notices outside the window leave it unknown. A row
+that wraps or scrolls out can be missed. Rendered history carries no command
+identifier, so a concurrent compaction or identical output can be
+indistinguishable. Input protection remains observational. After refusal or
+ambiguity the private pending payload is retained for inspection. The sender
+never retypes it or retries Enter. Unselected commands and the fork launcher's
+native completion watcher keep their existing semantics.
 
 ## Agent escalation and extension
 

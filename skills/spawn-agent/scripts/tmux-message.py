@@ -47,6 +47,34 @@ def resume_records(frame):
     return Counter(session.lower() for session in CLAUDE_RESUME.findall(styles.strip_ansi(frame.history or frame.raw)))
 
 
+# Codex 0.170.0 renders these as standalone info/error history rows.
+COMPACT_COMPLETED = re.compile(
+    r"• Context compacted(?: · (?:[0-9]+h [0-9]{2}m [0-9]{2}s|[0-9]+m [0-9]{2}s|[0-9]+s))?"
+)
+COMPACT_REFUSED = "■ '/compact' is disabled while a task is in progress."
+
+
+def compact_records(frame, inp):
+    """Count exact notices above the composer, with visible counts separately."""
+    visible = frame.raw.splitlines()
+    history = (frame.history or frame.raw).splitlines()
+    first_visible = len(history) - len(visible)
+    notices, visible_notices = Counter(), Counter()
+    for index, raw in enumerate(history[:first_visible + inp.start]):
+        row = styles.strip_ansi(raw).rstrip(" ")
+        if COMPACT_COMPLETED.fullmatch(row):
+            outcome = "completed"
+        elif row == COMPACT_REFUSED:
+            outcome = "refused"
+        else:
+            continue
+        notice = (outcome, row)
+        notices[notice] += 1
+        if index >= first_visible:
+            visible_notices[notice] += 1
+    return notices, visible_notices
+
+
 def normalized(text):
     # Line wrapping, indentation and terminal padding do not identify a message.
     return "".join(text.split())
@@ -82,6 +110,8 @@ DIAGNOSTIC_REASONS = frozenset({
     "mixed-input-after-paste", "receipt-timeout", "paste-not-observed",
     "input-changed-after-paste", "input-changed-before-enter", "modal-after-paste",
     "modal", "human-typing", "existing-input", "unsupported-layout",
+    "compact-requires-codex", "compact-refused", "conflicting-command-evidence",
+    "pane-width-changed",
     "unstable-composer", "input-changed-before-paste", "cursor-navigation-unverified",
     "command-clear-unverified", "input-changed-after-clear", "image-placeholder",
 })
@@ -481,6 +511,22 @@ def composer(frame, expected_codex_text=None, expected_codex_footer=None):
     return Input("unknown")
 
 
+def compact_prompt_row(frame, inp):
+    # The shared parser trims whitespace. Keep the prompt row untrimmed and
+    # require exactly one empty separator between that row and its footer.
+    if inp.end != inp.start + 2:
+        return None
+    rows = styles.strip_ansi(frame.raw).splitlines()
+    return rows[inp.start] if not rows[inp.start + 1] else None
+
+
+def compact_input_is_empty(frame, inp):
+    if inp.kind != "empty" or inp.cursor != (2, 0):
+        return False
+    row = compact_prompt_row(frame, inp)
+    return row is not None and not PROMPT.match(row).group(2).isspace()
+
+
 def records(frame, inp, strict_claude_submitted=False, archived_codex_status=None):
     """Candidate receipts outside the live composer, with semantic row markers.
 
@@ -764,6 +810,7 @@ class Sender:
         self.pasted = False
         self.enters = 0
         self.typed = getattr(options, "typed_command", False)
+        self.verify_compact = getattr(options, "verify_compact", False)
         self.expected = payload
         self.stale_draft_length = 0
         self.original_draft = ""
@@ -856,6 +903,11 @@ class Sender:
                     last_reason = "unstable-composer"
                 self.sleep(min(self.o.poll_interval, max(0, deadline - self.clock())))
                 continue
+            if self.verify_compact:
+                if inp.harness != "codex":
+                    raise DeliveryError("compact-requires-codex")
+                if not compact_input_is_empty(frame, inp):
+                    raise DeliveryError("existing-input")
             consecutive_known += 1
             if inp.kind in {"empty", "text", "suggestion"}:
                 seen_composer = True
@@ -927,9 +979,97 @@ class Sender:
             result["cleared_command_draft_length"] = self.cleared_command_draft_length
         return result
 
+    def type_payload(self):
+        self.pasted = True  # A failed input command can still change the composer.
+        self.diagnostic_phase = "post_paste"
+        if self.diagnostic is not None:
+            self.diagnostic.event("paste")
+        self.tmux.type_command(self.payload)
+
+    def owns_compact(self, frame, inp):
+        return (inp.harness == "codex" and self.input_evidence(inp) and self.at_end(inp)
+                and compact_prompt_row(frame, inp) == f"› {self.payload}")
+
+    def deliver_compact(self):
+        self.type_payload()
+        start = self.clock()
+        deadline = start + self.o.render_wait + self.o.submit_delay
+        owned_since = None
+        while self.clock() < deadline:
+            frame, inp = self.sample()
+            now = self.clock()
+            if now >= deadline:
+                break
+            owned = self.owns_compact(frame, inp)
+            if self.diagnostic is not None:
+                self.diagnostic.predicate("input_evidence", owned)
+            if owned:
+                if owned_since is None:
+                    owned_since = now
+                if now >= start + self.o.submit_delay and now - owned_since >= self.o.poll_interval:
+                    before, live = self.sample()
+                    owns_live = self.owns_compact(before, live)
+                    if self.diagnostic is not None:
+                        self.diagnostic.predicate("pre_enter_ownership", owns_live)
+                    if not owns_live or self.clock() >= deadline:
+                        raise DeliveryError("input-changed-before-enter", 3)
+                    return self.submit_compact(before, live)
+            elif inp.kind == "modal":
+                raise DeliveryError("modal-after-paste", 3)
+            elif (owned_since is not None or inp.kind in {"text", "suggestion"}
+                  or (inp.harness and inp.harness != "codex")):
+                raise DeliveryError("input-changed-after-paste", 3)
+            elif now >= start + self.o.render_wait:
+                break
+            self.sleep(min(self.o.poll_interval, max(0, deadline - self.clock())))
+        raise DeliveryError("paste-not-observed", 3)
+
+    def submit_compact(self, before, live):
+        if before.width <= 0:
+            raise DeliveryError("unsupported-layout", 3)
+        baseline, _ = compact_records(before, live)
+        self.enters = 1  # Count the attempt even if the tmux operation fails.
+        if self.diagnostic is not None:
+            self.diagnostic.event("enter")
+        self.tmux.keys("Enter")
+        deadline = self.clock() + self.o.receipt_wait
+
+        # Hold either observation through the window so a later contradictory
+        # notice cannot turn two possible outcomes into a definite answer.
+        observed = set()
+        while self.clock() < deadline:
+            frame, inp = self.sample()
+            now = self.clock()
+            if now >= deadline:
+                break
+            if frame.width > 0 and frame.width != before.width:
+                # Reflow can make a wrapped baseline notice look like new text.
+                raise DeliveryError("pane-width-changed", 3)
+            if (frame.width <= 0 or inp.kind == "modal"
+                    or (inp.harness and inp.harness != "codex")):
+                raise DeliveryError("unsupported-layout", 3)
+            if inp.harness == "codex":
+                notices, visible_notices = compact_records(frame, inp)
+                # Clearing and repainting a screen can duplicate an old notice
+                # in scrollback. Only simultaneous visible copies can establish
+                # an excess over the baseline for text that is already known.
+                new_text = notices.keys() - baseline.keys()
+                extra_visible = (visible_notices - baseline).keys()
+                observed.update(outcome for outcome, _ in new_text | extra_visible)
+                if len(observed) > 1:
+                    raise DeliveryError("conflicting-command-evidence", 3)
+            self.sleep(min(self.o.poll_interval, deadline - now))
+        if "refused" in observed:
+            raise DeliveryError("compact-refused", 3)
+        if "completed" in observed:
+            if self.diagnostic is not None:
+                self.diagnostic.predicate("command_completion", True)
+            return {"status": "delivered", "receipt": "command", "enters": self.enters,
+                    "command_outcome": "completed"}
+        raise DeliveryError("receipt-timeout", 3)
+
     def _deliver(self):
-        before, inp = self.ready()
-        baseline = records(before, inp)
+        _, inp = self.ready()
         # One final sample catches input beginning just after the stable period.
         before, check = self.sample()
         if check.fingerprint() != inp.fingerprint():
@@ -938,6 +1078,10 @@ class Sender:
             rows = styles.strip_ansi(before.raw).splitlines()
             if check.end < len(rows) and not FOOTER.match(rows[check.end]):
                 self.codex_fallback_footer = rows[check.end]
+        if self.verify_compact:
+            if not compact_input_is_empty(before, check):
+                raise DeliveryError("input-changed-before-paste")
+            return self.deliver_compact()
         if check.kind == "text" and styles.command_like(check.text) and not self.command_shape(before, check):
             raise DeliveryError("input-changed-before-clear")
         if check.kind == "text" and not self.at_end(check):
@@ -1005,11 +1149,7 @@ class Sender:
                 self.diagnostic.event("paste")
             self.tmux.keys("-l", self.payload)
         elif self.typed:
-            self.pasted = True
-            self.diagnostic_phase = "post_paste"
-            if self.diagnostic is not None:
-                self.diagnostic.event("paste")
-            self.tmux.type_command(self.payload)
+            self.type_payload()
         else:
             if self.stale_draft_length:
                 # Private ephemeral append bytes; retained pending stays outgoing-only.
@@ -1125,6 +1265,8 @@ def options(argv=None):
     p.add_argument("--diagnostic-file", type=Path,
                    help="write one owner-only structural record for this send attempt")
     p.add_argument("--typed-command", action="store_true", help="type one single-line slash command with literal keys; retain all composer/receipt guards")
+    p.add_argument("--verify-compact", action="store_true",
+                   help="verify the rendered outcome of a bare Codex /compact with --typed-command")
     p.add_argument("--stable-window", "--stable-wait", dest="stable_wait", type=float, default=None, help="composer settle window; default: submit-delay")
     for name, default in (("max-wait", 10), ("submit-delay", 8),
                           ("render-wait", 3), ("receipt-wait", 15), ("retry-wait", 3),
@@ -1133,7 +1275,12 @@ def options(argv=None):
     p.add_argument("--literal-exit", action="store_true", help="type a bare Claude /exit literally, send at most one Enter, and verify a fresh resume notice")
     p.add_argument("--backoff", action="store_true", help="wait for stable input within --max-wait instead of exiting on typing")
     p.add_argument("message", nargs="?")
-    o = p.parse_intermixed_args(argv)
+    o, extra = p.parse_known_intermixed_args(argv)
+    if o.verify_compact and (extra or not o.typed_command or o.literal_exit
+                             or o.prompt_file is not None or o.message != "/compact"):
+        p.exit(1, json.dumps({"status": "error", "reason": "verify-compact-requires-typed-bare-argument"}) + "\n")
+    if extra:
+        p.error("unrecognized arguments: " + " ".join(extra))
     if o.stable_wait is None:
         o.stable_wait = o.submit_delay
     o.stable_window = o.stable_wait
@@ -1142,7 +1289,7 @@ def options(argv=None):
         maximum = math.inf if name == "receipt_wait" else 600
         if not math.isfinite(value) or (not 0 < value <= maximum and not (name in {"submit_delay", "stable_wait"} and value == 0)):
             p.error(name.replace("_", "-") + " must be finite and positive (submit-delay and stable-window may be zero); options except receipt-wait are capped at 600 seconds")
-    if bool(o.prompt_file) == (o.message is not None):
+    if not o.verify_compact and bool(o.prompt_file) == (o.message is not None):
         p.error("provide exactly one message or --prompt-file")
     if not o.target or o.target.startswith("-"):
         p.error("invalid target")
@@ -1217,6 +1364,12 @@ def main():
                   "paste_attempted": pasted and not sender.typed,
                   "input_attempted": pasted, "input_method": "typed" if o.typed_command or o.literal_exit else "paste",
                   "enters": sender.enters if sender else 0}
+        if o.verify_compact and pasted:
+            code = 3
+            refused = reason == "compact-refused"
+            result["command_outcome"] = "refused" if refused else "unknown"
+            if refused:
+                result.update(status="refused", needs_review=False)
         if sender:
             if sender.clear_attempted:
                 result["clear_attempted"] = True
