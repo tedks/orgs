@@ -55,18 +55,24 @@ COMPACT_REFUSED = "■ '/compact' is disabled while a task is in progress."
 
 
 def compact_records(frame, inp):
-    """Count supported notices above the live composer in the captured history."""
+    """Count exact notices above the composer, with visible counts separately."""
     visible = frame.raw.splitlines()
     history = (frame.history or frame.raw).splitlines()
-    rows = history[:len(history) - len(visible) + inp.start]
-    result = Counter()
-    for raw in rows:
+    first_visible = len(history) - len(visible)
+    notices, visible_notices = Counter(), Counter()
+    for index, raw in enumerate(history[:first_visible + inp.start]):
         row = styles.strip_ansi(raw).rstrip(" ")
         if COMPACT_COMPLETED.fullmatch(row):
-            result["completed"] += 1
+            outcome = "completed"
         elif row == COMPACT_REFUSED:
-            result["refused"] += 1
-    return result
+            outcome = "refused"
+        else:
+            continue
+        notice = (outcome, row)
+        notices[notice] += 1
+        if index >= first_visible:
+            visible_notices[notice] += 1
+    return notices, visible_notices
 
 
 def normalized(text):
@@ -504,6 +510,16 @@ def composer(frame, expected_codex_text=None, expected_codex_footer=None):
     return Input("unknown")
 
 
+def compact_input_is_empty(frame, inp):
+    # The shared parser trims whitespace. For /compact, also check the cursor
+    # and the one blank separator between the prompt and its footer.
+    if inp.kind != "empty" or inp.cursor != (2, 0) or inp.end != inp.start + 2:
+        return False
+    rows = styles.strip_ansi(frame.raw).splitlines()
+    prompt_text = PROMPT.match(rows[inp.start]).group(2)
+    return not prompt_text.isspace() and not rows[inp.start + 1]
+
+
 def records(frame, inp, strict_claude_submitted=False, archived_codex_status=None):
     """Candidate receipts outside the live composer, with semantic row markers.
 
@@ -883,7 +899,7 @@ class Sender:
             if self.verify_compact:
                 if inp.harness != "codex":
                     raise DeliveryError("compact-requires-codex")
-                if inp.kind != "empty":
+                if not compact_input_is_empty(frame, inp):
                     raise DeliveryError("existing-input")
             consecutive_known += 1
             if inp.kind in {"empty", "text", "suggestion"}:
@@ -1001,12 +1017,12 @@ class Sender:
         raise DeliveryError("paste-not-observed", 3)
 
     def submit_compact(self, before, live):
-        baseline = compact_records(before, live)
-        deadline = self.clock() + self.o.receipt_wait
+        baseline, _ = compact_records(before, live)
         self.enters = 1  # Count the attempt even if the tmux operation fails.
         if self.diagnostic is not None:
             self.diagnostic.event("enter")
         self.tmux.keys("Enter")
+        deadline = self.clock() + self.o.receipt_wait
 
         # Hold either observation through the window so a later contradictory
         # notice cannot turn two possible outcomes into a definite answer.
@@ -1019,7 +1035,13 @@ class Sender:
             if inp.kind == "modal" or (inp.harness and inp.harness != "codex"):
                 raise DeliveryError("unsupported-layout", 3)
             if inp.harness == "codex":
-                observed.update(compact_records(frame, inp) - baseline)
+                notices, visible_notices = compact_records(frame, inp)
+                # Clearing and repainting a screen can duplicate an old notice
+                # in scrollback. Only simultaneous visible copies can establish
+                # an excess over the baseline for text that is already known.
+                new_text = notices.keys() - baseline.keys()
+                extra_visible = (visible_notices - baseline).keys()
+                observed.update(outcome for outcome, _ in new_text | extra_visible)
                 if len(observed) > 1:
                     raise DeliveryError("conflicting-command-evidence", 3)
             self.sleep(min(self.o.poll_interval, deadline - now))
@@ -1043,6 +1065,8 @@ class Sender:
             if check.end < len(rows) and not FOOTER.match(rows[check.end]):
                 self.codex_fallback_footer = rows[check.end]
         if self.verify_compact:
+            if not compact_input_is_empty(before, check):
+                raise DeliveryError("input-changed-before-paste")
             return self.deliver_compact()
         if check.kind == "text" and styles.command_like(check.text) and not self.command_shape(before, check):
             raise DeliveryError("input-changed-before-clear")

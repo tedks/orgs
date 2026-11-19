@@ -268,15 +268,21 @@ tmux-message send %PANE --typed-command --verify-compact /compact
 `--verify-compact` requires `--typed-command` with the exact positional
 argument `/compact`. Other arguments, prompt files, paste, and
 `--literal-exit` combinations exit 1 before resolving the pane. A draft
-of any kind, a known non-Codex harness, or an unverified composer defers
-with exit 2 without sending keys. The sender types once into a verified
-empty Codex composer. It checks the exact text and end cursor again
-immediately before submitting. Lost ownership preserves the input and
-sends no Enter. The attempt sends at most one Enter.
+detected in the composer, a known non-Codex harness, or an unverified
+composer defers with exit 2 without sending keys. The sender types once
+only after verifying the canonical empty cursor position and a single
+blank separator before the footer. A dim Codex placeholder at that position
+classifies as empty. The separate suggestion state applies to Claude.
+Visible whitespace in the prompt or extra blank rows defer even when the
+parsed text is empty. A space-only draft whose cells are absent from the
+capture can be indistinguishable from empty input if its cursor is at Home.
+The sender checks the exact command text and end cursor before submitting.
+Lost ownership preserves the input and sends no Enter. The attempt sends
+at most one Enter.
 
-The last pre-Enter frame establishes the baseline. The sender looks for
-an additional occurrence of either full, flush-left row above a recognized
-Codex composer. It strips ANSI styling and terminal padding.
+The last pre-Enter capture establishes the baseline. The sender looks for
+either full, flush-left row above a recognized Codex composer. It strips
+ANSI styling and terminal padding.
 
 - `• Context compacted`, optionally followed by a rendered elapsed time
   such as ` · 14s`, ` · 1m 04s` or ` · 2h 01m 04s`.
@@ -287,9 +293,16 @@ The shapes come from the Codex 0.170.0 renderer. [Completion](https://github.com
 [active-turn refusal](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/chatwidget/slash_dispatch.rs#L187-L193)
 and [history row prefixes](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/history_cell/notices.rs#L334-L356).
 
-The selected mode observes through `--receipt-wait` after Enter so it can
-detect conflicting notices. Once input is attempted, the result has
-`command_outcome`.
+A distinct notice can establish freshness. A full-screen repaint can copy
+an identical old notice into scrollback, so extra scrollback copies leave
+its freshness unknown. An identical notice can count if a single visible
+frame contains more copies than the entire baseline capture.
+
+The `--receipt-wait` window starts after the synchronous Enter call returns.
+A completion or refusal normally takes the full window to report, even when
+the notice appears immediately. The default is 15 seconds. Waiting through
+the window allows a contradictory notice to change the outcome to unknown.
+Once input is attempted, the result has `command_outcome`.
 
 | Outcome | Status | Exit |
 | --- | --- | --- |
