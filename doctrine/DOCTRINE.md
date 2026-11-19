@@ -110,6 +110,15 @@ The practical rules are:
   most two concurrent tactical workers per lane; the roster may set a tighter
   limit or explicitly authorize a different bound. Review seats are separate
   roles, with their own budget, not extra editing workers.
+- Dispatch named operational leads, implementers and expressly requested audit
+  lanes through [`spawn-agent`](../skills/spawn-agent/SKILL.md#named-lane-dispatch).
+  Each gets its own named, interactive tmux window, the requested model and
+  its assigned worktree. The same-provider council seat uses its native
+  council route. An assigning lead or operator may explicitly request an
+  internal helper for a bounded task whose evidence covers that task alone.
+  Keep ownership of the named lane and its package with the interactive
+  session. Use tier to select capability and the assignment to select the
+  dispatch route.
 - A fresh context with a precise brief beats a full context with the right history. New work gets a new worker; a finished worker is continued only when the next task needs the exact context it holds.
 - Compaction follows the binding's lifecycle controls. Save durable state first;
   if external control is required, request it and wait rather than pretending
@@ -476,6 +485,10 @@ The distilled form, packed verbatim into every role prompt:
 > finished work, thank the agent promptly and initiate retirement in the
 > same turn unless a named authorized next mission or review dependency needs
 > its exact context; record the owner and next checkpoint for a retained lane.
+> Dispatch named leads, implementers and requested audit lanes through
+> spawn-agent in their own named tmux windows. Verify live identity and fresh
+> task receipt separately. Use the native same-provider council route and
+> authorize internal helpers explicitly for bounded tasks.
 > A blocked procedure calls for a bounded alternate proof of the same
 > invariant, not identical retries. Protect human input before control
 > delivery: input that is changing between two looks means someone is

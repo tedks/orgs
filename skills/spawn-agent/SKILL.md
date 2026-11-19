@@ -45,6 +45,39 @@ Claude `--trust` grants directory trust before launch;
 read [Claude trust](references/claude-trust.md) when using it or diagnosing a
 trust modal. Never answer a modal with a task's Enter.
 
+### Named lane dispatch
+
+Give each named operational lead, implementer or expressly requested audit
+lane a named, interactive tmux window of its own. Launch with
+`scripts/agent-spawn.sh SESSION:WINDOW AGENT WORKTREE --model MODEL`, using the
+assigned worktree and requested model. Use the reported socket, window and
+pane to locate the child. Match the live pane, provider, selected model and
+worktree to the assignment. Track that identity evidence separately from
+the task's existing transport receipt.
+
+- For ordinary lanes, supply the brief in the combined launch as prompt text
+  or with `--prompt-file` when you can establish both identity and delivery.
+  Confirm the live identity and a fresh submitted or queued receipt before
+  reporting successful dispatch. If identity is unverified or mismatched, report the assignment
+  as unfulfilled and state the observed delivery outcome separately, even
+  if the task has a receipt. Preserve the child and alert the accountable
+  lead promptly to decide whether to steer or stop it.
+- For migrations and explicit identity-first requests, launch without the
+  brief, verify the live identity, then send the brief with `tmux-message`
+  and verify its fresh receipt. Withhold the brief and alert the
+  accountable lead if identity is unverified or mismatched.
+
+Report a blocked launch and an existing child with unconfirmed delivery
+as distinct outcomes. Preserve and inspect any existing child in its window
+before further action. Keep the original attempt for inspection without
+replaying the task or launching a duplicate. Use the receipt from the actual
+brief. Keep the window available for independent inspection and steering.
+
+The same-provider council seat follows its native council route. The
+assigning lead or operator can explicitly authorize a bounded internal helper
+whose result attests only to its assigned task. Use the interactive route
+above for named lanes and package ownership.
+
 ## Send and read
 
 Use `tmux-message` for running-agent messages and pane reads. The installed
