@@ -4,9 +4,11 @@
 command.
 
 An explicit option selects command-outcome verification for the exact bare
-`/compact` argument on the literal typed-command route in Codex. The caller
-uses a verified empty composer. A nonempty composer before typing defers
-without mutation. Verify ownership before submitting and send at most one
+`/compact` argument on the literal typed-command route in Codex. An ineligible
+argument or route, a non-Codex pane, or an unverified harness produces a
+non-success result before any composer mutation or Enter. The selected mode
+never falls through to an ordinary sender route. A nonempty composer
+before typing defers without mutation. Verify ownership before submitting and send at most one
 Enter for the attempt.
 
 After that Enter, fresh rendered Codex compaction completion provides
@@ -22,4 +24,5 @@ and the Codex fork's native completion watcher retain their existing routes
 and semantics. The exact option name and supported rendered evidence
 belong in the transport reference. Boundary checks cover completion,
 refusal, stale evidence, quiet and ordinary receipt, one Enter, wrong
-provider or payload, draft preservation, and route compatibility.
+provider, route or payload rejected without mutation, draft preservation,
+and route compatibility.
