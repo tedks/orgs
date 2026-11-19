@@ -80,8 +80,9 @@ migration because it attaches the shard to the launch prompt before the
 controller can verify the live successor. Use the separate
 [identity-first launch](../spawn-agent/SKILL.md#named-lane-dispatch) without
 a brief. Verify the live successor and fetch the approved private remote
-afresh. Record the fetched commit SHA and verify the exact shard bytes at
-the assigned shard path in that commit against the outgoing handoff.
+afresh. Record the fetched commit SHA and compare the blob ID at the
+assigned shard path in that commit with the shard blob hash recorded at
+the outgoing push.
 
 Build a new brief file in a directory accessible only to the controller.
 Use this order and separate the three parts with two LF bytes each. Keep
@@ -93,7 +94,7 @@ the shard bytes intact.
 3. The configured `ROLES.md` from `doctrine.roles_path`.
 
 ```text
-Reconstruct state from this shard and committed artifacts alone. File any protocol defect first. Establish your identity and write your first durable record before acting.
+Cold-start audit before action: Reconstruct state from this shard and committed artifacts alone. File any protocol defect first. Establish your identity and write your first durable record before acting.
 ```
 
 Keep the brief private and unchanged from construction through delivery.

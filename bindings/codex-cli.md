@@ -104,8 +104,10 @@ resources and empty childless shells, preserving active work and evidence.
   bookkeeping do not grant that time. Before a migration push, the controller
   records the intended successor provider and model argument, then confirms
   the target differs from the outgoing lane by provider or normalized model
-  argument. A CTO's own migration waits on
-  `orgs-cto-self-migration-approver`. Complete the [migration preflight](../skills/retire-agent/SKILL.md#migration)
+  argument. An open package's shard may brief a successor only in an
+  authorized model/provider migration. Approval comes from the responsible
+  CTO for another lane's migration or from `orgs-cto-self-migration-approver`
+  for a CTO's own migration. Complete the [migration preflight](../skills/retire-agent/SKILL.md#migration)
   before any outgoing handoff push or exit. Use [identity-first named lane dispatch](../skills/spawn-agent/SKILL.md#named-lane-dispatch)
   to launch without the shard or package brief. Confirm live identity,
   including the intended provider and selected model argument, and verify
@@ -115,9 +117,7 @@ resources and empty childless shells, preserving active work and evidence.
   or shard verification fails, the
   shard is not used as a successor brief; the package remains unassigned and
   its approving authority decides whether to assign a new owner. No work
-  resumes before that assignment. A model/provider migration authorized by
-  the responsible CTO is the only case where an open package's shard can
-  brief a successor. The outgoing lane's package
+  resumes before that assignment. The outgoing lane's package
   authority ends at the successful push; the controller records the new owner
   and assigns a fresh bounded mission before the successor acts. Only
   if the agent chooses to leave and asks for exit, and exact shard bytes are
