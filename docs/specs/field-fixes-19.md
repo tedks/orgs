@@ -16,7 +16,8 @@ Operators can inspect and steer named work lanes as soon as they launch.
 
 This work is bounded to the four field issues. The fork's native completion
 watcher, ordinary sender routes, provider seating and the operator's
-launch setup are compatibility constraints. The spec adds zero coordination services.
+launch setup are compatibility constraints. The spec adds zero
+coordination services.
 
 ## Boundary diagram
 
@@ -24,9 +25,10 @@ launch setup are compatibility constraints. The spec adds zero coordination serv
 flowchart LR
     Operator -->|opt-in typed request and observed outcome| Sender[tmux sender]
     Sender -->|composer and rendered command evidence| Codex[Codex pane]
-    Launcher -->|ordinary task delivery result| Sender
-    Launcher -->|child identity and delivery state| Dispatcher[Lane dispatcher]
+    Launcher -->|task and receipt for combined calls| Sender
+    Launcher -->|child identity and combined task state| Dispatcher[Lane dispatcher]
     Dispatcher -->|spawn named lane| Launcher
+    Dispatcher -->|separate brief and receipt when needed| Sender
     Lead[Accountable lead] -->|verification scope and evidence| Reviewer[Reviewer]
 ```
 
@@ -48,6 +50,6 @@ require a disposition on a later round.
 
 ## Interpretations
 
-The four contracts define the observable outcomes. For unsupported pane
-layouts, the caller retains an unknown outcome and the existing recovery
-rules.
+An unsupported pane layout defers before input. After opt-in compaction
+input, unsupported evidence leaves the outcome unknown. The compaction
+contract defines the recovery boundary.
