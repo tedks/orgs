@@ -55,8 +55,9 @@ explicitly for single-line slash commands; ordinary messages retain bracketed pa
 New receipt means an additional matching record compared with the pre-paste
 history. A collapsed receipt can match a marker observed in this attempt's
 input; a marker found only in history is insufficient. Ordinary assistant prose
-is not a receipt. `/compact` may instead be confirmed by a new visible
-`Context compacted` completion event. Receipt and task completion remain distinct.
+is not a receipt. The ordinary `/compact` route can also accept a new visible
+`Context compacted` notice as a command receipt. Use the opt-in mode below
+when the caller needs the rendered command outcome.
 Claude can show a flush-left `❯` payload row followed by
 `  ctrl+x ctrl+s to send now`, then a busy spinner and live composer. Plain
 screen text cannot distinguish that queue row from a transcript copy with the
@@ -253,10 +254,58 @@ Use `input_attempted` to determine whether outgoing input may have occurred.
 Either `clear_attempted` or `input_attempted` indicates possible composer mutation;
 `paste_attempted` applies to bracketed paste, except that the legacy
 `--literal-exit` mode retains its compatibility meaning of any input attempt.
-Both literal modes report `input_method: "typed"`. Signals retain conventional 128+signal exit
-codes. Unsuccessful attempts retain the outgoing message in a private temporary
+Both literal modes report `input_method: "typed"`. Signals retain conventional
+128+signal exit codes except for the selected compaction mode after input. Unsuccessful attempts retain the outgoing message in a private temporary
 directory (700) with a private file (600). Remove that file/directory after
 resolving it. No human draft or pane contents are logged automatically.
+
+## Verify a typed Codex compaction
+
+```bash
+tmux-message send %PANE --typed-command --verify-compact /compact
+```
+
+`--verify-compact` requires `--typed-command` with the exact positional
+argument `/compact`. Other arguments, prompt files, paste, and
+`--literal-exit` combinations exit 1 before resolving the pane. A draft
+of any kind, a known non-Codex harness, or an unverified composer defers
+with exit 2 without sending keys. The sender types once into a verified
+empty Codex composer. It checks the exact text and end cursor again
+immediately before submitting. Lost ownership preserves the input and
+sends no Enter. The attempt sends at most one Enter.
+
+The last pre-Enter frame establishes the baseline. The sender looks for
+an additional occurrence of either full, flush-left row above a recognized
+Codex composer. It strips ANSI styling and terminal padding.
+
+- `• Context compacted`, optionally followed by a rendered elapsed time
+  such as ` · 14s`, ` · 1m 04s` or ` · 2h 01m 04s`.
+- `■ '/compact' is disabled while a task is in progress.`
+
+The shapes come from the Codex 0.170.0 renderer. [Completion](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/chatwidget/compaction.rs#L42-L55),
+[elapsed time](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/status_indicator_widget.rs#L75-L90),
+[active-turn refusal](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/chatwidget/slash_dispatch.rs#L187-L193)
+and [history row prefixes](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/history_cell/notices.rs#L334-L356).
+
+The selected mode observes through `--receipt-wait` after Enter so it can
+detect conflicting notices. Once input is attempted, the result has
+`command_outcome`.
+
+| Outcome | Status | Exit |
+| --- | --- | --- |
+| `completed` | `delivered` with `receipt=command` | 0 |
+| `refused` | `refused` | 3 |
+| `unknown` | `ambiguous` | 3 |
+
+Existing history, ordinary submit or queue receipts, progress, and silence
+cannot establish an outcome. Conflicting notices, unsupported layouts with no
+verifiable evidence, and notices outside the window leave it unknown. A row
+that wraps or scrolls out can be missed. Rendered history carries no command
+identifier, so a concurrent compaction or identical output can be
+indistinguishable. Input protection remains observational. After refusal or
+ambiguity the private pending payload is retained for inspection. The sender
+never retypes it or retries Enter. Unselected commands and the fork launcher's
+native completion watcher keep their existing semantics.
 
 ## Agent escalation and extension
 
