@@ -8,8 +8,11 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
+from mcp import types
+from mcp.shared.memory import create_connected_server_and_client_session
 sys.dont_write_bytecode = True
 MODULE = Path(os.environ.get('HARNESS_TOOLS_TEST_MODULE', Path(__file__).with_name('server.py')))
 spec = importlib.util.spec_from_file_location('server', MODULE)
@@ -18,6 +21,21 @@ spec.loader.exec_module(server)
 from harness_identity import Identity, IdentityError
 
 SID = '11111111-1111-1111-1111-111111111111'
+OTHER = '22222222-2222-2222-2222-222222222222'
+
+
+def rpc_client(name='codex-mcp-client'):
+    return create_connected_server_and_client_session(
+        server.mcp._mcp_server, client_info=types.Implementation(name=name, version='test'))
+
+
+async def rpc_call(client, name, meta=None, **arguments):
+    request = types.CallToolRequest(
+        params=types.CallToolRequestParams(name=name, arguments=arguments, _meta=meta))
+    result = await client.send_request(types.ClientRequest(request), types.CallToolResult)
+    if result.isError:
+        raise AssertionError(result.content)
+    return json.loads(result.content[0].text)
 
 class ToolsTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -363,6 +381,99 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(usage['account_latest'], {'state': 'unavailable', 'source': 'codex_rollouts_newest',
                                                    'reason': 'sessions_unreadable'})
 
+    async def test_codex_rpc_metadata_is_per_call_and_uses_thread_id(self):
+        identity = Identity('codex', 123, '777', 'boot', '/tmp/socket', '%9', '/work')
+        overlap = threading.Barrier(2, timeout=5)
+
+        def unavailable(_):
+            overlap.wait()
+            return {'state': 'unavailable', 'reason': 'codex_rollout_unavailable'}
+
+        with patch.object(server, '_own_identity', return_value=identity), \
+                patch.object(server, '_native_observation', side_effect=unavailable):
+            async with rpc_client() as client:
+                root, child = await asyncio.gather(
+                    rpc_call(client, 'get_status', {'threadId': SID, 'sessionId': SID}),
+                    rpc_call(client, 'get_status', {'threadId': OTHER, 'sessionId': SID}),
+                )
+        for actual, thread, scope, sid in ((root, SID, 'root', SID),
+                                           (child, OTHER, 'descendant', None)):
+            self.assertIsNone(actual['identity'])
+            self.assertEqual(actual['observation'], {
+                'state': 'observed', 'source': 'codex_mcp_request', 'thread_id': thread,
+                'thread_scope': scope, 'session_id': sid, 'model': None,
+                'context_remaining': None, 'context_remaining_state': 'unsupported',
+            })
+            self.assertEqual([name for name, enabled in actual['capabilities'].items() if enabled],
+                             ['status'])
+
+    async def test_codex_rpc_demands_valid_metadata_and_client(self):
+        fallback = {'state': 'unavailable', 'reason': 'outside tmux'}
+        with patch.object(server, '_own_identity', side_effect=IdentityError('outside tmux')), \
+                patch('harness_identity.calling_harness', return_value='codex'):
+            async with rpc_client() as client:
+                schema = next(t.inputSchema for t in (await client.list_tools()).tools
+                              if t.name == 'get_status')
+                invalid = []
+                for meta in (None, {'sessionId': SID}, {'threadId': SID},
+                             {'threadId': {}, 'sessionId': SID},
+                             {'threadId': SID, 'sessionId': '../not-a-uuid'}):
+                    invalid.append(await rpc_call(client, 'get_status', meta,
+                        _meta={'threadId': SID, 'sessionId': SID}, threadId=SID, sessionId=SID))
+            async with rpc_client('other-client') as client:
+                other_client = await rpc_call(client, 'get_status', {
+                    'threadId': SID, 'sessionId': SID})
+        self.assertEqual(schema['properties'], {})
+        self.assertTrue(all(result == fallback for result in invalid))
+        self.assertEqual(other_client, fallback)
+
+    async def test_codex_rpc_session_info_and_unpinned_control(self):
+        meta = {'threadId': SID, 'sessionId': SID}
+        with patch.object(server, '_own_identity', side_effect=IdentityError('outside tmux')), \
+                patch('harness_identity.calling_harness') as ancestor, \
+                patch.object(server, '_native_observation') as reader:
+            async with rpc_client() as client:
+                ancestor.return_value = 'codex'
+                root = await rpc_call(client, 'get_session_info', meta)
+                descendant = await rpc_call(client, 'get_session_info', {
+                    'threadId': OTHER, 'sessionId': SID})
+                control = await rpc_call(client, 'read_own_pane', meta)
+                ancestor.return_value = 'claude'
+                unrelated = await rpc_call(client, 'get_session_info', meta)
+        self.assertEqual(root, {'session_id': SID, 'thread_id': SID, 'thread_scope': 'root',
+                                'source': 'codex_mcp_request'})
+        self.assertEqual(descendant, {'session_id': None, 'thread_id': OTHER,
+                                      'thread_scope': 'descendant', 'source': 'codex_mcp_request'})
+        self.assertEqual(control, {'state': 'unavailable', 'reason': 'outside tmux'})
+        self.assertEqual(unrelated, {'session_id': None, 'reason': 'outside tmux',
+                                     'next_action': 'get_status'})
+        reader.assert_not_called()
+
+    async def test_codex_rpc_native_details_require_matching_root(self):
+        identity = Identity('codex', 123, '777', 'boot', '/tmp/socket', '%9', '/work')
+        native = {'state': 'observed', 'session_id': SID, 'model': 'observed-model',
+                  'source': 'codex_rollout', 'rollout_path': 'private'}
+        binding = {'state': 'observed', 'session_id': SID, 'observation': native}
+        with patch.object(server, '_own_identity', return_value=identity), \
+                patch.object(server, '_native_observation', return_value=binding), \
+                patch('harness_identity.codex_terminal_process', return_value=True) as terminal:
+            async with rpc_client() as client:
+                meta = {'threadId': SID, 'sessionId': SID}
+                pinned = await rpc_call(client, 'get_status', meta)
+                info = await rpc_call(client, 'get_session_info', meta)
+                different = await rpc_call(client, 'get_status', {'threadId': OTHER, 'sessionId': OTHER})
+                descendant = await rpc_call(client, 'get_status', {'threadId': SID, 'sessionId': OTHER})
+                terminal.return_value = False  # An app-server can inherit tmux and have a matching file.
+                app_server = await rpc_call(client, 'get_status', meta)
+        self.assertEqual(pinned['identity']['pane'], '%9')
+        self.assertEqual(pinned['observation']['model'], 'observed-model')
+        self.assertNotIn('rollout_path', pinned['observation'])
+        self.assertEqual(info, {'session_id': SID, 'source': 'codex_rollout'})
+        for got in (different, descendant, app_server):
+            self.assertIsNone(got['identity'])
+            self.assertIsNone(got['observation']['model'])
+            self.assertFalse(got['capabilities']['compact'])
+
     async def test_configured_pointer_snapshot_uses_default_directory(self):
         sid = 'AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA'
         snapshot = {'schema_version': 1, 'session_id': sid, 'observed_at': 100}
@@ -376,11 +487,22 @@ class ToolsTests(unittest.IsolatedAsyncioTestCase):
 
 
 MUTANTS = {
+    'test_codex_rpc_metadata_is_per_call_and_uses_thread_id': (
+        "thread_id = getattr(request.meta, 'threadId', None)",
+        "thread_id = getattr(request.meta, 'sessionId', None)"),
+    'test_codex_rpc_demands_valid_metadata_and_client': (
+        "and client.clientInfo.name == 'codex-mcp-client'", ""),
+    'test_codex_rpc_session_info_and_unpinned_control': (
+        'if request_ids is not None and _calling_codex():', 'if request_ids is not None:'),
+    'test_codex_rpc_native_details_require_matching_root': (
+        "or not harness_identity.codex_terminal_process(identity)", ""),
     'test_codex_partial_observation_limits': (", 'history_complete', 'read_window')", ")"),
     'test_pinned_identity_verified_every_time': ('if _self_identity is None:', 'if True:'),
     'test_no_tmux_returns_typed_unavailable': ('"reason": str(exc)', '"reason": "unknown"'),
     'test_claude_binding_ignores_env_override': ('binding = await asyncio.to_thread(_native_observation, identity)', "binding = {'state': 'observed', 'session_id': os.environ.get('CLAUDE_SESSION_ID'), 'pointer_paths': ['/tmp/nope'], 'status_dir': '/tmp'}"),
-    'test_missing_or_invalid_snapshot_unavailable': ('return sid, None\n\n\n@mcp.tool()', "return sid, {'schema_version': 1, 'session_id': sid, 'observed_at': 1}\n\n\n@mcp.tool()"),
+    'test_missing_or_invalid_snapshot_unavailable': (
+        'except (OSError, ValueError):\n        return sid, None',
+        "except (OSError, ValueError):\n        return sid, {'schema_version': 1, 'session_id': sid, 'observed_at': 1}"),
     'test_codex_account_latest_and_superseded': ("flag = True if latest > mine else (False if complete else None)", "flag = True if latest >= mine else (False if complete else None)"),
     'test_superseded_reflects_account_uncertainty': ("complete = observed and account_latest.get('incomplete') is not True", "complete = observed"),
     'test_codex_account_reader_failure_keeps_session_result': ("        except Exception:  # never lose", "        except ZeroDivisionError:  # never lose"),

@@ -289,16 +289,71 @@ def _claude_snapshot(binding):
         return sid, None
 
 
+_STATUS_CAPABILITIES = {"status": True, "usage": True,
+                        "compact": True, "exit": True,
+                        "send_to_self": True, "read_own_pane": True,
+                        "checkpoint": True, "operation_receipts": True,
+                        "compact_continuation": True}
+
+
+def _codex_request_context():
+    """The local stdio peer identifies itself during MCP initialization."""
+    try:
+        request = mcp.get_context().request_context
+    except ValueError:  # direct invocation outside MCP
+        return None
+    client = request.session.client_params
+    if client is not None and client.clientInfo.name == 'codex-mcp-client':
+        return request
+    return None
+
+
+def _codex_request_ids():
+    request = _codex_request_context()
+    if request is None:
+        return None
+    # Codex 0.170.0 stamps these on tools/call params._meta, outside arguments.
+    thread_id = getattr(request.meta, 'threadId', None)
+    session_id = getattr(request.meta, 'sessionId', None)
+    if all(isinstance(value, str) and SESSION_ID.fullmatch(value)
+           for value in (thread_id, session_id)):
+        return thread_id, session_id
+    return None
+
+
+def _calling_codex():
+    try:
+        return harness_identity.calling_harness() == 'codex'
+    except harness_identity.IdentityError:
+        return False
+
+
+def _codex_thread_status(thread_id, session_id):
+    root = thread_id == session_id
+    return {
+        "identity": None,
+        "observation": {
+            "state": "observed", "source": "codex_mcp_request",
+            "thread_id": thread_id, "thread_scope": "root" if root else "descendant",
+            "session_id": thread_id if root else None,
+            "model": None, "context_remaining": None,
+            "context_remaining_state": "unsupported",
+        },
+        "capabilities": {name: name == "status" for name in _STATUS_CAPABILITIES},
+    }
+
+
 @mcp.tool()
 async def get_status() -> dict:
-    """Own pinned tmux harness, model and last-observed context; unknowns explicit.
+    """Own harness status, including the calling Codex thread when available.
 
-    Linux/tmux only. No active-window fallback. Codex context remaining cannot
-    be established exactly from rollout token counts and is reported unknown.
-    Legacy introspection tools remain Claude-specific.
+    Linux only. Pane, model and last-observed context require native evidence.
+    Codex context remaining is unknown. With MCP thread metadata alone, only
+    read-only thread identity is available.
     """
     from harness_identity import IdentityError
     from harness_status import parse_claude_status
+    request_ids = _codex_request_ids()
     try:
         identity = _own_identity()
         binding = await asyncio.to_thread(_native_observation, identity)
@@ -306,16 +361,20 @@ async def get_status() -> dict:
             sid, snapshot = _claude_snapshot(binding) if binding['state'] == 'observed' else (None, None)
             state = parse_claude_status(snapshot, sid)
         else:
+            if request_ids is not None:
+                thread_id, session_id = request_ids
+                if (binding['state'] != 'observed' or thread_id != session_id
+                        or thread_id != binding.get('session_id')
+                        or not harness_identity.codex_terminal_process(identity)):
+                    return _codex_thread_status(thread_id, session_id)
             state = dict(binding.get('observation', {'state': 'unsupported', 'source': 'codex_rollout',
                                                       'reason': binding.get('reason', 'native_binding_unavailable')}))
             state.pop('rollout_path', None)
         return {"identity": identity.public(), "observation": state,
-                "capabilities": {"status": True, "usage": True,
-                                 "compact": True, "exit": True,
-                                 "send_to_self": True, "read_own_pane": True,
-                                 "checkpoint": True, "operation_receipts": True,
-                                 "compact_continuation": True}}
+                "capabilities": dict(_STATUS_CAPABILITIES)}
     except IdentityError as exc:
+        if request_ids is not None and _calling_codex():
+            return _codex_thread_status(*request_ids)
         return {"state": "unavailable", "reason": str(exc)}
 
 
@@ -668,11 +727,23 @@ async def cancel_operation(operation_id: str) -> dict:
 
 @mcp.tool()
 async def get_session_info() -> dict:
-    """Get information about the current Claude Code session.
+    """Get the current session ID and any supported session details.
 
-    Returns the session ID, launch directory, project path,
-    and any state captured by the session-state hook.
+    Claude Code uses the session-state hook and sessions index. Codex reports
+    the calling thread from the same evidence as get_status.
     """
+    if _codex_request_context() is not None or _calling_codex():
+        status = await get_status()
+        observation = status.get('observation', {})
+        if observation.get('source') in ('codex_rollout', 'codex_mcp_request'):
+            if observation.get('thread_id'):
+                return {key: observation[key] for key in
+                        ('session_id', 'thread_id', 'thread_scope', 'source')}
+            if observation.get('session_id'):
+                return {'session_id': observation['session_id'], 'source': 'codex_rollout'}
+        return {'session_id': None, 'reason': observation.get('reason') or status.get('reason')
+                or 'codex_session_id_unavailable', 'next_action': 'get_status'}
+
     session_id = await _get_session_id()
     result: dict = {
         "session_id": session_id,

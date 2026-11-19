@@ -60,8 +60,28 @@ class IdentityTests(unittest.TestCase):
 
     def test_nearest_without_tmux_does_not_climb(self):
         self.make(30, 20, 'codex')
+        self.assertEqual(h.calling_harness(30, self.proc), 'codex')
         with self.assertRaisesRegex(h.IdentityError, 'outside tmux'):
             self.identity()
+
+    def test_calling_harness_rejects_process_change(self):
+        with patch.object(h, 'process', side_effect=[(20, '777'), (10, '777'), (10, '888')]):
+            with self.assertRaisesRegex(h.IdentityError, 'harness changed'):
+                h.calling_harness(30, self.proc)
+
+    def test_codex_terminal_process_excludes_app_server_and_detached_process(self):
+        self.make(20, 10, 'codex', 'TMUX=/tmp/socket,123,0\0TMUX_PANE=%9\0')
+        identity = self.identity()
+        cmdline = self.proc / '20/cmdline'
+        cmdline.write_bytes(b'/path/codex\0--no-daemon\0')
+        self.assertFalse(h.codex_terminal_process(identity, self.proc))
+        status = self.proc / '20/stat'
+        status.write_text(status.read_text().replace('S 10 0 0 0 ', 'S 10 0 0 34816 '))
+        self.assertTrue(h.codex_terminal_process(identity, self.proc))
+        cmdline.write_bytes(b'/path/codex\0--strict-config\0app-server\0--listen\0unix://\0')
+        self.assertFalse(h.codex_terminal_process(identity, self.proc))
+        cmdline.unlink()
+        self.assertFalse(h.codex_terminal_process(identity, self.proc))
 
     def test_missing_and_malformed_ancestry(self):
         with self.assertRaises(h.IdentityError):
@@ -135,7 +155,14 @@ MUTANTS = {
     'test_nested_harness_rejected': ("if pid != identity.pid and _harness", "if False and _harness"),
     'test_nearest_and_socket': ("cwd = os.readlink(base / 'cwd')", "cwd = '/wrong'"),
     'test_codex_version_name': ("return Identity(harness, pid,", "return Identity('claude', pid,"),
-    'test_nearest_without_tmux_does_not_climb': ("if harness:", "if harness and (base / 'environ').read_bytes():"),
+    'test_nearest_without_tmux_does_not_climb': (
+        "if harness:\n            return harness, pid, start",
+        "if harness and (proc / str(pid) / 'environ').read_bytes():\n"
+        "            return harness, pid, start"),
+    'test_calling_harness_rejects_process_change': (
+        "if process(pid, proc)[1] != start:", "if False:"),
+    'test_codex_terminal_process_excludes_app_server_and_detached_process': (
+        "and b'app-server' not in argv.split(b'\\0')[1:]", ""),
     'test_missing_and_malformed_ancestry': ("raise IdentityError('malformed process stat')", "return 20, '777'"),
     'test_cycles_and_lookalike_fail_closed': ("comm == name or re.fullmatch(name + r'-[0-9].*', comm)", "comm.startswith(name)"),
     'test_tmux_values_rejected': ("not re.fullmatch(r'%[0-9]+', pane)", "not pane"),
