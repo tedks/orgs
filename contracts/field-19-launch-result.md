@@ -4,13 +4,15 @@
 
 When a child was launched and the task sender returns nonzero, report that
 the child launched and its task delivery is unconfirmed, with the existing
-target and pane identity. Preserve the sender output and exact exit
-status so callers can distinguish deferral from ambiguity. The diagnostic
-directs the caller to inspect that child before any retry. It never instructs
+target and pane identity. Preserve the sender output and exit from the launcher
+with the sender's exact status so callers can distinguish deferral from
+ambiguity. A nonzero status alone cannot establish launch failure. The
+diagnostic directs the caller to inspect that child before any retry. It never instructs
 automatic replay or launches a duplicate.
 
 Confirmed delivery and actual launch failure keep their existing paths.
-The fork compaction gate is outside this boundary. The change uses only the
-checked-in source and leaves the separate live operator launcher patch
-outside the PR. Boundary checks exercise successful delivery, deferred and
+Task delivery after a successful fork uses the same diagnostic. The fork's
+native completion watcher and its failure path keep their behavior. Change
+only the checked-in task-result branch. The separate live operator patch
+changes tmux window targeting and stays outside this PR. Boundary checks exercise successful delivery, deferred and
 ambiguous task results, and genuine launch failure.

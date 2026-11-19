@@ -8,16 +8,22 @@ An explicit option selects command-outcome verification for the exact bare
 argument or route, a non-Codex pane, or an unverified harness produces a
 non-success result before any composer mutation or Enter. The selected mode
 never falls through to an ordinary sender route. A nonempty composer
-before typing defers without mutation. Verify ownership before submitting and send at most one
-Enter for the attempt.
+before typing defers without mutation. Verify ownership before submitting and
+send at most one Enter for the attempt. If ownership is lost after typing,
+preserve the current input, report unknown and send no Enter.
 
-After that Enter, fresh rendered Codex compaction completion provides
-success and fresh rendered command refusal provides refusal. Old history,
-ordinary submitted or queued rows, an empty or quiet pane, and progress
-text alone are insufficient. Unsupported or conflicting evidence stays
-unknown. Refusal and unknown are distinguishable from success in the result.
-Keep input ownership and private pending-payload rules in force and never
-replay the command automatically.
+Use a baseline captured before Enter. During the configured receipt wait,
+fresh rendered Codex completion or refusal relative to that baseline
+determines the outcome. Old history, ordinary submitted or queued rows,
+an empty or quiet pane, and progress text alone are insufficient. Evidence
+after the wait falls outside the attempt. Unsupported or conflicting
+evidence gives an unknown outcome.
+
+After input is attempted the structured result reports a distinct
+`command_outcome` of `completed`, `refused` or `unknown`. Completion
+exits zero. Refusal and unknown exit nonzero. Existing pre-input deferral
+and unselected sender exits keep their meanings. Keep input ownership and
+private pending-payload rules in force without automatic replay.
 
 Unselected typed commands, ordinary messages, pasted `/compact`, Claude,
 and the Codex fork's native completion watcher retain their existing routes

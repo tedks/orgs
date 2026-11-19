@@ -5,12 +5,15 @@
 Ordinary verification uses the product's normal execution path and
 its established checks. Before adding tooling that attaches to a process,
 intercepts execution, or materially alters observable behavior, identify
-the run as a diagnostic and obtain explicit authority for the diagnostic.
-Record the purpose, target, permitted method and bounds. Attach that evidence
-to the reviewed revision and report which run produced each observation.
-Ordinary gate results still apply under their governing acceptance criteria.
+the run as a diagnostic and obtain explicit authority from the accountable
+project owner or a delegate with authority over that run. Without a ruling
+or when permission is denied, omit the intrusive step, record why, and
+continue any available ordinary checks.
 
-Scope comes from the governing project and the authorization for the run.
-An authorized intrusive diagnostic is valid in its approved scope.
+Record the purpose, target, permitted method and bounds. Attach the
+authorization and diagnostic observations to the reviewed revision and
+identify the run that produced each observation. Project restrictions
+govern throughout. Ordinary gates retain their acceptance criteria.
+Diagnostic evidence counts for a gate only under those criteria.
 Boundary checks cover ordinary verification, an unapproved tracing
 proposal, an authorized diagnostic, and a project-specific restriction.

@@ -14,7 +14,7 @@ Operators can inspect and steer named work lanes as soon as they launch.
 | `verify-lead-tracing-scope-20261119` | verification guidance at the review and role boundaries | [Verification scope](../../contracts/field-19-verification.md) |
 | `spawned-lane-dispatch-20261119` | doctrine, dispatch skills and harness bindings | [Named lane dispatch](../../contracts/field-19-dispatch.md) |
 
-This work is bounded to the four field issues. The fork's native watcher,
+This work is bounded to the four field issues. The fork's native completion watcher,
 ordinary sender routes, provider seating and the operator's launch setup
 are compatibility constraints. The spec adds zero coordination services.
 
@@ -32,14 +32,14 @@ flowchart LR
 
 ## Milestones and stop conditions
 
-Freeze and council this spec with its contracts. Exercise one existing
-dispatch and verification scenario across the boundaries, publish each
+Freeze and council this spec with its contracts. Exercise the existing sender, launcher and verification paths as a thin
+end-to-end scenario, publish each
 package's acceptance checks, then dispatch four distinct packages in
 separate window and worktree pairs. Review pushed package revisions,
 run their local gates, merge through normal PRs, and record issue outcomes.
 
-Escalate missing command evidence, scope changes, or launch failures that
-leave child identity uncertain. Keep an unconfirmed child available for
+Bring missing command evidence, scope changes, or uncertain child identity
+to the accountable lead. Keep an unconfirmed child available for
 inspection and preserve the task's no-replay boundary. A live verification
 run that needs an intrusive diagnostic waits for a scoped ruling before the
 diagnostic begins. Council findings require a disposition on a later round.
