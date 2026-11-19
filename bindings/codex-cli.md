@@ -12,17 +12,18 @@ this document.
 
 | Protocol concept | Codex CLI primitive |
 |---|---|
-| CTO / lead session | Interactive `codex` in its own tmux window and git worktree, launched with `agent-spawn.sh SESSION:WINDOW codex DIR --model MODEL` (or `SPAWN_CODEX_MODEL`). The launcher adds `--no-alt-screen` so tmux scrollback keeps delivery receipts, and suppresses the startup update check for that process. |
-| Worker | A native Codex subagent under the `multi_agent` feature (stable and on in 0.157.1), bounded by the `[agents]` table (`max_threads`, `max_depth`); or a spawned session in its own window and worktree when the worker must be steerable or outlive the lead's turn. The roster's worker bound applies either way; `[agents]` is a harness ceiling, not the roster. |
+| CTO session | Interactive `codex` in its own tmux window and git worktree via `agent-spawn.sh` with `--model MODEL` (or `SPAWN_CODEX_MODEL`). A named operational CTO follows [named lane dispatch](../skills/spawn-agent/SKILL.md#named-lane-dispatch). |
+| Named operational lead, implementer or expressly requested audit lane | [Named lane dispatch](../skills/spawn-agent/SKILL.md#named-lane-dispatch) via `agent-spawn.sh SESSION:WINDOW codex DIR --model MODEL`, with its own named interactive window and assigned worktree. The launcher adds `--no-alt-screen` to preserve delivery receipts in tmux scrollback and suppresses the startup update check for that process. |
+| Scoped internal helper | With explicit authorization from the assigning lead or operator, a native Codex `multi_agent` subagent can do a bounded task. Its result covers that task. The roster's worker bound applies within the harness limits in `[agents]` (`max_threads`, `max_depth`). |
 | Huddle attendance (carry your own context) | `codex exec fork <id> -`: a headless, non-mutating branch of the attendee's session. The parent stays pristine. For an interactive branch a human can steer, `agent-spawn.sh ... --fork-session <id>` runs `codex fork` (see the skill's `references/codex-forks.md`). |
-| Same-tier continuation of a running worker | `codex exec resume <id> -` (the trailing `-` reads the next prompt from stdin; without it or a PROMPT argument nothing is sent) appends in place to the same thread, with a single active writer. Never resume a session another process is driving. For a live interactive worker, send the next task over `tmux-message` instead. |
-| Takeover at a **higher tier** | Not a fork and not a resume: both keep the original model's thread. Spawn a fresh session with the higher model via `agent-spawn.sh --model`, packed from the implementer's branch, diff, PR thread, status entry and, where the reasoning matters, a transcript excerpt. The journey travels through committed artifacts. |
-| Judgment roles (review, necessity challenge, cold-start audit) | A fresh session or a fresh native subagent with the curated pack. Never a fork or resume of the agent under review. |
+| Same-tier continuation | Steer a live named lane over `tmux-message`. For a headless thread, `codex exec resume <id> -` reads the next prompt from stdin and appends it to the same thread. Resume only when no other process is driving the thread. |
+| Takeover at a **higher tier** | Use [named lane dispatch](../skills/spawn-agent/SKILL.md#named-lane-dispatch) for a fresh session with the higher model. Pack it with the implementer's branch, diff, PR thread, status entry and a transcript excerpt where the reasoning matters. |
+| Judgment roles (review, necessity challenge, cold-start audit) | Use a fresh context with the curated pack, independent of the agent under review. Expressly requested audit lanes use named lane dispatch. Council seats use their council routes. The accountable lead can explicitly authorize a bounded necessity or lead-review helper. |
 | Inter-agent messaging | `tmux-message send TARGET 'text'` and `tmux-message read TARGET` (installed at `~/.bin/tmux-message`; skill entrypoint `spawn-agent/scripts/tmux-message.sh`). Success means a NEW submitted or queued receipt was observed; that proves delivery, not that the work was accepted or completed (doctrine, *Quiet coordination and lifecycle*). `codex queue --thread` exists in 0.157.1 but the shared sender does not use it. A native `multi_agent` subagent has no pane: its parent messages it through the host's own subagent tools, and the evidence is that tool's result, not a tmux receipt (tool names **unverified** for this document). |
 | Foreign council seats | `ask-agent claude` and `ask-agent agy`, warm-chained across rounds with `--resume <id>` and `--session-id-file`; verify the yielded id every round. The Codex host fills the OpenAI seat with its own native subagent and never calls `ask-agent codex`. |
 | Council review | The `council-review` skill: `PR #N` is the formal round (pinned pushed head and merge-base, round records on the PR, the same command for convergence); other targets are advisory; in an org sprint formal rounds use `orgs-pack` and `orgs-ledger`. `orgs-review` remains the accountable lead's separate rung. `codex exec` refuses to start outside a git repo or a trusted directory, so run from the worktree. |
 | Standup heartbeat | Event-driven only. No scheduler for Codex lanes exists today, so a standup is a message the coordinator sends when an event or its own cadence calls for one. Do not claim a timer that is not running. |
-| Deterministic fan-out | No Codex equivalent of a workflow runner is bound. Enumerated work goes to bounded subagents or spawned sessions briefed from a file. |
+| Deterministic fan-out | Dispatch named assignments to interactive sessions briefed from a file. Use bounded subagents for explicitly authorized internal helper tasks. |
 | Team isolation | Git worktrees per team or branch (bare-repo layout); packing lists via prompt assembly. |
 | Compaction | Bare `/compact` delivered into the pane by a peer over `tmux-message`, after durable state is saved. `/compact` takes no inline argument; step-specific focus goes through the `experimental_compact_prompt_file` config override, as the fork launcher does. Completion is a new compaction record or a visible `Context compacted` event. `remote_compaction = true` is set in config, but 0.157.1 warns at startup that `features.remote_compaction` is ignored, so it has no effect. |
 | Harness self-control | The `harness-control` MCP package is in this repository; host installation remains a separate cutover. Until installed and registered on a host, a session asks a peer with `COMPACT ME` for compaction; after the shard push a peer types the bare exit command only if the agent chooses to leave and asks for it (see Lean operating mode). |
@@ -77,7 +78,7 @@ a bounded alternate observation; do not replay an ambiguous command or
 weaken the identity and input guards. After verified exit, collect owned
 resources and empty childless shells, preserving active work and evidence.
 
-- A worker is a Codex session in its own tmux window and worktree, spawned
+- A named lane is a Codex session in its own tmux window and worktree, spawned
   with the roster's tier and briefed from a file. Its session id is recorded
   so it can be brought back for its own work.
 - Messages to the coordinator take fixed forms and nothing else:
@@ -103,15 +104,20 @@ resources and empty childless shells, preserving active work and evidence.
   bookkeeping do not grant that time. Before a migration push, the controller
   records the intended successor provider and model argument, then confirms
   the target differs from the outgoing lane by provider or normalized model
-  argument. A CTO's own migration waits on
-  `orgs-cto-self-migration-approver`. After launch, before the successor
-  receives the shard as a brief or package mission, the controller confirms
-  the live provider and selected model argument match that target and
-  verifies the shard's exact bytes. Otherwise the
+  argument. An open package's shard may brief a successor only in an
+  authorized model/provider migration. Approval comes from the responsible
+  CTO for another lane's migration or from `orgs-cto-self-migration-approver`
+  for a CTO's own migration. Complete the [migration preflight](../skills/retire-agent/SKILL.md#migration)
+  before any outgoing handoff push or exit. Use [identity-first named lane dispatch](../skills/spawn-agent/SKILL.md#named-lane-dispatch)
+  to launch without the shard or package brief. Confirm live identity,
+  including the intended provider and selected model argument, and verify
+  the shard's exact bytes against a fresh fetch of the approved private
+  remote. Construct the private brief from that verified commit as
+  described in the migration guide and send that exact file. If identity
+  or shard verification fails, the
   shard is not used as a successor brief; the package remains unassigned and
   its approving authority decides whether to assign a new owner. No work
-  resumes before that assignment. A model/provider migration is the only case where
-  an open package's shard can brief a successor. The outgoing lane's package
+  resumes before that assignment. The outgoing lane's package
   authority ends at the successful push; the controller records the new owner
   and assigns a fresh bounded mission before the successor acts. Only
   if the agent chooses to leave and asks for exit, and exact shard bytes are
@@ -123,11 +129,8 @@ resources and empty childless shells, preserving active work and evidence.
   not a live exit, so **unverified**); use whichever the installed version
   accepts. The receipt is the pane's process ending, observed; never a kill.
   Confirm resource release before marking the lane RETIRED. This stays until
-  the harness-control MCP lands. The migration workflow is
-  `retire.sh --handoff AGENT MODEL`, which wraps the published
-  `agent-spawn.sh` launcher. The launcher accepts `--model` for Claude and
-  Codex successors. The workflow verifies the successor's live provider and
-  selected model argument before briefing. Same-provider selector and alias
+  the harness-control MCP lands. The launcher accepts `--model` for Claude
+  and Codex successors. Same-provider selector and alias
   rules are in [doctrine, *Quiet coordination and lifecycle*](../doctrine/DOCTRINE.md#quiet-coordination-and-lifecycle). New missions
   start in fresh lanes unless exact context continuity is justified.
 - Retirement shards and receipts are pushed from a temporary worktree at the freshly fetched remote master commit, never committed in the shared checkout, and verified against a fresh remote fetch.

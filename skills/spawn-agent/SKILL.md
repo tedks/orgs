@@ -45,6 +45,85 @@ Claude `--trust` grants directory trust before launch;
 read [Claude trust](references/claude-trust.md) when using it or diagnosing a
 trust modal. Never answer a modal with a task's Enter.
 
+### Named lane dispatch
+
+Give each named operational lead, implementer or expressly requested audit
+lane a named, interactive tmux window of its own. Use `scripts/tmux-info.sh`
+to identify the project session. For ordinary dispatch, use its existing
+session name in `SESSION:WINDOW` and choose a new window name. Create a tmux
+session only when the request explicitly calls for a separate session or
+the project has no existing session.
+
+For example, with the `project` session already running, launch a new
+`api-impl` window with the assigned worktree, requested model and brief.
+
+```bash
+scripts/agent-spawn.sh project:api-impl codex ./api-impl --model MODEL \
+  --prompt-file /path/to/brief
+```
+
+Verify that the live pane is in the chosen session and new window on the
+selected socket. A different session or window is an identity mismatch.
+Match the live provider, selected model and worktree to the assignment.
+Track that identity evidence separately from the task's transport receipt.
+
+Choose the briefing path before sending the brief. Use identity-first for
+migrations, explicit identity-first requests, and cases where a combined
+call cannot establish the required live identity. For migrations, complete
+the [migration preflight](../retire-agent/SKILL.md#migration) before any
+outgoing handoff push or exit.
+
+**Combined.** For ordinary lanes, supply the brief in the launch as prompt
+text or with `--prompt-file` when you can establish both identity and
+delivery. Confirm the live identity for the returned pane and a fresh
+submitted or queued receipt before reporting successful dispatch. If
+identity is unverified or mismatched, report the assignment as unfulfilled
+and state the observed delivery outcome separately, even if the task has a
+receipt. Preserve the child and alert the accountable lead promptly to
+decide whether to steer or stop it.
+
+**Identity-first.**
+
+1. Resolve the selected server to an absolute socket path. On a running
+   server, run the tmux command selected by `scripts/tmux-info.sh` with
+   `display-message -p '#{socket_path}'`. Pin that socket with
+   `SPAWN_TMUX_SOCKET` for the launcher and sender and use
+   `tmux -S "$socket"` for direct inspection. If there is no server for an
+   authorized new session, select an explicit absolute socket path first.
+2. Choose a fresh window name. Check the intended session by exact name
+   with `tmux -S "$socket" list-windows -t "=$session" -F '#{window_name}'`
+   and verify the name is absent before launch. To create a session on a
+   running server, confirm its exact name is absent in the session inventory.
+   If the inventory cannot establish the precondition, report the blocker.
+   Launch without a brief or migration shard using
+   `SPAWN_TMUX_SOCKET="$socket" scripts/agent-spawn.sh "$session:$window" "$agent" "$worktree" --model "$model"`.
+3. The unbriefed launcher prints the window and directory. Resolve the pane
+   from tmux on the pinned socket. List the exact session's windows with
+   `list-windows -t "=$session" -F '#{window_id} #{window_name}'`. Require
+   exactly one match for the window name, then use
+   `list-panes -t "$window_id" -F '#{pane_id}'` with that `@WINDOW_ID`.
+   Require one pane and verify it is live and matches the requested
+   provider, model and worktree. If identity mismatches or remains
+   unverifiable, withhold the brief, report the blocker and alert the
+   accountable lead. Record the brief as withheld and preserve any child.
+4. Verify live identity before briefing. For a migration, complete the
+   [authority and shard checks and build the private brief](../retire-agent/SKILL.md#migration).
+   Send the exact brief file at `"$brief"` on the same socket with
+   `SPAWN_TMUX_SOCKET="$socket" scripts/tmux-message.sh send "$pane_id" --prompt-file "$brief"`
+   and verify a fresh receipt.
+
+If the requested launch is blocked, report the blocker. If a child exists
+and a brief attempt has no fresh receipt, report the child with delivery
+unconfirmed. Preserve and inspect any existing child in its window before
+further action. Keep the original attempt for inspection without replaying
+the task or launching a duplicate. Use the receipt from the actual brief.
+Keep the window available for independent inspection and steering.
+
+The same-provider council seat follows its native council route. The
+assigning lead or operator can explicitly authorize a bounded internal helper
+whose result attests only to its assigned task. Use the interactive route
+above for named lanes and package ownership.
+
 ## Send and read
 
 Use `tmux-message` for running-agent messages and pane reads. The installed

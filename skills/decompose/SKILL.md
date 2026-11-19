@@ -38,9 +38,9 @@ Templates: `protocol/templates/work-package.md`, `protocol/templates/contract.md
    design doc, consumed contracts, owned scope, selected lessons. Lean by
    default.
 
-Record each transition via `orgs-ledger`. Hand the packed packages to
-`orgs-implement`. (What else watches the fan-out is the sprint root's wiring,
-not this skill's concern.)
+Record each transition via `orgs-ledger`. Launch each named implementer
+using [named lane dispatch](../spawn-agent/SKILL.md#named-lane-dispatch)
+and hand it the packed package for `orgs-implement`.
 
 ## On contracts
 
