@@ -111,6 +111,7 @@ DIAGNOSTIC_REASONS = frozenset({
     "input-changed-after-paste", "input-changed-before-enter", "modal-after-paste",
     "modal", "human-typing", "existing-input", "unsupported-layout",
     "compact-requires-codex", "compact-refused", "conflicting-command-evidence",
+    "pane-width-changed",
     "unstable-composer", "input-changed-before-paste", "cursor-navigation-unverified",
     "command-clear-unverified", "input-changed-after-clear", "image-placeholder",
 })
@@ -1032,6 +1033,9 @@ class Sender:
             now = self.clock()
             if now >= deadline:
                 break
+            if frame.width > 0 and frame.width != before.width:
+                # Reflow can make a wrapped baseline notice look like new text.
+                raise DeliveryError("pane-width-changed", 3)
             if inp.kind == "modal" or (inp.harness and inp.harness != "codex"):
                 raise DeliveryError("unsupported-layout", 3)
             if inp.harness == "codex":

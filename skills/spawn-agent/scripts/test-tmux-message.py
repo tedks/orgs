@@ -2744,6 +2744,23 @@ class VerifyCompactTests(unittest.TestCase):
                     terminal.frame = capture
                     self.assert_unknown(terminal, enters=1)
 
+    def test_widening_cannot_make_wrapped_old_refusal_fresh(self):
+        terminal = CompactTerminal()
+        refusal = m.styles.strip_ansi(COMPACT_REFUSAL)
+
+        def capture():
+            if terminal.enters:
+                prefix, width = refusal + '\n', 80
+            else:
+                width = 40
+                prefix = refusal[:width] + '\n' + refusal[width:] + '\n'
+            frame = screen(terminal.draft, prefix=prefix)
+            frame.width = width
+            return frame
+
+        terminal.frame = capture
+        self.assert_unknown(terminal, enters=1)
+
     def test_distinct_fresh_notice_can_confirm_despite_repaint(self):
         terminal = CompactTerminal()
         old_notice = COMPACT_COMPLETE + '\n'

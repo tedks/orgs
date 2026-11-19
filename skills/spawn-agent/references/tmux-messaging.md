@@ -296,7 +296,9 @@ and [history row prefixes](https://github.com/openai/codex/blob/29eb79e9866b3262
 A distinct notice can establish freshness. A full-screen repaint can copy
 an identical old notice into scrollback, so extra scrollback copies leave
 its freshness unknown. An identical notice can count if a single visible
-frame contains more copies than the entire baseline capture.
+frame contains more copies than the entire baseline capture. If a receipt
+frame has a different measured pane width than the baseline, verification
+ends with `unknown`. Reflow can turn a wrapped old notice into an exact row.
 
 The `--receipt-wait` window starts after the synchronous Enter call returns.
 A completion or refusal normally takes the full window to report, even when
