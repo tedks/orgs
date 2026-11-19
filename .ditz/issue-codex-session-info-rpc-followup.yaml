@@ -1,0 +1,21 @@
+id: codex-session-info-rpc-followup
+title: Document and regression-test session-info RPC compatibility
+desc: 'Track two nonblocking refinements from PR #62. Add a packaged RPC regression
+  for the unchanged Claude get_session_info hook and sessions-index response. Clarify
+  in the get_session_info tool description that Codex descendants receive their own
+  thread_id and a null session_id, and keep that reply tied to the supported observation
+  shape if it evolves. The PR already verifies Claude parity in a fixture, root and
+  descendant RPC replies, and suppression of native details for a shared app server.'
+type: task
+component: harness-control
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-19T23:51:04-00:00
+references: []
+log_events:
+- time: 2026-11-19T23:51:04-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
