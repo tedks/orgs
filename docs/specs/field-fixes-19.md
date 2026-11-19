@@ -50,6 +50,6 @@ require a disposition on a later round.
 
 ## Interpretations
 
-An unsupported pane layout defers before input. After opt-in compaction
-input, unsupported evidence leaves the outcome unknown. The compaction
-contract defines the recovery boundary.
+In opt-in compaction, an unsupported pane layout defers before input.
+After input, unsupported evidence leaves the outcome unknown. The
+compaction contract defines the recovery boundary.

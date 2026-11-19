@@ -8,18 +8,22 @@ with the requested model and the worktree assigned for the package. Verify
 the live pane identity, provider, model and worktree. A fresh transport
 receipt establishes task delivery.
 
-For ordinary lanes the standard combined spawn-and-brief is available when
-the launcher and dispatcher can establish the required identity and delivery.
-For migrations and explicit identity-first requests, verify the live child
-before briefing. If that identity differs or cannot be verified, withhold
-an identity-first brief, preserve the observed child, and alert the
-accountable lead. An ordinary combined attempt with missing evidence stays
-unconfirmed.
+For ordinary lanes, use the standard combined spawn-and-brief when the
+launcher and dispatcher can establish the required identity and delivery.
+Combined dispatch succeeds only after both are established. If the live
+identity is unverified or mismatched, report the assignment as unfulfilled,
+retain the observed delivery state separately, and promptly alert the
+accountable lead to decide whether to steer or stop the child.
 
-Report a blocked launch or an unconfirmed brief accurately. Inspect an
-existing child before taking further action. Preserve the no-replay boundary.
-The lane stays independently visible and steerable. A native subagent or
-one-shot headless call cannot fulfill this dispatch.
+A migration transfers an existing lane to a new session. For migrations
+and explicit identity-first requests, verify the live child before
+briefing. If the identity differs or cannot be verified, withhold the
+brief and alert the accountable lead.
+
+Report a blocked launch or an unconfirmed brief accurately. Preserve and
+inspect any existing child before taking further action, without replay
+or duplicate launch. The lane stays independently visible and steerable.
+A native subagent or one-shot headless call cannot fulfill this dispatch.
 
 The explicit native same-provider council seat retains its council route.
 The assigning lead or an operator can explicitly request a scoped internal
@@ -29,5 +33,5 @@ a dispatch route. The helper's result attests to its own task.
 
 Boundary checks exercise a named lead, implementer and audit lane, a
 council seat, a scoped helper, combined and identity-first dispatch,
-withholding an identity-first brief on a mismatch, a blocked launch, and
+identity mismatch on both briefing paths, a blocked launch, and
 unconfirmed delivery to an existing child.
