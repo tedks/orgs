@@ -55,6 +55,7 @@ COMPACT_REFUSED = "■ '/compact' is disabled while a task is in progress."
 
 
 def compact_records(frame, inp):
+    """Count supported notices above the live composer in the captured history."""
     visible = frame.raw.splitlines()
     history = (frame.history or frame.raw).splitlines()
     rows = history[:len(history) - len(visible) + inp.start]
@@ -1007,6 +1008,8 @@ class Sender:
             self.diagnostic.event("enter")
         self.tmux.keys("Enter")
 
+        # Hold either observation through the window so a later contradictory
+        # notice cannot turn two possible outcomes into a definite answer.
         observed = set()
         while self.clock() < deadline:
             frame, inp = self.sample()
@@ -1234,7 +1237,12 @@ def options(argv=None):
     p.add_argument("--literal-exit", action="store_true", help="type a bare Claude /exit literally, send at most one Enter, and verify a fresh resume notice")
     p.add_argument("--backoff", action="store_true", help="wait for stable input within --max-wait instead of exiting on typing")
     p.add_argument("message", nargs="?")
-    o = p.parse_intermixed_args(argv)
+    o, extra = p.parse_known_intermixed_args(argv)
+    if o.verify_compact and (extra or not o.typed_command or o.literal_exit
+                             or o.prompt_file is not None or o.message != "/compact"):
+        p.exit(1, json.dumps({"status": "error", "reason": "verify-compact-requires-typed-bare-argument"}) + "\n")
+    if extra:
+        p.error("unrecognized arguments: " + " ".join(extra))
     if o.stable_wait is None:
         o.stable_wait = o.submit_delay
     o.stable_window = o.stable_wait
@@ -1252,11 +1260,6 @@ def options(argv=None):
 
 def main():
     o = options()
-    if o.verify_compact and (not o.typed_command or o.literal_exit
-                             or o.prompt_file is not None or o.message != "/compact"):
-        print(json.dumps({"status": "error", "reason": "verify-compact-requires-typed-bare-argument"}),
-              file=sys.stderr)
-        return 1
     try:
         payload = o.prompt_file.read_bytes().decode("utf-8") if o.prompt_file else o.message
         if o.literal_exit and payload != "/exit":

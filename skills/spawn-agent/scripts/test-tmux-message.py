@@ -157,6 +157,10 @@ class CompactTerminal(Terminal):
 
     def frame(self):
         if self.accepted_at is None:
+            if self.draft == '/compact':
+                # The exact match menu sits above the editable command.
+                menu = '\x1b[1;7m› /compact  summarize conversation to prevent hitting the context limit\x1b[0m\n\n'
+                return screen(self.draft, self.history, harness=self.harness, prefix=menu)
             return super().frame()
         rows = self.outcome(self.now - self.accepted_at)
         return screen(self.draft, self.history + rows, harness=self.harness)
@@ -2649,7 +2653,10 @@ class VerifyCompactTests(unittest.TestCase):
                   patch.object(m.signal, 'signal'),
                   patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)),
                   redirect_stdout(out), redirect_stderr(err)):
-                code = m.main()
+                try:
+                    code = m.main()
+                except SystemExit as exit:
+                    code = exit.code
             result = json.loads(out.getvalue() if code == 0 else err.getvalue())
             if code == 1:
                 resolve.assert_not_called()
@@ -2703,17 +2710,23 @@ class VerifyCompactTests(unittest.TestCase):
         self.assertEqual(terminal.actions, ['typed:/compact', 'Enter'])
 
     def test_pre_enter_notice_is_stale(self):
-        class NoticeDuringTyping(CompactTerminal):
-            def type_command(self, text):
-                super().type_command(text)
-                self.history += COMPACT_COMPLETE + '\n' + COMPACT_REFUSAL + '\n'
+        for notice in (COMPACT_COMPLETE, COMPACT_REFUSAL):
+            with self.subTest(notice=notice):
+                terminal = CompactTerminal()
+                type_command = terminal.type_command
 
-        self.assert_unknown(NoticeDuringTyping(), enters=1)
+                def render_before_enter(text):
+                    type_command(text)
+                    terminal.history += notice + '\n'
+
+                terminal.type_command = render_before_enter
+                self.assert_unknown(terminal, enters=1)
 
     def test_quiet_progress_ordinary_receipts_and_other_text_are_unknown(self):
         for rows in ('', '• Compacting context (8s)\n', '› /compact\n',
                      '• Messages to be submitted\n  ↳ /compact\n',
                      '• Context compacted but the task is still running\n',
+                     '• Context compacted · 1m 2s\n',
                      '• The log contains: • Context compacted\n',
                      "  ■ '/compact' is disabled while a task is in progress.\n"):
             with self.subTest(rows=rows):
@@ -2764,26 +2777,25 @@ class VerifyCompactTests(unittest.TestCase):
             with self.subTest(changed=changed):
                 terminal = CompactTerminal()
                 frame = terminal.frame
-                elapsed_at_submit = None
+                last_poll = None
 
                 def capture():
-                    nonlocal elapsed_at_submit
+                    nonlocal last_poll
                     current = frame()
-                    if terminal.draft and terminal.now >= .75:
-                        if elapsed_at_submit != terminal.now:
-                            elapsed_at_submit = terminal.now
-                        else:
-                            if changed == 'cursor':
-                                current.x = 2
-                            elif changed == 'mixed':
-                                return screen('/compact human')
-                            elif changed == 'unknown':
-                                return m.Frame('', -1, -1)
-                            elif changed == 'empty':
-                                return screen()
-                            else:
-                                return screen('/compact', harness='claude')
-                    return current
+                    # The final capture immediately follows a regular poll.
+                    if not terminal.draft or last_poll != terminal.now:
+                        last_poll = terminal.now
+                        return current
+                    if changed == 'cursor':
+                        current.x = 2
+                        return current
+                    if changed == 'mixed':
+                        return screen('/compact human')
+                    if changed == 'unknown':
+                        return m.Frame('', -1, -1)
+                    if changed == 'empty':
+                        return screen()
+                    return screen('/compact', harness='claude')
 
                 terminal.frame = capture
                 self.assert_unknown(terminal, enters=0)
@@ -2806,8 +2818,20 @@ class VerifyCompactTests(unittest.TestCase):
                 setattr(terminal, phase, fail)
                 self.assert_unknown(terminal, enters=enters)
 
+    def test_interruption_after_typing_reports_unknown(self):
+        terminal = CompactTerminal()
+        type_command = terminal.type_command
+
+        def interrupt(text):
+            type_command(text)
+            raise m.DeliveryError('signal-15', 143)
+
+        terminal.type_command = interrupt
+        self.assert_unknown(terminal, enters=0)
+
     def test_ineligible_route_or_argument_never_resolves_a_pane(self):
         for arguments in (('/compact',), ('--typed-command', '/compact now'),
+                          ('--typed-command', '/compact', 'now'),
                           ('--typed-command', '/compact '), ('--typed-command', ' /compact'),
                           ('--typed-command', '/compact\n'), ('--typed-command', '/status'),
                           ('--typed-command', '--literal-exit', '/compact'),
@@ -2845,6 +2869,22 @@ class VerifyCompactTests(unittest.TestCase):
                 self.assertFalse(result['input_attempted'])
                 self.assertEqual(terminal.actions, [])
                 self.assertEqual(terminal.draft, draft)
+
+    def test_new_draft_during_final_readiness_check_is_preserved(self):
+        terminal = CompactTerminal()
+        frame = terminal.frame
+
+        def capture():
+            if terminal.frames == 2:
+                terminal.draft = '/status'
+            return frame()
+
+        terminal.frame = capture
+        code, result = self.compact(terminal)
+        self.assertEqual(code, 2, result)
+        self.assertEqual(result['reason'], 'input-changed-before-paste')
+        self.assertEqual(terminal.actions, [])
+        self.assertEqual(terminal.draft, '/status')
 
     def test_unselected_compact_still_uses_ordinary_receipt_and_route(self):
         for typed in (True, False):
