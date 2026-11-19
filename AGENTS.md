@@ -65,6 +65,11 @@ package at the root uses the Nix flake; its Python helpers also live under
 
 ## Build and test
 
+Run `nix develop --command bazel test //:portable_tools_test` for the
+Linux x86-64 shell and monitor checks: Crystal, standup, and quota-reset
+monitor tests (including the mutation check). The suite is defined in the
+root `BUILD.bazel`.
+
 Run `nix flake check` for the packaged harness-control unit, package,
 transport, and native helper checks. Run `nix build .#harness-control` when
 verifying the built executable. Also run
