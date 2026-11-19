@@ -35,14 +35,17 @@ deviation. Assumed everywhere below.
    `org/ROSTER.md`, including lane authority, worker bounds, resource leases,
    audit links and active standup cadence. Every artifact type whose trigger fires gets produced no
    matter how few agents wear the hats; **an unfired trigger (a sprint with no
-   escalations) owes nothing.** Sizing is short and lives here.
+   escalations) owes nothing.** Launch named operational leads and expressly
+   requested audit lanes using [named lane dispatch](../spawn-agent/SKILL.md#named-lane-dispatch).
+   Sizing is short and lives here.
 3. **[decompose]** — the lead builds the tracer bullet, refines the spec's
    contracts into boundary tests, cuts work packages, runs the necessity
    challenge, and calls **[pack]** for each worker. → produces work packages,
    boundary tests, packed contexts.
-4. **[implement]×N** — workers build their packages in parallel, each in its
-   own worktree/branch, inside firewalled scope, and **self-review** against
-   the acceptance criteria before handing off. → produces commits + status.
+4. **[implement]×N** — named implementers dispatched by **[decompose]**
+   build their packages in parallel, each in its own worktree and branch,
+   inside firewalled scope, and **self-review** against the acceptance
+   criteria before handing off. → produces commits + status.
 5. **[standup]** and **[crystal]** run *alongside* the fan-out (see Wiring).
 6. **[council-review]** — `/council-review PR #N`: formal cross-provider
    rounds to fixpoint on each frozen, pushed PR head; rerunning the same
@@ -74,8 +77,10 @@ complete record. In the **full** composition:
   blocked past threshold, interface change, or the roster heartbeat.
 - **deviations → adjudicator:** `LOGGED → ADJUDICATED` by the next standup's
   adjudicator.
-- **tactical task → lane:** bounded task reports carry acceptance evidence and
-  judgment calls; the lane reviews each diff before assigning another task.
+- **tactical task → lane:** an assigning lead or operator can explicitly
+  authorize an internal helper for a bounded task. Its report covers that
+  task's evidence and judgment calls. The lane retains package ownership and
+  reviews each diff before assigning another task.
 - **review → integrate:** each ACCEPTED package flows to integrate immediately,
   after any executive audit explicitly required by its authority envelope.
 - **lifecycle → ledger:** material control/receipt, resource and retirement
@@ -92,7 +97,8 @@ on the removed one gets an explicit substitute:
 - **no `decompose`:** `implement` runs in **whole-spec mode**; the single
   implicit package enters READY on the implementer's stated assumptions and
   the sprint enters EXECUTING directly — see the no-decomposition rows in
-  `STATES.md`.
+  `STATES.md`. A named whole-spec implementer uses the same
+  [named lane dispatch](../spawn-agent/SKILL.md#named-lane-dispatch).
 Write each variety as its own short root file: the skills it composes, in
 order, plus its wiring and its re-routes. Never a flag on this file.
 

@@ -138,6 +138,12 @@ and treats one forming as the defect it is.
 
 - **Owns:** a verdict against a named state (the sha), findings with
   evidence and severity, and clearances that were actually checked.
+- **Verifies:** use the project's established checks on the normal execution
+  path and honor its restrictions. Before an intrusive diagnostic, confirm
+  explicit authority for the run and its bounds. Record the authorization or
+  the reason the step was omitted, along with any diagnostic observations,
+  against the reviewed revision. See the
+  [review verification checklist](../skills/review/SKILL.md#verification-scope).
 - Never a fork of the agent under review. One seat per provider. An
   unavailable foreign seat stays empty and is recorded as empty.
 - Seats run at the Lead tier (Opus / Sol). A Frontier model reviews only

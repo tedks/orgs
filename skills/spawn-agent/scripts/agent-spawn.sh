@@ -501,7 +501,7 @@ if [[ -n "$prompt_file" ]]; then
         exit 0
     else
         status=$?
-        echo "Error: task transport failed; child remains in $target ($pane_id). Inspect before retrying." >&2
+        echo "Child launched; task delivery unconfirmed in $target ($pane_id). Inspect that pane before retrying." >&2
         exit "$status"
     fi
 fi
