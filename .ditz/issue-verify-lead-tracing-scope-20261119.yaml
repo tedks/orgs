@@ -1,0 +1,21 @@
+id: verify-lead-tracing-scope-20261119
+title: Consider a verification checklist prompt for intrusive tracing
+desc: 'Field report: a verification harness wrapped an ordinary product run in strace
+  without a ruling, and the run was killed. The report does not establish which mechanism
+  caused termination. That project subsequently restricted ptrace tracing on ordinary
+  runs. Checklist proposal for consideration: identify whether a run is ordinary verification
+  or an explicitly scoped diagnostic before adding an intrusive tracer. The reported
+  local ruling applies to its originating project.'
+type: task
+component: doctrine
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-19T08:46:47-00:00
+references: []
+log_events:
+- time: 2026-11-19T08:46:47-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
