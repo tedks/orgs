@@ -69,7 +69,9 @@ Track that identity evidence separately from the task's transport receipt.
 
 Choose the briefing path before sending the brief. Use identity-first for
 migrations, explicit identity-first requests, and cases where a combined
-call cannot establish the required live identity.
+call cannot establish the required live identity. For migrations, complete
+the [migration preflight](../retire-agent/SKILL.md#migration) before any
+outgoing handoff push or exit.
 
 **Combined.** For ordinary lanes, supply the brief in the launch as prompt
 text or with `--prompt-file` when you can establish both identity and
@@ -104,8 +106,9 @@ decide whether to steer or stop it.
    provider, model and worktree. If identity mismatches or remains
    unverifiable, withhold the brief, report the blocker and alert the
    accountable lead. Record the brief as withheld and preserve any child.
-4. After verification, and after the [migration authority and shard checks](../../doctrine/ROLES.md#handoff-and-migration-any-hat)
-   when applicable, send the brief on the same socket. Use
+4. Verify live identity before briefing. For a migration, complete the
+   [authority and shard checks and build the private brief](../retire-agent/SKILL.md#migration).
+   Send the exact brief file at `"$brief"` on the same socket with
    `SPAWN_TMUX_SOCKET="$socket" scripts/tmux-message.sh send "$pane_id" --prompt-file "$brief"`
    and verify a fresh receipt.
 

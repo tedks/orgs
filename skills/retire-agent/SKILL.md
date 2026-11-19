@@ -50,15 +50,6 @@ or process-end proof to make the procedure finish.
 - `scripts/retire.sh %PANE --waiting`: the same sequence, with the pending
   human decision and its owner named in the shard.
 
-For a migration, follow the [authority and shard rules](../../doctrine/ROLES.md#handoff-and-migration-any-hat)
-and the separate [identity-first launch](../spawn-agent/SKILL.md#named-lane-dispatch).
-The legacy `retire.sh --handoff` wrapper attaches the shard to the launch
-prompt before the controller can verify the live successor. Use the separate
-launch without a task, verify the live identity and the exact shard bytes
-from a fresh fetch of the approved private remote, then brief. Record the
-new owner before the successor acts. The successor reconstructs from
-artifacts and writes its first durable record before acting.
-
 Offer the waiting-list message to **every** agent, including Utility. An agent
 may decline or report DONE without leaving a shard. In either case the caller
 writes the same operational shard with `author: "caller"`, a
@@ -71,10 +62,45 @@ Honestly name the source and uncertainty.
 Do not invent an agent's own-word thanks. Personal thanks are separate from
 operational recovery. Off-duty is not authorization to resume product work.
 
-The published launcher supports explicit model selection for Claude and
-Codex. Shared task delivery for agy is unsupported. Report a blocked
-migration when the requested route cannot supply the required identity and
-receipt.
+## Migration
+
+Follow the [authority and shard rules](../../doctrine/ROLES.md#handoff-and-migration-any-hat).
+A CTO's own migration requires approval from `orgs-cto-self-migration-approver`. Before
+any outgoing handoff push or exit, confirm that the requested successor
+provider and model are supported, that the live identity can be verified
+through the selected launch route, and that the sender supports a fresh
+application receipt on that route. Confirm that `doctrine.roles_path`
+resolves to the configured, readable `ROLES.md`. The published launcher
+supports explicit model selection for Claude and Codex. Shared task
+delivery for agy is unsupported. If any prerequisite fails, report the
+migration blocker before the outgoing push or exit.
+
+The legacy `retire.sh --handoff` wrapper is unsuitable for an approved
+migration because it attaches the shard to the launch prompt before the
+controller can verify the live successor. Use the separate
+[identity-first launch](../spawn-agent/SKILL.md#named-lane-dispatch) without
+a brief. Verify the live successor and fetch the approved private remote
+afresh. Record the fetched commit SHA and verify the exact shard bytes at
+the assigned shard path in that commit against the outgoing handoff.
+
+Build a new brief file in a directory accessible only to the controller.
+Use this order and separate the three parts with two LF bytes each. Keep
+the shard bytes intact.
+
+1. The cold-start instruction below.
+2. The shard bytes read directly from the verified fetched commit and
+   assigned path using `git cat-file blob "$verified_commit:$shard_path"`.
+3. The configured `ROLES.md` from `doctrine.roles_path`.
+
+```text
+Reconstruct state from this shard and committed artifacts alone. File any protocol defect first. Establish your identity and write your first durable record before acting.
+```
+
+Keep the brief private and unchanged from construction through delivery.
+Pass that exact file to `tmux-message send "$pane_id" --prompt-file "$brief"`
+on the pinned socket and verify its fresh receipt. Withhold the brief if
+live identity or shard verification fails. Record the new owner before the
+successor acts.
 
 ## Evidence and limits
 
