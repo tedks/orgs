@@ -26,3 +26,10 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-19T08:46:51-00:00
+  who: Ted Smith
+  what: commented
+  comment: "November 18\u201319 field report: in five retirements of pane-root agents,
+    the initial offer was ambiguous and observing the original event on resume verified
+    the handoff. All five later remained pending-exit after pane closure. The independent
+    exit-witness gap is tracked under retire-agent-pane-closes-before-notice-20261115."
