@@ -1,0 +1,22 @@
+id: tmux-compact-refused-during-turn-20261119
+title: Distinguish a refused Codex /compact from confirmed compaction
+desc: "Two field observations on November 18\u201319: Codex refused typed /compact
+  as disabled during a task even though the immediately preceding pane read showed
+  no busy marker. The reporter found that three reads ten seconds apart and checking
+  for refusal text helped. This is an observed workaround. A quiet read alone cannot
+  establish command success. Investigate command-specific evidence of refusal and
+  a fresh compaction boundary, retaining an unknown outcome where neither is observable.
+  Related: compact-unconfirmed-review-notice."
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-19T08:46:46-00:00
+references: []
+log_events:
+- time: 2026-11-19T08:46:46-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
