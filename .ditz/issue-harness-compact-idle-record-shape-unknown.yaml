@@ -41,3 +41,10 @@ log_events:
 
     Triage records accountability and next action; it does not itself start an implementation
     lane or change an existing pause.'
+- time: 2026-11-19T08:46:53-00:00
+  who: Ted Smith
+  what: commented
+  comment: "November 18\u201319 field report: self_compact on a Claude session returned
+    idle_record_shape_unknown and did not dispatch. This extends the reported symptom
+    to a Claude target. Whether it shares a parser cause with the original Codex-target
+    observation is unknown."
