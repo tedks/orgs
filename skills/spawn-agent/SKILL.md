@@ -48,12 +48,25 @@ trust modal. Never answer a modal with a task's Enter.
 ### Named lane dispatch
 
 Give each named operational lead, implementer or expressly requested audit
-lane a named, interactive tmux window of its own. Launch with
-`scripts/agent-spawn.sh SESSION:WINDOW AGENT WORKTREE --model MODEL`, using the
-assigned worktree and requested model. Use the reported socket, window and
-pane to locate the child. Match the live pane, provider, selected model and
-worktree to the assignment. Track that identity evidence separately from
-the task's existing transport receipt.
+lane a named, interactive tmux window of its own. Use `scripts/tmux-info.sh`
+to identify the project session. For ordinary dispatch, use its existing
+session name in `SESSION:WINDOW` and choose a new window name. Create a tmux
+session only when the request explicitly calls for a separate session or
+the project has no existing session.
+
+For example, with the `project` session already running, launch a new
+`api-impl` window with the assigned worktree, requested model and brief.
+
+```bash
+scripts/agent-spawn.sh project:api-impl codex ./api-impl --model MODEL \
+  --prompt-file /path/to/brief
+```
+
+Check that the reported live pane is in the chosen session and new window
+on the reported socket. A different session or window is an identity
+mismatch. Match the live provider, selected model and worktree to the
+assignment. Track that identity evidence separately from the task's
+existing transport receipt.
 
 - For ordinary lanes, supply the brief in the combined launch as prompt text
   or with `--prompt-file` when you can establish both identity and delivery.
