@@ -337,7 +337,13 @@ class DeliveryTests(unittest.TestCase):
             pending = Path(tmp) / 'pending'
             pending.mkdir()
             err = io.StringIO()
-            with patch.object(m, 'options', return_value=m.options(['%1', '--typed-command', '/x '])), patch.object(m, 'Tmux', return_value=SimpleNamespace(identity='0:%1', pane='%1')), patch.object(m, 'pane_lock', return_value=nullcontext()), patch.object(m.Sender, 'deliver', return_value={'status': 'delivered'}), redirect_stdout(io.StringIO()), patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)), redirect_stderr(err):
+            with (patch.dict(os.environ, XDG_STATE_HOME=tmp),
+                  patch.object(m, 'options', return_value=m.options(['%1', '--typed-command', '/x '])),
+                  patch.object(m, 'Tmux', return_value=Terminal()),
+                  patch.object(m, 'pane_lock', return_value=nullcontext()),
+                  patch.object(m.Sender, 'deliver', return_value={'status': 'delivered'}),
+                  patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)),
+                  redirect_stdout(io.StringIO()), redirect_stderr(err)):
                 self.assertEqual(m.main(), 2)
             result = json.loads(err.getvalue())
             self.assertEqual(result['input_method'], 'typed')
