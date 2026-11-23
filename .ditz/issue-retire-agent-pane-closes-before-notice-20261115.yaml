@@ -32,3 +32,11 @@ log_events:
     One reporter proposes process end as an alternative final receipt. That proposal
     would change the evidence contract and has no ruling. Retain separate evidence
     for process end and the native session notice."
+- time: 2026-11-23T19:24:13-00:00
+  who: Ted Smith
+  what: commented
+  comment: Lang Weave reproduced this on 2026-11-23. A standalone Codex pane disappeared
+    after one guarded typed /exit. The agent-authored private shard was verified and
+    its original PID ended, but the terminal resume notice could no longer be read.
+    On the other lane, retaining its verified window before exit preserved the terminal
+    notice. Both exits were voluntary. No command was replayed.
