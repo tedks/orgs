@@ -775,11 +775,11 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
 
     def test_osc8_url_delivers_with_a_fresh_receipt(self):
         url = 'https://example.org/relay?q=one&next=two'
-        for end in ('\x1b\\', '\x07'):
-            with self.subTest(terminator=end):
-                t = Terminal(payload=f'Read {url} please')
+        for end, dropped in (('\x1b\\', 0), ('\x07', 0), ('\x1b\\', 2)):
+            with self.subTest(terminator=end, dropped_enters=dropped):
+                t = Terminal(payload=f'Read {url} please', dropped=dropped)
                 decorated = f'\x1b]8;id=relay;{url}{end}{url}\x1b]8;;{end}'
-                t.history = f'› {decorated}\n\n'  # An unrelated old hyperlink.
+                t.history = f'› Read {decorated} please\n\n'
                 original = t.frame
 
                 def styled():
@@ -790,9 +790,37 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
                     return frame
 
                 t.frame = styled
+                if dropped:
+                    with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
+                        deliver(t)
+                    self.assertEqual(t.actions, ['paste', 'Enter', 'Enter'])
+                    continue
                 self.assertEqual(deliver(t)['receipt'], 'submitted')
                 self.assertEqual(t.submitted, t.payload)
                 self.assertEqual(t.actions, ['paste', 'Enter'])
+
+    def test_wrapped_osc8_url_delivers_with_row_local_pairs(self):
+        url = 'https://example.org/' + 'segment-' * 28 + 'end?q=one'
+        t = Terminal(payload=f'Read {url}')
+        # tmux capture -e reopens and closes the same hyperlink on each row.
+        pieces = (url[:153], url[153:])
+        rows = [f'  \x1b]8;;{url}\x1b\\{part}\x1b]8;;\x1b\\' for part in pieces]
+        rendered = 'Read\n' + '\n'.join(rows)
+        original = t.frame
+
+        def wrapped():
+            frame = original()
+            if t.draft:
+                frame.y += len(rows)
+                frame.x = 2 + len(pieces[-1])
+            frame.raw = frame.raw.replace(t.payload, rendered)
+            frame.history = frame.history.replace(t.payload, rendered)
+            return frame
+
+        t.frame = wrapped
+        self.assertEqual(deliver(t)['receipt'], 'submitted')
+        self.assertEqual(t.submitted, t.payload)
+        self.assertEqual(t.actions, ['paste', 'Enter'])
 
     def test_osc8_rejects_malformed_and_mixed_visible_input(self):
         url = 'https://example.org/link'
@@ -1354,6 +1382,18 @@ class PasteJournalTests(unittest.TestCase):
         retry = Terminal(payload='Fresh payload after interrupted send')
         code, result = self.send(retry)
         self.assertEqual((code, result['blocking_attempt_id'], retry.actions), (2, record['id'], []))
+
+    def test_crash_during_completed_cleanup_does_not_strand_payload(self):
+        t = Terminal()
+        with patch.object(m.PasteJournal, 'cleanup_completed', side_effect=SystemExit(99)):
+            with self.assertRaises(SystemExit):
+                self.send(t)
+        root = self.root / 'tmux-message'
+        completed, = root.iterdir()
+        self.assertTrue(completed.name.startswith('.'))
+        self.assertTrue((completed / 'message').exists())
+        self.assertEqual(self.command('--unresolved')[1], [])
+        self.assertFalse(completed.exists())
 
 
 class DiagnosticTests(unittest.TestCase):

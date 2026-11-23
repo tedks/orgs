@@ -906,8 +906,8 @@ assert m.state(owned, '/compact', 11, y) == 'busy'
 assert m.state(owned, 'different', 10, y) == 'busy'
 PYTEST
 
-# Legacy Claude co-submit recognition shares the public sender's exact-text /
-# measured-marker predicate and freezes only a private fingerprint.
+# Legacy Claude co-submit recognizes exact text or a measured marker and
+# freezes only a private fingerprint.
 python3 - "$SCRIPT_DIR/claude-send-screen.py" "$SCRIPT_DIR/fixtures/claude-send/claude-combined-composer.ansi" <<'PYTEST'
 import importlib.util, sys, tempfile
 from pathlib import Path

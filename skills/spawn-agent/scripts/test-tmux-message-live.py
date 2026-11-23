@@ -75,9 +75,11 @@ def test():
             deadline = time.monotonic() + 5
             while not state.exists() and time.monotonic() < deadline:
                 time.sleep(.05)
-            env = dict(os.environ, SPAWN_TMUX_LABEL=label)
+            env = dict(os.environ, SPAWN_TMUX_LABEL=label, XDG_STATE_HOME=directory,
+                       TMPDIR=directory, CLAUDE_SEND_LOCK_DIR=str(Path(directory) / 'locks'))
             env.pop('SPAWN_TMUX_SOCKET', None)
-            result = subprocess.run([str(Path(__file__).with_name('tmux-message.sh')), 'send', pane,
+            entry = str(Path(__file__).with_name('tmux-message.sh'))
+            result = subprocess.run([entry, 'send', pane,
                                      'Real tmux test\nActual message\nUnicode λ'], env=env,
                                     text=True, capture_output=True, timeout=35)
             assert result.returncode == 0, result.stderr
@@ -86,6 +88,37 @@ def test():
             observed = json.loads(state.read_text())
             assert observed == {'pastes': 1, 'enters': 2, 'accepted': True}, observed
             print('PASS: private real tmux, collapsed paste, swallowed Enter, queued receipt, one paste/two Enters')
+
+            first_payload = 'Synthetic stranded paste'
+            with subprocess.Popen([entry, 'send', pane, '--stable-window', '0', '--submit-delay', '0',
+                                   '--poll-interval', '1', '--render-wait', '.4', '--receipt-wait', '.4',
+                                   first_payload], env=env, text=True,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE) as first:
+                deadline = time.monotonic() + 5
+                marker = f'[Pasted Content {len(first_payload)} chars]'
+                while time.monotonic() < deadline:
+                    screen = subprocess.check_output(tmux + ['capture-pane', '-p', '-t', pane], text=True)
+                    if marker in screen:
+                        break
+                    time.sleep(.05)
+                else:
+                    raise AssertionError('first paste was never visible in the disposable pane')
+                assert first.poll() is None, 'first sender finished before the concurrent send'
+                second = subprocess.run([entry, 'send', pane, '--stable-window', '0',
+                                         'Another synthetic message'], env=env, text=True,
+                                        capture_output=True, timeout=10)
+                _, error = first.communicate(timeout=10)
+                assert first.returncode == 3, error
+            report = json.loads(error)
+            assert report['submit_not_attempted'] is True and report['enters'] == 0, report
+            assert second.returncode == 2, second
+            deferred = json.loads(second.stderr)
+            assert deferred['blocking_attempt_id'] == report['attempt_id'] and not deferred['input_attempted'], deferred
+            observed = json.loads(state.read_text())
+            assert observed == {'pastes': 2, 'enters': 2, 'accepted': True}, observed
+            pending = Path(report['pending_file'])
+            assert pending.read_bytes() == first_payload.encode(), report
+            print('PASS: competing sender defers after zero-Enter attempt, preserving pending bytes and pane input')
         finally:
             subprocess.run(tmux + ['kill-server'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 

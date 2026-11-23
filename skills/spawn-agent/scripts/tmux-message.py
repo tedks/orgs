@@ -661,7 +661,7 @@ class Tmux:
         return subprocess.run(self.base + list(args), check=True, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, text=True, timeout=5).stdout
 
-    def receiver_identity(self):
+    def receiver_identity(self, *, allow_dead=False):
         # list-panes and an exact row filter avoid display-message's fallback
         # on missing targets. A respawn can retain the pane ID but changes PID.
         fields = ("pid", "pane_id", "socket_path", "start_time", "pane_pid", "pane_tty", "pane_dead")
@@ -672,14 +672,16 @@ class Tmux:
             if len(values) != len(fields) or ":".join(values[:2]) != self.identity:
                 continue
             receiver = dict(zip(fields, values))
-            if (receiver.pop("pane_dead") == "0" and Path(receiver["socket_path"]).is_absolute()
+            dead = receiver.pop("pane_dead")
+            if ((dead == "0" or (allow_dead and dead == "1")) and Path(receiver["socket_path"]).is_absolute()
                     and all(re.fullmatch(r"[1-9][0-9]*", receiver[k]) for k in ("start_time", "pane_pid"))
                     and receiver["pane_tty"]):
                 return receiver
         raise DeliveryError("receiver-changed")
 
-    def check_receiver(self):
-        if getattr(self, "receiver", None) is not None and self.receiver_identity() != self.receiver:
+    def check_receiver(self, *, allow_dead=False):
+        if (getattr(self, "receiver", None) is not None
+                and self.receiver_identity(allow_dead=allow_dead) != self.receiver):
             raise DeliveryError("receiver-changed")
 
     def frame(self):
@@ -689,7 +691,9 @@ class Tmux:
         before = self.run("display-message", "-p", "-t", self.pane, fmt).strip()
         history = self.run("capture-pane", "-e", "-p", "-t", self.pane, "-S", "-2000")
         after = self.run("display-message", "-p", "-t", self.pane, fmt).strip()
-        self.check_receiver()
+        # A retained dead pane can show the original process's final exit
+        # notice. Only capture is allowed after death, never key delivery.
+        self.check_receiver(allow_dead=True)
         values = before.split(":")
         if before != after or len(values) != 5 or values[-1] != "0":
             return Frame("", -1, -1)
@@ -816,9 +820,21 @@ class PasteJournal:
         return hashlib.sha256(json.dumps(tmux.receiver, sort_keys=True).encode()).hexdigest()
 
     def unresolved(self, prefix=""):
-        return sorted(path for path in self.root.iterdir()
-                      if path.name.startswith(prefix) and ATTEMPT_ID.fullmatch(path.name)
-                      and (path / "attempt.json").exists() and not (path / "resolution.json").exists())
+        attempts = []
+        for path in self.root.iterdir():
+            name = path.name.removeprefix(".")
+            if not name.startswith(prefix) or not ATTEMPT_ID.fullmatch(name) or path.is_symlink():
+                continue
+            if path.name.startswith("."):
+                # A stopped sender may have published completion but not
+                # removed the private bytes yet. No pane state is involved.
+                try:
+                    self.cleanup_completed(path)
+                except OSError:
+                    pass
+            elif (path / "attempt.json").exists() and not (path / "resolution.json").exists():
+                attempts.append(path)
+        return sorted(attempts)
 
     def prepare(self, tmux, payload):
         path = self.root / (self.receiver_key(tmux) + "-" + uuid.uuid4().hex)
@@ -828,10 +844,20 @@ class PasteJournal:
                   "sender": {"uid": os.getuid(), "pid": os.getpid(), "parent_pid": os.getppid(),
                              "tmux": os.environ.get("TMUX"), "pane": os.environ.get("TMUX_PANE")},
                   "pending_file": str(path / "message")}
-        write_private(path / "message", payload.encode("utf-8"))
-        self.write_record(path, "attempt", record)
-        sync_directory(self.root)
-        sync_directory(self.root.parent)
+        try:
+            self.write_record(path, "attempt", record)
+            write_private(path / "message", payload.encode("utf-8"))
+            sync_directory(path)
+            sync_directory(self.root)
+            sync_directory(self.root.parent)
+        except (DeliveryError, OSError):
+            # No pane input has occurred. Reclaim the files from this attempt
+            # if the filesystem is still writable.
+            try:
+                self.cleanup_completed(path)
+            except OSError:
+                pass
+            raise
         return path
 
     @staticmethod
@@ -839,9 +865,12 @@ class PasteJournal:
         # Readers never see a partial JSON record. Serialize writes with the
         # same pane lock used for delivery, including offline resolution.
         temporary = path / (".record-" + uuid.uuid4().hex)
-        write_private(temporary, (json.dumps(record) + "\n").encode())
-        temporary.rename(path / (name + ".json"))
-        sync_directory(path)
+        try:
+            write_private(temporary, (json.dumps(record) + "\n").encode())
+            temporary.rename(path / (name + ".json"))
+            sync_directory(path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     @staticmethod
     def read_record(path, name):
@@ -861,11 +890,30 @@ class PasteJournal:
         # Hide a conclusively finished attempt before deleting its payload.
         # A concurrent listing may have seen the old name and skip its removal.
         finished = path.with_name("." + path.name)
-        path.rename(finished)
+        try:
+            path.rename(finished)
+        except OSError:
+            # Keep a terminal disposition if this volume permits updating
+            # the record but not renaming the entire attempt directory.
+            self.mark_finished(path, "transport-finished")
+            (path / "message").unlink(missing_ok=True)
+            sync_directory(path)
+            return
         sync_directory(self.root)
-        (finished / "attempt.json").unlink()
-        (finished / "message").unlink()
-        finished.rmdir()
+        self.cleanup_completed(finished)
+
+    def mark_finished(self, path, disposition):
+        self.write_record(path, "resolution", {"disposition": disposition, "resolved_ns": time.time_ns()})
+
+    @staticmethod
+    def cleanup_completed(finished):
+        (finished / "message").unlink(missing_ok=True)
+        (finished / "attempt.json").unlink(missing_ok=True)
+        try:
+            finished.rmdir()
+        except FileNotFoundError:
+            return  # Another reader completed the same cleanup.
+        sync_directory(finished.parent)
 
     def resolve(self, attempt_id, disposition):
         path = self.root / attempt_id
@@ -937,7 +985,8 @@ class Sender:
         while self.clock() < deadline:
             frame, inp = self.sample()
             now = self.clock()
-            fp = inp.fingerprint()
+            verified_empty = empty_composer(frame, inp)
+            fp = (*inp.fingerprint(), verified_empty)
             # Screen text cannot establish ownership of an attached image.
             # Visual wrapping may split the placeholder across composer rows.
             # Never append or submit alongside its visible placeholder.
@@ -945,7 +994,7 @@ class Sender:
                 raise DeliveryError("image-placeholder")
             if now >= deadline:
                 break
-            if probe_empty_credit and inp.kind != "empty":
+            if probe_empty_credit and not verified_empty:
                 probe_empty_credit = False
             if inp.kind == "modal":
                 raise DeliveryError("modal")
@@ -988,7 +1037,7 @@ class Sender:
             settled = (now - stable_since >= getattr(self.o, "stable_window", self.o.stable_wait)
                        or (probe_empty_credit and inp.kind == "empty"))
             if twice and settled:
-                if empty_composer(frame, inp):
+                if verified_empty:
                     if self.diagnostic is not None:
                         self.diagnostic.predicate("ready", True)
                     return frame, inp
@@ -1221,7 +1270,12 @@ class Sender:
                     if self.diagnostic is not None:
                         self.diagnostic.predicate("pre_enter_ownership", True)
                     self.enters += 1  # Count the attempted key even if tmux fails.
-                    self.tmux.keys("Enter")
+                    try:
+                        self.tmux.keys("Enter")
+                    except DeliveryError as error:
+                        if error.reason == "receiver-changed":
+                            self.enters -= 1  # Target verification failed before dispatch.
+                        raise
                     self.enter_confirmed = True
                     if self.diagnostic is not None:
                         self.diagnostic.event("enter")
@@ -1319,9 +1373,7 @@ def deliver_locked(sender):
                 except OSError:
                     if sender.enter_confirmed:
                         try:
-                            sender.journal.write_record(sender.attempt, "resolution", {
-                                "disposition": "enter-confirmed", "resolved_ns": time.time_ns(),
-                            })
+                            sender.journal.mark_finished(sender.attempt, "enter-confirmed")
                         except OSError:
                             pass  # Keep the original outcome and any surviving evidence.
                 else:

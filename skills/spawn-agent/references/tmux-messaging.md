@@ -9,8 +9,10 @@ the resolved pane ID; deletion afterward causes failure rather than retargeting.
 
 The public sender uses `tmux-message.py` and returns success only with a
 new application receipt. Use this entry point for inter-agent traffic and
-lifecycle commands. The historical `claude-send.sh` is a separate
-transport-only command with its legacy interface and safety contract.
+lifecycle commands. The standalone legacy `claude-send.sh` reports
+`status=sent receipt=unverified`. Its legacy path can append to stable
+ordinary drafts and clear eligible command drafts. Keep that command out of
+inter-agent delivery and lifecycle workflows.
 
 ## Flow
 
@@ -63,8 +65,9 @@ ambiguous payload.
 The observed Codex `[Pasted Content N chars]` form is supported when it is the
 whole input and N matches the payload's Unicode code-point or UTF-16-unit
 length. Visible text outside this whole-paste marker is mixed input and stops
-submission. Existing `[Pasted text …]` markers retain their surrounding-text
-checks. A retained file alone never establishes which paste is on screen.
+submission. For an independently observed fresh `[Pasted text …]` marker,
+visible surrounding text must agree with the outgoing payload. A retained
+file alone never establishes which paste is on screen.
 
 ## Unresolved paste records
 
@@ -73,8 +76,8 @@ An ordinary send publishes a private write-ahead record before pasting.
 `${XDG_STATE_HOME:-~/.local/state}/tmux-message`. Use the same state home
 for cooperating invocations. Each attempt has a unique ID, the resolved
 receiver, the sender process and available tmux context, and the path to
-the owner-only payload file. Listing reads metadata and prints no payload
-bytes or composer text. An attempt that has no outcome may still be active
+the owner-only payload file. Listing reports metadata and finishes interrupted
+cleanup of completed attempts. An attempt with no outcome may still be active
 or have been interrupted. A controlled ambiguous outcome reports `enters`
 and `submit_not_attempted`. The latter says what the sender attempted.
 It provides no evidence of submission by the receiver or another actor.

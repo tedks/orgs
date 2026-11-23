@@ -20,8 +20,8 @@ skill are required. Native verification loads the canonical sibling readers in
 `../_shared/native/`, including the bounded Codex rollout reader; preserve the
 installed skills tree layout. Claude requires the
 installed `capture-session-state.sh` PreToolUse hook and its per-process pointer.
-The sender must provide stable ordinary draft co-submission and guarded typed
-Codex / literal Claude exits. Configure `off_duty.path`, optional expected `off_duty.remote`, and
+The sender must defer on an existing draft and guard typed Codex and literal
+Claude exits. Configure `off_duty.path`, optional expected `off_duty.remote`, and
 `doctrine.roles_path` in the [shared configuration](../_shared/configuration.md).
 The generic handoff path is `<projects_root>/agent-handoffs`; the existing
 repository must have a verified private `origin` with `master`. No remote is
@@ -110,6 +110,10 @@ Pin the explicit pane and verify its identity before each send. Use the shared
 An ambiguous send never authorizes another paste. The sender observes input
 twice eight seconds apart. Existing drafts defer the offer or exit. The
 controller preserves the composer and returns to the pending handoff.
+After a proven pre-input offer deferral, wait for the draft's owner to
+reconcile it. Then resume the same handoff with
+`--resume STATE --retry-deferred offer`. Ambiguous input requires observation
+and disposition before proceeding.
 Claude exit uses the shared `--literal-exit` guard and Codex exit uses
 `--typed-command`.
 Changing input, a modal, missing evidence, or changed process identity defers
@@ -199,8 +203,9 @@ only assigned identity/shard files and forbids live publication or pane control.
 Artifacts are retained for inspection; source/shared heads and dirty state are
 recorded separately as fidelity evidence.
 
-`--stale-offer-draft` also exercises ordinary draft co-submission through the
-published sender. `--baseline-script` runs the original history-discovery
+`--stale-offer-draft` verifies pre-input offer deferral through the shared
+sender. The fixture checks its own draft, clears it, then resumes the same
+handoff with `--retry-deferred offer`. `--baseline-script` runs the original history-discovery
 failure against real Codex before checking the repaired flow. Observation
 continues with `--resume` after a delivered offer exhausts its first minute;
 it never resends that offer. Run without Python optimization so assertions

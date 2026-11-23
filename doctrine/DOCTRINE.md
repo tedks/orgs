@@ -490,13 +490,11 @@ The distilled form, packed verbatim into every role prompt:
 > A blocked procedure calls for a bounded alternate proof of the same
 > invariant, not identical retries. Protect human input before control
 > delivery: input that is changing between two looks means someone is
-> typing, so defer with bounded backoff and a timeout; input that is
-> unchanged is a stale draft, so append your payload and submit both, never
-> clearing or overwriting it; a modal defers. Streaming output with an empty
-> composer permits delivery. Ambiguous input after a paste means stop: never
-> submit, clear, overwrite or blindly repaste. Keep the outgoing payload private;
-> never log unfinished human input. Transport success is not receipt: verify
-> the exact message in submitted history or an explicit pending queue. A
+> typing, so defer with bounded backoff and a timeout. Stable drafts and
+> modals also defer. Streaming output with an empty composer permits delivery.
+> Ambiguous input after paste calls for preserving the outgoing payload and
+> any unresolved attempt privately. Keep unfinished human input out of records.
+> Verify the exact message in submitted history or an explicit pending queue. A
 > queue receipt is not action completion. Retry submission only for exact
 > own unsent payload with no unrelated input/modal, keeping the same event id;
 > recipients check prior disposition before acting. Screen polling has races,
