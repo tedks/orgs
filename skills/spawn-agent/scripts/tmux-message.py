@@ -112,8 +112,8 @@ DIAGNOSTIC_REASONS = frozenset({
     "modal", "human-typing", "existing-input", "unsupported-layout",
     "compact-requires-codex", "compact-refused", "conflicting-command-evidence",
     "pane-width-changed",
-    "unstable-composer", "input-changed-before-paste", "cursor-navigation-unverified",
-    "command-clear-unverified", "input-changed-after-clear", "image-placeholder",
+    "unstable-composer", "input-changed-before-paste", "image-placeholder",
+    "receiver-changed", "unresolved-paste", "attempt-state-unavailable",
 })
 DIAGNOSTIC_STYLES = frozenset({"bold", "dim", "italic", "underline", "inverse", "fg", "bg"})
 DIAGNOSTIC_MAX_ROWS = 12
@@ -527,7 +527,16 @@ def compact_input_is_empty(frame, inp):
     return row is not None and not PROMPT.match(row).group(2).isspace()
 
 
-def records(frame, inp, strict_claude_submitted=False, archived_codex_status=None):
+def empty_composer(frame, inp):
+    if inp.harness == "codex":
+        return compact_input_is_empty(frame, inp)
+    if inp.harness != "claude" or inp.kind != "empty" or inp.cursor != (2, 0):
+        return False
+    return (inp.end == inp.start + 1
+            and not PROMPT.match(styles.strip_ansi(frame.raw).splitlines()[inp.start]).group(2))
+
+
+def records(frame, inp, archived_codex_status=None):
     """Candidate receipts outside the live composer, with semantic row markers.
 
     A new occurrence is required relative to the pre-paste history. Assistant
@@ -561,10 +570,6 @@ def records(frame, inp, strict_claude_submitted=False, archived_codex_status=Non
                 queued = False
             continue
         kind = "queued" if queue_match else "submitted"
-        # Co-submit receipts use the measured flush-left Claude prompt. Do not
-        # let an indented quote or tool transcript masquerade as a user turn.
-        if strict_claude_submitted and kind == "submitted" and not line.startswith("❯"):
-            continue
         text = queue_match.group(1) if queue_match else match.group(2)
         end = index + 1
         while end < len(lines) and lines[end].startswith("  ") and lines[end].strip():
@@ -591,70 +596,6 @@ def records(frame, inp, strict_claude_submitted=False, archived_codex_status=Non
             continue
         result[(kind, normalized(text))] += 1
     return result
-
-
-def claude_combined_receipts(frame, inp, draft, payload):
-    """Count measured Claude user blocks with the co-submit blank separator.
-
-    Claude 2.1.283 can render an appended stable draft as a prompt row, one
-    blank separator, then two-space-indented payload rows. Keep this parser
-    specific to the known co-submit body; ordinary receipt parsing remains
-    unchanged. The existing receipt normalization is intentionally reused for
-    terminal wrapping and indentation.
-    """
-    if inp.harness != "claude" or inp.kind in {"unknown", "modal"}:
-        return 0
-    visible = frame.raw.splitlines()
-    history = frame.history.splitlines() if frame.history else visible
-    prefix_len = max(0, len(history) - len(visible))
-    rows = history[:prefix_len + inp.start]
-    lines = [styles.strip_ansi(row) for row in rows]
-    expected_form = normalized(draft + "\n" + payload)
-    draft_form = normalized(draft)
-    count = 0
-    rule = lambda row: bool(row.strip()) and set(row.strip()) == {"─"}
-
-    for index, line in enumerate(lines):
-        # The measured submitted Claude prompt is flush-left. An indented glyph
-        # can occur inside assistant/tool prose and is not a native user row.
-        if not line.startswith("❯"):
-            continue
-        prompt = PROMPT.match(line)
-        if not prompt or prompt.group(1) != "❯":
-            continue
-        previous = next((row for row in reversed(lines[:index]) if row.strip()), "")
-        if rule(previous):
-            continue
-
-        draft_rows = [prompt.group(2)]
-        end = index + 1
-        while normalized("\n".join(draft_rows)) != draft_form:
-            if end >= len(lines) or not lines[end].startswith("  ") or not lines[end].strip():
-                break
-            draft_rows.append(lines[end][2:])
-            end += 1
-        if normalized("\n".join(draft_rows)) != draft_form:
-            continue
-        # Exactly one measured blank row separates the visible stale draft
-        # from the appended payload. Other blank/cropped layouts stay unknown.
-        if end >= len(lines) or lines[end].strip():
-            continue
-        end += 1
-        payload_rows = []
-        while end < len(lines) and lines[end].startswith("  ") and lines[end].strip():
-            payload_rows.append(lines[end][2:])
-            end += 1
-        if not payload_rows:
-            continue
-        body = "\n".join(draft_rows + payload_rows)
-        following = next((row for row in lines[end:] if row.strip()), "")
-        # Match records()' guards against a composer archived by a full-screen
-        # redraw; that box is not a submitted user row.
-        if FOOTER.match(following) or rule(following):
-            continue
-        if normalized(body) == expected_form:
-            count += 1
-    return count
 
 
 def paste_evidence(inp, payload):
@@ -714,10 +655,34 @@ class Tmux:
         if not re.fullmatch(r"\d+:%\d+", self.identity):
             raise DeliveryError("invalid-target")
         self.pane = self.identity.split(":")[1]
+        self.receiver = None
 
     def run(self, *args):
         return subprocess.run(self.base + list(args), check=True, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, text=True, timeout=5).stdout
+
+    def receiver_identity(self, *, allow_dead=False):
+        # list-panes and an exact row filter avoid display-message's fallback
+        # on missing targets. A respawn can retain the pane ID but changes PID.
+        fields = ("pid", "pane_id", "socket_path", "start_time", "pane_pid", "pane_tty", "pane_dead")
+        fmt = "\t".join("#{" + name + "}" for name in fields)
+        rows = self.run("list-panes", "-t", self.pane, "-F", fmt).splitlines()
+        for row in rows:
+            values = row.split("\t")
+            if len(values) != len(fields) or ":".join(values[:2]) != self.identity:
+                continue
+            receiver = dict(zip(fields, values))
+            dead = receiver.pop("pane_dead")
+            if ((dead == "0" or (allow_dead and dead == "1")) and Path(receiver["socket_path"]).is_absolute()
+                    and all(re.fullmatch(r"[1-9][0-9]*", receiver[k]) for k in ("start_time", "pane_pid"))
+                    and receiver["pane_tty"]):
+                return receiver
+        raise DeliveryError("receiver-changed")
+
+    def check_receiver(self, *, allow_dead=False):
+        if (getattr(self, "receiver", None) is not None
+                and self.receiver_identity(allow_dead=allow_dead) != self.receiver):
+            raise DeliveryError("receiver-changed")
 
     def frame(self):
         # Recheck coordinates around capture; discard frames that scroll/resize
@@ -726,6 +691,9 @@ class Tmux:
         before = self.run("display-message", "-p", "-t", self.pane, fmt).strip()
         history = self.run("capture-pane", "-e", "-p", "-t", self.pane, "-S", "-2000")
         after = self.run("display-message", "-p", "-t", self.pane, fmt).strip()
+        # A retained dead pane can show the original process's final exit
+        # notice. Only capture is allowed after death, never key delivery.
+        self.check_receiver(allow_dead=True)
         values = before.split(":")
         if before != after or len(values) != 5 or values[-1] != "0":
             return Frame("", -1, -1)
@@ -738,15 +706,18 @@ class Tmux:
                      width, int(values[3]))
 
     def keys(self, *keys):
+        self.check_receiver()
         self.run("send-keys", "-t", self.pane, *keys)
 
     def type_command(self, text):
+        self.check_receiver()
         self.run("send-keys", "-t", self.pane, "-l", "--", text)
 
     def paste(self, path):
         name = "tmux-message-" + uuid.uuid4().hex
         self.run("load-buffer", "-b", name, str(path))
         try:
+            self.check_receiver()
             self.run("paste-buffer", "-p", "-r", "-d", "-t", self.pane, "-b", name)
         finally:
             try:
@@ -800,23 +771,204 @@ def pane_lock(identity, timeout):
         os.close(fd)
 
 
+ATTEMPT_ID = re.compile(r"[0-9a-f]{64}-[0-9a-f]{32}")
+DISPOSITIONS = ("receipt-confirmed", "acknowledged", "draft-removed", "receiver-replaced")
+
+
+def sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def write_private(path, content):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as file:
+        file.write(content)
+        file.flush()
+        os.fsync(file.fileno())
+
+
+def private_pending(payload):
+    directory = Path(tempfile.mkdtemp(prefix="tmux-message-"))
+    path = directory / "message"
+    try:
+        write_private(path, payload.encode("utf-8"))
+    except OSError:
+        path.unlink(missing_ok=True)
+        directory.rmdir()
+        raise
+    return path
+
+
+class PasteJournal:
+    """Owner-only attempts published before paste, with metadata-only resolution."""
+
+    def __init__(self):
+        state = os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state"
+        self.root = Path(state) / "tmux-message"
+        if not self.root.is_absolute():
+            raise DeliveryError("attempt-state-unavailable")
+        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        info = self.root.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise DeliveryError("attempt-state-unavailable")
+
+    @staticmethod
+    def receiver_key(tmux):
+        return hashlib.sha256(json.dumps(tmux.receiver, sort_keys=True).encode()).hexdigest()
+
+    def unresolved(self, prefix=""):
+        attempts = []
+        for path in self.root.iterdir():
+            name = path.name.removeprefix(".")
+            if not name.startswith(prefix) or not ATTEMPT_ID.fullmatch(name) or path.is_symlink():
+                continue
+            if path.name.startswith("."):
+                # A stopped sender may have published completion but not
+                # removed the private bytes yet. No pane state is involved.
+                try:
+                    self.cleanup_completed(path)
+                except OSError:
+                    pass
+            elif (path / "attempt.json").exists():
+                try:
+                    resolution = self.read_record(path, "resolution")
+                except (FileNotFoundError, ValueError):
+                    attempts.append(path)
+                else:
+                    disposition = resolution.get("disposition") if isinstance(resolution, dict) else None
+                    if disposition in (*DISPOSITIONS, "transport-finished"):
+                        try:
+                            self.purge_resolved_payload(path)
+                        except OSError:
+                            pass  # Retain the disposition and retry cleanup on a later listing.
+                    elif disposition != "enter-confirmed":
+                        attempts.append(path)
+        return sorted(attempts)
+
+    def prepare(self, tmux, payload):
+        path = self.root / (self.receiver_key(tmux) + "-" + uuid.uuid4().hex)
+        path.mkdir(mode=0o700)
+        record = {"version": 1, "id": path.name, "created_ns": time.time_ns(),
+                  "receiver": tmux.receiver, "lock_identity": tmux.identity,
+                  "sender": {"uid": os.getuid(), "pid": os.getpid(), "parent_pid": os.getppid(),
+                             "tmux": os.environ.get("TMUX"), "pane": os.environ.get("TMUX_PANE")},
+                  "pending_file": str(path / "message")}
+        try:
+            self.write_record(path, "attempt", record)
+            write_private(path / "message", payload.encode("utf-8"))
+            sync_directory(path)
+            sync_directory(self.root)
+            sync_directory(self.root.parent)
+        except (DeliveryError, OSError):
+            # No pane input has occurred. Reclaim the files from this attempt
+            # if the filesystem is still writable.
+            try:
+                self.cleanup_completed(path)
+            except OSError:
+                pass
+            raise
+        return path
+
+    @staticmethod
+    def write_record(path, name, record):
+        # Readers never see a partial JSON record. Serialize writes with the
+        # same pane lock used for delivery, including offline resolution.
+        temporary = path / (".record-" + uuid.uuid4().hex)
+        try:
+            write_private(temporary, (json.dumps(record) + "\n").encode())
+            temporary.rename(path / (name + ".json"))
+            sync_directory(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    @staticmethod
+    def read_record(path, name):
+        return json.loads((path / (name + ".json")).read_text(encoding="utf-8"))
+
+    def report(self, path):
+        record = self.read_record(path, "attempt")
+        try:
+            record["outcome"] = self.read_record(path, "outcome")
+        except FileNotFoundError:
+            # A signal or crash can prevent a controlled outcome. The
+            # write-ahead record establishes no Enter count or receiver state.
+            record["outcome"] = None
+        return record
+
+    def discard(self, path):
+        # Hide a conclusively finished attempt before deleting its payload.
+        # A concurrent listing may have seen the old name and skip its removal.
+        finished = path.with_name("." + path.name)
+        try:
+            path.rename(finished)
+        except OSError:
+            # Keep a terminal disposition if this volume permits updating
+            # the record but not renaming the entire attempt directory.
+            self.mark_finished(path, "transport-finished")
+            self.purge_resolved_payload(path)
+            return
+        sync_directory(self.root)
+        self.cleanup_completed(finished)
+
+    def mark_finished(self, path, disposition):
+        self.write_record(path, "resolution", {"disposition": disposition, "resolved_ns": time.time_ns()})
+
+    @staticmethod
+    def purge_resolved_payload(path):
+        payload = path / "message"
+        if payload.exists():
+            # A listing can see the atomic resolution rename before the
+            # resolving process fsyncs it. Flush it before erasing the bytes.
+            sync_directory(path)
+            payload.unlink(missing_ok=True)
+            sync_directory(path)
+
+    @staticmethod
+    def cleanup_completed(finished):
+        (finished / "message").unlink(missing_ok=True)
+        (finished / "attempt.json").unlink(missing_ok=True)
+        try:
+            finished.rmdir()
+        except FileNotFoundError:
+            return  # Another reader completed the same cleanup.
+        sync_directory(finished.parent)
+
+    def resolve(self, attempt_id, disposition):
+        path = self.root / attempt_id
+        record = self.read_record(path, "attempt")
+        with pane_lock(record["lock_identity"], 10):
+            if not (path / "attempt.json").exists():
+                raise DeliveryError("attempt-not-unresolved")
+            try:
+                resolution = self.read_record(path, "resolution")
+            except FileNotFoundError:
+                self.write_record(path, "resolution", {"disposition": disposition,
+                                                       "resolved_ns": time.time_ns(), "pid": os.getpid()})
+            else:
+                if resolution["disposition"] != disposition:
+                    raise DeliveryError("attempt-already-resolved")
+            self.purge_resolved_payload(path)
+
+
 class Sender:
     def __init__(self, tmux, options, payload, path, clock=time.monotonic, sleep=time.sleep,
-                 diagnostic=None):
+                 diagnostic=None, journal=None):
         self.tmux, self.o, self.payload, self.path = tmux, options, payload, path
         self.clock, self.sleep = clock, sleep
         self.diagnostic = diagnostic
         self.diagnostic_phase = "readiness"
         self.pasted = False
         self.enters = 0
+        self.enter_confirmed = False
         self.typed = getattr(options, "typed_command", False)
         self.verify_compact = getattr(options, "verify_compact", False)
-        self.expected = payload
-        self.stale_draft_length = 0
-        self.original_draft = ""
-        self.draft_harness = ""
-        self.clear_attempted = False
-        self.cleared_command_draft_length = 0
+        self.journal = journal
+        self.attempt = None
+        self.blocking_attempt = None
         self.codex_fallback_footer = None
         if self.typed and getattr(options, "literal_exit", False):
             raise DeliveryError("conflicting-input-modes")
@@ -828,36 +980,12 @@ class Sender:
     def input_evidence(self, inp):
         if self.typed:
             return inp.kind == "text" and inp.text == self.payload
-        if self.stale_draft_length:
-            if inp.kind != "text":
-                return False
-            # Claude 2.1.283 replaces a long bracketed paste with this exact
-            # visible shape. The known draft prefix, one current paste marker,
-            # its appended-line count, harness and end cursor are consistent
-            # with the one append operation above; the hidden bytes stay opaque.
-            # The optional expansion hint is transient and ignored.
-            if self.draft_harness == "claude":
-                return styles.claude_combined_input_evidence(
-                    inp.kind, inp.text, inp.harness, self.original_draft,
-                    self.payload, self.at_end(inp))
-            if inp.text == self.expected:
-                # Preserve Codex's previously accepted exact-text behavior.
-                return True
-            # Codex compresses the appended newline+payload inline after the
-            # untouched draft. Readiness excluded all old paste markers.
-            if (inp.harness == self.draft_harness == "codex" and self.at_end(inp)
-                    and inp.text.startswith(self.original_draft)):
-                marker = re.fullmatch(r"\[Pasted Content ([0-9]+) chars\]", inp.text[len(self.original_draft):])
-                appended = "\n" + self.payload
-                counts = {str(len(appended)), str(len(appended.encode("utf-16-le")) // 2)}
-                return bool(marker and marker.group(1) in counts)
-            return False
         return paste_evidence(inp, self.payload)
 
     def sample(self):
         frame = self.tmux.frame()
         inp = composer(frame,
-                       self.expected if self.pasted and self.codex_fallback_footer else None,
+                       self.payload if self.pasted and self.codex_fallback_footer else None,
                        self.codex_fallback_footer)
         if self.diagnostic is not None:
             self.diagnostic.observe(frame, inp, self.diagnostic_phase)
@@ -866,12 +994,8 @@ class Sender:
     def at_end(self, inp):
         return inp.cursor == (2 + styles.cell_width(inp.text.rsplit("\n", 1)[-1]), inp.text.count("\n"))
 
-    def command_shape(self, frame, inp):
-        return styles.command_rows(frame.raw, "❯" if inp.harness == "claude" else "›", inp.start, inp.end)
-
     def ready(self):
         deadline = self.clock() + self.o.max_wait
-        self.readiness_deadline = deadline
         previous = None
         stable_since = self.clock()
         probed = False
@@ -882,7 +1006,8 @@ class Sender:
         while self.clock() < deadline:
             frame, inp = self.sample()
             now = self.clock()
-            fp = inp.fingerprint()
+            verified_empty = empty_composer(frame, inp)
+            fp = (*inp.fingerprint(), verified_empty)
             # Screen text cannot establish ownership of an attached image.
             # Visual wrapping may split the placeholder across composer rows.
             # Never append or submit alongside its visible placeholder.
@@ -890,7 +1015,7 @@ class Sender:
                 raise DeliveryError("image-placeholder")
             if now >= deadline:
                 break
-            if probe_empty_credit and inp.kind != "empty":
+            if probe_empty_credit and not verified_empty:
                 probe_empty_credit = False
             if inp.kind == "modal":
                 raise DeliveryError("modal")
@@ -933,17 +1058,7 @@ class Sender:
             settled = (now - stable_since >= getattr(self.o, "stable_window", self.o.stable_wait)
                        or (probe_empty_credit and inp.kind == "empty"))
             if twice and settled:
-                if inp.kind == "empty":
-                    if self.diagnostic is not None:
-                        self.diagnostic.predicate("ready", True)
-                    return frame, inp
-                if (inp.kind == "text" and (not self.typed or styles.command_draft(inp.text))
-                        and not getattr(self.o, "literal_exit", False)
-                        and not re.search(r"\[Pasted (?:text|Content)", inp.text, re.I)
-                        and not styles.contains_payload(inp.text, self.payload)
-                        and (not styles.command_like(inp.text)
-                             or (styles.command_draft(inp.text) and self.command_shape(frame, inp)))
-                        and (self.at_end(inp) or ("\n" not in inp.text and inp.cursor == (2, 0)))):
+                if verified_empty:
                     if self.diagnostic is not None:
                         self.diagnostic.predicate("ready", True)
                     return frame, inp
@@ -961,7 +1076,7 @@ class Sender:
                     probe_empty_credit = True
                     previous = None
                     stable_since = self.clock()
-                elif inp.kind in {"text", "suggestion"}:
+                else:
                     last_reason = "existing-input"
                     if not self.o.backoff:
                         raise DeliveryError(last_reason)
@@ -971,12 +1086,6 @@ class Sender:
     def deliver(self):
         result = self._deliver()
         result["input_method"] = "typed" if self.typed or getattr(self.o, "literal_exit", False) else "paste"
-        if self.stale_draft_length:
-            result["stale_draft_length"] = self.stale_draft_length
-        if self.clear_attempted:
-            result["clear_attempted"] = True
-        if self.cleared_command_draft_length:
-            result["cleared_command_draft_length"] = self.cleared_command_draft_length
         return result
 
     def type_payload(self):
@@ -1069,10 +1178,21 @@ class Sender:
         raise DeliveryError("receipt-timeout", 3)
 
     def _deliver(self):
+        if self.journal is not None:
+            blocked = self.journal.unresolved(self.journal.receiver_key(self.tmux) + "-")
+            if blocked:
+                self.blocking_attempt = blocked[0].name
+                raise DeliveryError("unresolved-paste")
         _, inp = self.ready()
+        if self.journal is not None and not (self.typed or getattr(self.o, "literal_exit", False)):
+            try:
+                self.attempt = self.journal.prepare(self.tmux, self.payload)
+            except OSError as error:
+                raise DeliveryError("attempt-state-unavailable") from error
         # One final sample catches input beginning just after the stable period.
         before, check = self.sample()
-        if check.fingerprint() != inp.fingerprint():
+        if (check.fingerprint() != inp.fingerprint()
+                or (check.kind == "empty" and not empty_composer(before, check))):
             raise DeliveryError("input-changed-before-paste")
         if check.harness == "codex":
             rows = styles.strip_ansi(before.raw).splitlines()
@@ -1082,66 +1202,12 @@ class Sender:
             if not compact_input_is_empty(before, check):
                 raise DeliveryError("input-changed-before-paste")
             return self.deliver_compact()
-        if check.kind == "text" and styles.command_like(check.text) and not self.command_shape(before, check):
-            raise DeliveryError("input-changed-before-clear")
-        if check.kind == "text" and not self.at_end(check):
-            home = check
-            # Claude Code 2.1.314 in a scratch tmux pane honored Ctrl-E but
-            # ignored terminal End; Codex uses End. Verify the resulting
-            # cursor before appending. Multiline Claude drafts may defer.
-            self.tmux.keys("C-e" if check.harness == "claude" else "End")
-            while True:
-                before, check = self.sample()
-                remaining = self.readiness_deadline - self.clock()
-                if remaining <= 0:
-                    raise DeliveryError("cursor-navigation-unverified")
-                if check.kind == "text" and check.text == home.text and check.harness == home.harness:
-                    if self.at_end(check):
-                        break
-                    if check.cursor != (2, 0):
-                        raise DeliveryError("cursor-navigation-unverified")
-                elif check.kind != "unknown":
-                    raise DeliveryError("cursor-navigation-unverified")
-                # End can repaint through an unreadable frame or unchanged Home.
-                # Neither grants input authority; no more keys until exact end.
-                self.sleep(min(self.o.poll_interval, remaining))
-        if check.kind == "text" and styles.command_draft(check.text):
-            if not self.command_shape(before, check):
-                raise DeliveryError("input-changed-before-clear")
-            command = check
-            self.clear_attempted = True  # C-u may mutate even if tmux reports failure.
-            self.tmux.keys("C-u")
-            while True:
-                before, check = self.sample()
-                remaining = self.readiness_deadline - self.clock()
-                if remaining <= 0:
-                    raise DeliveryError("command-clear-unverified", 3)
-                if check.kind == "empty" and check.harness == command.harness and self.at_end(check):
-                    self.cleared_command_draft_length = len(command.text)
-                    break
-                if check.kind != "unknown" and check.fingerprint() != command.fingerprint():
-                    raise DeliveryError("command-clear-unverified", 3)
-                # Repaint may retain the command or be unreadable; never clear twice.
-                self.sleep(min(self.o.poll_interval, remaining))
-            before, check = self.sample()
-            if (self.clock() >= self.readiness_deadline or check.kind != "empty"
-                    or check.harness != command.harness or not self.at_end(check)):
-                raise DeliveryError("input-changed-after-clear", 3)
         literal = getattr(self.o, "literal_exit", False)
         if literal and (self.payload != "/exit" or check.harness != "claude"):
             raise DeliveryError("literal-exit-requires-claude-exit")
         resume_before = resume_records(before) if literal else Counter()
         compact_before = styles.strip_ansi(before.history or before.raw).count("• Context compacted")
-        if check.kind == "text":
-            self.stale_draft_length = len(check.text)
-            self.original_draft = check.text
-            self.draft_harness = check.harness
-            self.expected = check.text + "\n" + self.payload
-        claude_co_submit = bool(self.stale_draft_length and self.draft_harness == "claude")
-        baseline = records(before, check, strict_claude_submitted=claude_co_submit,
-                           archived_codex_status=self.codex_fallback_footer)
-        claude_receipt_baseline = (claude_combined_receipts(
-            before, check, self.original_draft, self.payload) if claude_co_submit else 0)
+        baseline = records(before, check, archived_codex_status=self.codex_fallback_footer)
         if literal:
             self.pasted = True  # A failed input command can still change the composer.
             self.diagnostic_phase = "post_paste"
@@ -1151,37 +1217,28 @@ class Sender:
         elif self.typed:
             self.type_payload()
         else:
-            if self.stale_draft_length:
-                # Private ephemeral append bytes; retained pending stays outgoing-only.
-                with tempfile.NamedTemporaryFile(dir=self.path.parent, prefix="append-") as append:
-                    append.write(("\n" + self.payload).encode("utf-8"))
-                    append.flush()
-                    self.pasted = True
-                    self.diagnostic_phase = "post_paste"
-                    if self.diagnostic is not None:
-                        self.diagnostic.event("paste")
-                    self.tmux.paste(Path(append.name))
-            else:
-                self.pasted = True
-                self.diagnostic_phase = "post_paste"
-                if self.diagnostic is not None:
-                    self.diagnostic.event("paste")
-                self.tmux.paste(self.path)
+            # Receipt observation may read a retained dead pane. Establish
+            # liveness separately before marking an outgoing input attempt.
+            self.tmux.check_receiver()
+            self.pasted = True
+            self.diagnostic_phase = "post_paste"
+            if self.diagnostic is not None:
+                self.diagnostic.event("paste")
+            self.tmux.paste(self.attempt / "message" if self.attempt is not None else self.path)
         start = self.clock()
         deadline = start + self.o.render_wait + self.o.submit_delay + self.o.receipt_wait
         owned = None
         evidence_since = None
         last_enter = None
         input_disappeared = False
-        max_enters = 1 if literal or claude_co_submit else 2
-        accepted_forms = {normalized(self.expected)}
+        max_enters = 1 if literal else 2
+        accepted_forms = {normalized(self.payload)}
         while self.clock() < deadline:
             frame, current = self.sample()
             now = self.clock()
             if now >= deadline:
                 break
-            receipt = records(frame, current, strict_claude_submitted=claude_co_submit,
-                              archived_codex_status=self.codex_fallback_footer)
+            receipt = records(frame, current, archived_codex_status=self.codex_fallback_footer)
             if self.diagnostic is not None:
                 self.diagnostic.predicate("receipt_new", False)
             if literal and self.enters == 1 and current.kind == "unknown":
@@ -1204,12 +1261,6 @@ class Sender:
                     if self.diagnostic is not None:
                         self.diagnostic.predicate("receipt_new", True)
                     return {"status": "delivered", "receipt": kind, "enters": self.enters}
-            if (claude_co_submit and self.enters
-                    and claude_combined_receipts(frame, current, self.original_draft, self.payload)
-                    > claude_receipt_baseline):
-                if self.diagnostic is not None:
-                    self.diagnostic.predicate("receipt_new", True)
-                return {"status": "delivered", "receipt": "submitted", "enters": self.enters}
             if current.kind == "modal":
                 raise DeliveryError("modal-after-paste", 3)
             if owned is not None and current.kind == "empty":
@@ -1219,7 +1270,7 @@ class Sender:
                 self.diagnostic.predicate("input_evidence", evidence)
             if evidence:
                 fp = current.fingerprint()
-                if owned is not None and fp != owned and (self.enters or claude_co_submit):
+                if owned is not None and fp != owned and self.enters:
                     raise DeliveryError("input-changed-after-paste", 3)
                 if owned != fp:
                     evidence_since = now
@@ -1230,8 +1281,7 @@ class Sender:
                         and self.enters < max_enters and not input_disappeared):
                     # Refresh receipt AND input immediately before each Enter.
                     confirm, live = self.sample()
-                    fresh = records(confirm, live, strict_claude_submitted=claude_co_submit,
-                                    archived_codex_status=self.codex_fallback_footer)
+                    fresh = records(confirm, live, archived_codex_status=self.codex_fallback_footer)
                     for kind in ("submitted", "queued"):
                         if not literal and self.enters and any(fresh[(kind, form)] > baseline[(kind, form)] for form in accepted_forms):
                             if self.diagnostic is not None:
@@ -1243,8 +1293,14 @@ class Sender:
                         raise DeliveryError("input-changed-before-enter", 3)
                     if self.diagnostic is not None:
                         self.diagnostic.predicate("pre_enter_ownership", True)
-                    self.tmux.keys("Enter")
-                    self.enters += 1
+                    self.enters += 1  # Count the attempted key even if tmux fails.
+                    try:
+                        self.tmux.keys("Enter")
+                    except DeliveryError as error:
+                        if error.reason == "receiver-changed":
+                            self.enters -= 1  # Target verification failed before dispatch.
+                        raise
+                    self.enter_confirmed = True
                     if self.diagnostic is not None:
                         self.diagnostic.event("enter")
                     last_enter = self.clock()
@@ -1296,7 +1352,80 @@ def options(argv=None):
     return o
 
 
+def journal_command(argv):
+    parser = argparse.ArgumentParser(description="Inspect or resolve a private paste attempt without pane input")
+    if argv[0] == "--resolve":
+        parser.add_argument("id")
+        parser.add_argument("--disposition", required=True, choices=DISPOSITIONS)
+    o = parser.parse_args(argv[1:])
+    if argv[0] == "--resolve" and not ATTEMPT_ID.fullmatch(o.id):
+        parser.error("invalid attempt ID")
+    try:
+        journal = PasteJournal()
+        if argv[0] == "--resolve":
+            journal.resolve(o.id, o.disposition)
+            print(json.dumps({"status": "resolved", "id": o.id, "disposition": o.disposition}))
+        else:
+            attempts = []
+            for path in journal.unresolved():
+                try:
+                    attempts.append(journal.report(path))
+                except FileNotFoundError:
+                    # A successful in-flight send can remove its own record.
+                    continue
+            print(json.dumps(attempts))
+    except (DeliveryError, OSError, ValueError, KeyError) as error:
+        reason = error.reason if isinstance(error, DeliveryError) else "attempt-state-unavailable"
+        print(json.dumps({"status": "error", "reason": reason}), file=sys.stderr)
+        return 2
+    return 0
+
+
+def deliver_locked(sender):
+    try:
+        result = sender.deliver()
+    except (DeliveryError, OSError, subprocess.SubprocessError) as error:
+        if sender.attempt is not None:
+            if not sender.pasted or sender.enter_confirmed:
+                # A known Enter restores the existing pending-file ambiguity
+                # path. The journal only blocks possible stranded pastes.
+                try:
+                    if sender.enter_confirmed:
+                        sender.path = private_pending(sender.payload)
+                    sender.journal.discard(sender.attempt)
+                except OSError:
+                    if sender.enter_confirmed:
+                        try:
+                            sender.journal.mark_finished(sender.attempt, "enter-confirmed")
+                        except OSError:
+                            pass  # Keep the original outcome and any surviving evidence.
+                else:
+                    sender.attempt = None
+            else:
+                try:
+                    sender.journal.write_record(sender.attempt, "outcome", {
+                        "status": "ambiguous", "enters": sender.enters,
+                        "submit_not_attempted": sender.enters == 0,
+                        "enter_confirmed": False,
+                        "reason": error.reason if isinstance(error, DeliveryError) else "tmux-operation-failed",
+                    })
+                except OSError:
+                    # Even without final metadata, the write-ahead record and
+                    # original payload remain discoverable and unresolved.
+                    pass
+        raise
+    if sender.attempt is not None:
+        try:
+            sender.journal.discard(sender.attempt)
+        except OSError:
+            # Cleanup cannot take away a verified application receipt.
+            result["attempt_cleanup"] = "failed"
+    return result
+
+
 def main():
+    if sys.argv[1:2] in (["--unresolved"], ["--resolve"]):
+        return journal_command(sys.argv[1:])
     o = options()
     try:
         payload = o.prompt_file.read_bytes().decode("utf-8") if o.prompt_file else o.message
@@ -1314,22 +1443,13 @@ def main():
         except (OSError, ValueError):
             print(json.dumps({"status": "error", "reason": "unsafe-diagnostic-path"}), file=sys.stderr)
             return 1
-    pending = None
+    path = None
     try:
-        pending = Path(tempfile.mkdtemp(prefix="tmux-message-"))
-        path = pending / "message"
-        path.write_bytes(payload.encode("utf-8"))
-        path.chmod(0o600)
+        if o.typed_command or o.literal_exit:
+            path = private_pending(payload)
     except OSError:
-        if diagnostic_file is None:
-            raise  # Preserve the pre-existing opt-out setup failure path.
-        diagnostic_file.abort()
-        if pending is not None:
-            try:
-                (pending / "message").unlink(missing_ok=True)
-                pending.rmdir()
-            except OSError:
-                pass
+        if diagnostic_file is not None:
+            diagnostic_file.abort()
         print(json.dumps({"status": "error", "reason": "pending-file-failed"}), file=sys.stderr)
         return 1
     sender = None
@@ -1341,26 +1461,31 @@ def main():
         tmux = Tmux(o.target)
         sender = Sender(tmux, o, payload, path,
                         diagnostic=StructuralDiagnostic() if diagnostic_file is not None else None)
+        tmux.receiver = tmux.receiver_identity()
+        try:
+            sender.journal = PasteJournal()
+        except OSError as error:
+            raise DeliveryError("attempt-state-unavailable") from error
         with pane_lock(tmux.identity, o.max_wait):
-            result = sender.deliver()
+            result = deliver_locked(sender)
         result["pane"] = tmux.pane
         if diagnostic_file is not None:
             written = diagnostic_file.finish(sender.diagnostic, result["status"], "none",
                                              result["input_method"], sender.enters)
             result["diagnostic_status"] = "written" if written else "write-failed"
         print(json.dumps(result))
-        path.unlink()
-        pending.rmdir()
+        if path is not None:
+            path.unlink()
+            path.parent.rmdir()
         return 0
     except (DeliveryError, OSError, subprocess.SubprocessError) as error:
         pasted = sender is not None and sender.pasted
-        changed = pasted or (sender is not None and sender.clear_attempted)
-        code = error.code if isinstance(error, DeliveryError) else (3 if changed else 2)
-        if changed and code == 2:
+        code = error.code if isinstance(error, DeliveryError) else (3 if pasted else 2)
+        if pasted and code == 2:
             code = 3
         reason = error.reason if isinstance(error, DeliveryError) else "tmux-operation-failed"
-        result = {"status": "ambiguous" if changed else "deferred", "reason": reason,
-                  "pending_file": str(path), "needs_review": changed or reason in {"unsupported-layout", "unstable-composer", "modal"},
+        result = {"status": "ambiguous" if pasted else "deferred", "reason": reason,
+                  "needs_review": pasted or reason in {"unsupported-layout", "unstable-composer", "modal", "unresolved-paste"},
                   "paste_attempted": pasted and not sender.typed,
                   "input_attempted": pasted, "input_method": "typed" if o.typed_command or o.literal_exit else "paste",
                   "enters": sender.enters if sender else 0}
@@ -1371,13 +1496,22 @@ def main():
             if refused:
                 result.update(status="refused", needs_review=False)
         if sender:
-            if sender.clear_attempted:
-                result["clear_attempted"] = True
-            if sender.cleared_command_draft_length:
-                result["cleared_command_draft_length"] = sender.cleared_command_draft_length
-            if sender.stale_draft_length:
-                result["stale_draft_length"] = sender.stale_draft_length
             result["pane"] = sender.tmux.pane
+            if sender.blocking_attempt is not None:
+                result["blocking_attempt_id"] = sender.blocking_attempt
+            if pasted and not sender.typed and not o.literal_exit:
+                result["submit_not_attempted"] = sender.enters == 0
+            path = sender.path
+            if pasted and sender.attempt is not None:
+                if path is None:
+                    path = sender.attempt / "message"
+                if not sender.enter_confirmed:
+                    result["attempt_id"] = sender.attempt.name
+        try:
+            result["pending_file"] = str(path if path is not None else private_pending(payload))
+        except OSError:
+            result["pending_file"] = None
+            result["pending_retention"] = "failed"
         if diagnostic_file is not None and not diagnostic_file.closed:
             if sender is None:
                 diagnostic_file.abort()

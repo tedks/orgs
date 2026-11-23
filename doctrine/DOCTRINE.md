@@ -225,15 +225,13 @@ evidence.
 
 Before control delivery, inspect the composer twice, one settle window
 apart. Input that is changing means someone is typing: defer with bounded
-backoff and a stated timeout. Input that is unchanged is a stale draft: never
-clear or overwrite it, but do not wait on it either; append the payload
-after it and submit both, recording that a draft was co-submitted (its
-length, never its contents). Two messages landing back to back is
-acceptable; a delivery blocked for hours behind a stale line is not. A modal
-still defers. Streaming agent output with an empty composer permits
-delivery. If input becomes ambiguous after a paste, do not submit, clear,
-overwrite or blindly repaste it. Preserve the outgoing payload privately for
-deliberate retry; never record unfinished human text or keys. Screen inspection has races;
+backoff and a stated timeout. A stable draft also defers. The sender
+preserves it without appending, submitting or clearing it. A modal still
+defers. Streaming agent output with an empty composer permits delivery.
+When paste evidence is ambiguous, stop and preserve the outgoing payload
+and any stranded-paste record privately. Never clear, overwrite or blindly
+repaste. Resolve the attempt only with independent evidence. Keep unfinished
+human text and keys out of records. Screen inspection has races;
 bindings must state their limits and cannot promise atomic typing exclusion.
 Transport exit zero is not application receipt: verify submitted history or
 an explicit pending queue for the exact message. A queued message is received,
@@ -492,13 +490,12 @@ The distilled form, packed verbatim into every role prompt:
 > A blocked procedure calls for a bounded alternate proof of the same
 > invariant, not identical retries. Protect human input before control
 > delivery: input that is changing between two looks means someone is
-> typing, so defer with bounded backoff and a timeout; input that is
-> unchanged is a stale draft, so append your payload and submit both, never
-> clearing or overwriting it; a modal defers. Streaming output with an empty
-> composer permits delivery. Ambiguous input after a paste means stop: never
-> submit, clear, overwrite or blindly repaste. Keep the outgoing payload private;
-> never log unfinished human input. Transport success is not receipt: verify
-> the exact message in submitted history or an explicit pending queue. A
+> typing, so defer with bounded backoff and a timeout. Stable drafts and
+> modals also defer. Streaming output with an empty composer permits delivery.
+> Ambiguous input after paste means stop. Preserve the outgoing payload and
+> any unresolved attempt privately. Never clear, overwrite or blindly repaste.
+> A pending file alone never authorizes replay. Keep unfinished human input out of records.
+> Verify the exact message in submitted history or an explicit pending queue. A
 > queue receipt is not action completion. Retry submission only for exact
 > own unsent payload with no unrelated input/modal, keeping the same event id;
 > recipients check prior disposition before acting. Screen polling has races,

@@ -64,7 +64,7 @@ def main():
     parser.add_argument('--shared-skill', type=Path, required=True)
     parser.add_argument('--preflight-only', action='store_true', help='read-only cwd/containment validation; never launch models or create evidence')
     parser.add_argument('--baseline-script', type=Path)
-    parser.add_argument('--stale-offer-draft', action='store_true', help='exercise shared sender stable draft co-submission')
+    parser.add_argument('--stale-offer-draft', action='store_true', help='verify offer deferral with a synthetic stable draft')
     parser.add_argument('--harness', choices=['both', 'codex', 'claude'], default='both', help='independent native diagnosis; acceptance defaults to both')
     parser.add_argument('--codex-model', default='gpt-6-luna')
     parser.add_argument('--claude-model', default='haiku')
@@ -122,6 +122,7 @@ def main():
     label = 'retire-native-' + uuid.uuid4().hex
     tmux = ['tmux', '-L', label]
     environment = dict(os.environ, SPAWN_TMUX_LABEL=label, RETIRE_REPO=str(repo),
+                       XDG_STATE_HOME=str(directory / 'state'), CLAUDE_SEND_LOCK_DIR=str(directory / 'sender-locks'),
                        RETIRE_PRIVATE_CHECK=str(checker), RETIRE_SPAWN_SKILL=str(args.shared_skill.resolve()))
     environment.pop('CODEX_SESSION_ID', None)
     environment.pop('TMUX', None)
@@ -222,15 +223,16 @@ def main():
                 assert not list(records.glob('*-offer.txt')), 'baseline sent an offer before failing'
                 assert not [path for path in records.glob('*.json') if re.fullmatch(r'[0-9a-f]{32}', path.stem)], 'baseline created event state before failing'
                 report['baseline'] = 'verified-original-history-failure'
-            # Deliberately leave this owned ordinary draft unsent. The published
-            # sender must preserve and co-submit it with the retirement offer.
+            draft = 'Synthetic retirement rehearsal reminder.'
+            draft_checked = False
             if args.stale_offer_draft:
-                require(run([*tmux, 'send-keys', '-t', pane, '-l', 'Disposable retirement rehearsal reminder.']))
+                require(run([*tmux, 'send-keys', '-t', pane, '-l', '--', draft]))
             notice = ('claude --resume ' if harness == 'claude' else 'codex resume ') + context['session_id']
             prefix = r'^Resume this session with:[ \t]*\n' if harness == 'claude' else r'^Token usage: [^\n]+\nTo continue this session, run:[ \t]*\n'
             pattern = prefix + r'[ \t]*' + re.escape(notice) + r'[ \t]*$'
             deadline = time.monotonic() + 1200
-            command = [HERE / 'retire.sh', pane, '--retire', '--wait', '60', '--poll', '1']
+            base_command = [HERE / 'retire.sh', pane, '--retire', '--wait', '60', '--poll', '1']
+            command = base_command
             observations = []
             while True:
                 result = run(command, env=environment, timeout=240)
@@ -246,10 +248,20 @@ def main():
                     pending = json.loads(result.stderr)
                 except ValueError as error:
                     raise RuntimeError('retirement failure lacked structured JSON; inspect retained result') from error
+                if args.stale_offer_draft and not draft_checked:
+                    offer = json.loads(Path(pending['state']).read_text())['offer']
+                    assert (offer['status'], offer['reason'], offer['input_attempted']) == ('deferred', 'existing-input', False)
+                    screen = require(run([*tmux, 'capture-pane', '-p', '-t', pane]))
+                    assert any(row in {f'› {draft}', f'❯ {draft}', f'❯\u00a0{draft}'} for row in screen.splitlines())
+                    # Only this disposable fixture's exact draft is cleared.
+                    require(run([*tmux, 'send-keys', '-t', pane, 'C-u']))
+                    command = [*base_command, '--resume', pending['state'], '--retry-deferred', 'offer']
+                    draft_checked = True
+                    continue
                 if (result.returncode != 2 or not pending.get('reason', '').startswith(('DONE not observed;', 'handoff verified; retirement pending original process end and fresh same-session exit notice'))
                         or time.monotonic() >= deadline):
                     require(result)
-                command = [HERE / 'retire.sh', pane, '--retire', '--resume', pending['state'], '--wait', '60', '--poll', '1']
+                command = [*base_command, '--resume', pending['state']]
             require(result)
             states = [json.loads(path.read_text()) for path in records.glob('*.json') if re.fullmatch(r'[0-9a-f]{32}', path.stem)]
             matching = [item for item in states if item['pane'] == pane]
@@ -258,7 +270,7 @@ def main():
             assert state['status'] == 'retired', state['status']
             assert state['offer']['status'] == 'delivered'
             if args.stale_offer_draft:
-                assert state['offer'].get('stale_draft_length') == len('Disposable retirement rehearsal reminder.'), 'ordinary stale draft was not co-submitted'
+                assert draft_checked, 'retirement ran before the synthetic draft deferral check'
             assert state.get('handoff_receipt') and state.get('shard_hash')
             screen = require(run([*tmux, 'capture-pane', '-p', '-J', '-S', '-', '-t', pane]))
             baseline = state['exit_notice']

@@ -47,21 +47,6 @@ def codex_fixture_frame(name):
     return m.Frame((CO_SUBMIT_FIXTURES / (name + '.ansi')).read_text(), x, y)
 
 
-def claude_co_submit_frame(text='', receipt=True):
-    rows = (CO_SUBMIT_FIXTURES / 'claude-co-submit-receipt.ansi').read_text().splitlines()
-    if not receipt:
-        start = next(i for i, row in enumerate(rows)
-                     if row == '❯ Disposable retirement rehearsal reminder.')
-        end = next(i for i, row in enumerate(rows[start:], start)
-                   if row == '● ACK-QUEUE-3155db7fcc5e')
-        del rows[start:end + 1]
-    prompt = next(i for i, row in enumerate(rows) if row == '❯\u00a0')
-    rows[prompt] = '❯\u00a0' + text
-    raw = '\n'.join(rows) + '\n'
-    return m.Frame(raw, 2 + m.styles.cell_width(text.rsplit('\n', 1)[-1]),
-                   prompt + text.count('\n'), raw)
-
-
 class Terminal:
     def __init__(self, payload='hello', dropped=0, collapsed=False, queued=False, delayed=0, draft='', mutate=False):
         self.payload, self.dropped, self.collapsed, self.queued = payload, dropped, collapsed, queued
@@ -73,31 +58,25 @@ class Terminal:
         self.history = ''
         self.actions = []
         self.pane = '%1'
+        self.identity = '100:%1'
+        self.pane_pid = '200'
         self.frames = 0
         self.submitted = None
         self.harness = 'codex'
         self.home = False
-        self.end_moves = True
-        self.end_paint_delay = 0
-        self.end_requested_at = None
-        self.end_unknown_frames = 0
-        self.clear_mode = 'empty'
-        self.clear_unknown_frames = 0
-        self.clear_requested = False
+
+    def receiver_identity(self):
+        return {"pid": "100", "pane_id": self.pane, "socket_path": "/synthetic/tmux",
+                "start_time": "300", "pane_pid": self.pane_pid, "pane_tty": "/dev/pts/1"}
+
+    def check_receiver(self):
+        if hasattr(self, 'receiver') and self.receiver != self.receiver_identity():
+            raise m.DeliveryError('receiver-changed')
 
     def sleep(self, n): self.now += n
     def clock(self): return self.now
 
     def frame(self):
-        if self.clear_requested and self.clear_unknown_frames:
-            self.clear_unknown_frames -= 1
-            return m.Frame('', -1, -1)
-        if self.end_requested_at is not None and self.end_unknown_frames:
-            self.end_unknown_frames -= 1
-            self.frames += 1
-            return m.Frame("", -1, -1)
-        if self.end_moves and self.end_requested_at is not None and self.now >= self.end_requested_at + self.end_paint_delay:
-            self.home = False
         self.frames += 1
         history = self.history
         if self.accepted_at is not None and self.now >= self.accepted_at + self.delayed:
@@ -124,16 +103,6 @@ class Terminal:
 
     def keys(self, *keys):
         self.actions.extend(keys)
-        if keys == (('C-e' if self.harness == 'claude' else 'End'),) and self.end_moves:
-            self.end_requested_at = self.now
-            if not self.end_paint_delay:
-                self.home = False
-        if keys == ('C-u',):
-            self.clear_requested = True
-            if self.clear_mode == 'empty':
-                self.draft = ''
-            elif self.clear_mode == 'changed':
-                self.draft = 'new human text'
         if keys == ('Enter',):
             self.enters += 1
             if self.enters > self.dropped:
@@ -207,172 +176,6 @@ def deliver(t, **kw):
 
 
 class DeliveryTests(unittest.TestCase):
-    def test_command_draft_cleared_without_execution_both_harnesses(self):
-        for harness in ('codex', 'claude'):
-            for command in ('/compact old context', '!echo old context'):
-                for home in (False, True):
-                    with self.subTest(harness=harness, command=command, home=home):
-                        t = Terminal(draft=command)
-                        t.harness, t.home = harness, home
-                        result = deliver(t)
-                        self.assertEqual(t.actions, (['C-e' if harness == 'claude' else 'End'] if home else []) + ['C-u', 'paste', 'Enter'])
-                        self.assertEqual(t.submitted, t.payload)
-                        self.assertEqual(result['cleared_command_draft_length'], len(command))
-                        self.assertTrue(result['clear_attempted'])
-                        self.assertNotIn('stale_draft_length', result)
-
-    def test_command_clear_allows_typed_outgoing(self):
-        t = Terminal(payload='/status', draft='/compact old context')
-        result = deliver(t, typed_command=True)
-        self.assertEqual(t.actions, ['C-u', 'typed:/status', 'Enter'])
-        self.assertEqual(t.submitted, '/status')
-        self.assertTrue(result['clear_attempted'])
-
-    def test_command_like_invalid_or_replay_drafts_never_mutate(self):
-        for draft in (' /compact', '/tmp/path', '/compact;', '/compact ' + 'x' * 200,
-                      '/compact\ncontext', '!', '!echo\ncontext', '/compact hello',
-                      '/compact [Pasted text #1 +2 lines]'):
-            for harness in ('codex', 'claude'):
-                with self.subTest(draft=draft, harness=harness):
-                    t = Terminal(draft=draft)
-                    t.harness = harness
-                    with self.assertRaises(m.DeliveryError): deliver(t)
-                    self.assertEqual(t.actions, [])
-
-    def test_command_clear_unknown_repaint_then_empty(self):
-        for harness in ('codex', 'claude'):
-            t = Terminal(draft='/compact old context')
-            t.harness, t.clear_unknown_frames = harness, 2
-            deliver(t)
-            self.assertEqual(t.actions, ['C-u', 'paste', 'Enter'])
-            self.assertEqual(t.submitted, 'hello')
-
-    def test_command_clear_failure_never_sends_or_claims_cleared(self):
-        for mode, unknown in (('unchanged', 0), ('changed', 0), ('empty', 100)):
-            for harness in ('codex', 'claude'):
-                t = Terminal(draft='/compact old context')
-                t.harness, t.clear_mode, t.clear_unknown_frames = harness, mode, unknown
-                with tempfile.TemporaryDirectory() as tmp:
-                    path = Path(tmp) / 'message'
-                    path.write_text('hello')
-                    o = SimpleNamespace(max_wait=5, stable_wait=3, poll_interval=.25, backoff=False,
-                                        typed_command=False, submit_delay=1, render_wait=3, receipt_wait=8, retry_wait=3)
-                    sender = m.Sender(t, o, 'hello', path, t.clock, t.sleep)
-                    with self.assertRaisesRegex(m.DeliveryError, 'command-clear-unverified'):
-                        sender.deliver()
-                    self.assertEqual(t.actions, ['C-u'])
-                    self.assertTrue(sender.clear_attempted)
-                    self.assertFalse(sender.pasted)
-                    self.assertEqual(sender.cleared_command_draft_length, 0)
-
-    def test_command_clear_failure_main_metadata_keeps_only_outgoing(self):
-        for verified in (False, True):
-            with tempfile.TemporaryDirectory() as tmp:
-                pending = Path(tmp) / 'pending'
-                pending.mkdir()
-                t = Terminal(draft='/compact old context')
-                t.identity = '0:%1'
-                t.clear_mode = 'changed' if not verified else 'empty'
-                original = t.frame
-                count = 0
-                def frame():
-                    nonlocal count
-                    if t.clear_requested:
-                        count += 1
-                        if verified and count == 2: t.draft = 'new human text'
-                    return original()
-                t.frame = frame
-                o = m.options(['%1', '--stable-window', '0', '--submit-delay', '0', '--poll-interval', '.01', 'hello'])
-                err = io.StringIO()
-                with patch.object(m, 'options', return_value=o), patch.object(m, 'Tmux', return_value=t), patch.object(m, 'pane_lock', return_value=nullcontext()), patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)), redirect_stderr(err):
-                    self.assertEqual(m.main(), 3)
-                result = json.loads(err.getvalue())
-                self.assertEqual(result['status'], 'ambiguous')
-                self.assertTrue(result['clear_attempted'])
-                self.assertFalse(result['input_attempted'])
-                self.assertFalse(result['paste_attempted'])
-                self.assertTrue(result['needs_review'])
-                self.assertEqual(result.get('cleared_command_draft_length', 0), 20 if verified else 0)
-                self.assertNotIn('old context', err.getvalue())
-                self.assertEqual((pending / 'message').read_bytes(), b'hello')
-
-    def test_command_clear_known_modal_harness_or_cursor_change_stops(self):
-        for kind in ('modal', 'harness', 'cursor'):
-            t = Terminal(draft='/compact old context')
-            old_frame = t.frame
-            def frame():
-                f = old_frame()
-                if t.clear_requested:
-                    if kind == 'modal': return m.Frame('Would you like to proceed?\n› yes\n', 2, 1)
-                    if kind == 'harness': return screen('', harness='claude')
-                    f.x = 3
-                return f
-            t.frame = frame
-            with self.assertRaisesRegex(m.DeliveryError, 'command-clear-unverified'): deliver(t)
-            self.assertEqual(t.actions, ['C-u'])
-
-    def test_command_draft_changing_or_final_preclear_race_no_keys(self):
-        for continuous in (False, True):
-            t = Terminal(draft='/compact old context')
-            old_frame = t.frame
-            def frame():
-                if continuous or t.frames == 2: t.draft += 'x'
-                return old_frame()
-            t.frame = frame
-            with self.assertRaises(m.DeliveryError): deliver(t, stable_wait=0)
-            self.assertEqual(t.actions, [])
-
-    def test_command_trailing_blank_rows_at_home_never_clear(self):
-        for harness in ('codex', 'claude'):
-            t = Terminal(draft='/compact\n')
-            t.harness, t.home = harness, True
-            old_frame = t.frame
-            def frame():
-                f = old_frame()
-                f.y -= 1
-                return f
-            t.frame = frame
-            with self.assertRaises(m.DeliveryError): deliver(t)
-            self.assertEqual(t.actions, [])
-
-    def test_command_clear_tmux_failure_main_is_ambiguous(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            pending = Path(tmp) / 'pending'
-            pending.mkdir()
-            t = Terminal(draft='/compact old context')
-            t.identity = '0:%1'
-            def keys(*keys):
-                t.actions.extend(keys)
-                raise OSError('private tmux detail')
-            t.keys = keys
-            o = m.options(['%1', '--stable-window', '0', '--poll-interval', '.01', 'hello'])
-            err = io.StringIO()
-            with patch.object(m, 'options', return_value=o), patch.object(m, 'Tmux', return_value=t), patch.object(m, 'pane_lock', return_value=nullcontext()), patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)), redirect_stderr(err):
-                self.assertEqual(m.main(), 3)
-            result = json.loads(err.getvalue())
-            self.assertEqual(result['status'], 'ambiguous')
-            self.assertTrue(result['clear_attempted'])
-            self.assertTrue(result['needs_review'])
-            self.assertFalse(result['input_attempted'])
-            self.assertFalse(result['paste_attempted'])
-            self.assertNotIn('cleared_command_draft_length', result)
-            self.assertEqual(t.actions, ['C-u'])
-
-    def test_command_clear_final_empty_recheck_protects_new_text(self):
-        t = Terminal(draft='/compact old context')
-        old_frame = t.frame
-        count = 0
-        def frame():
-            nonlocal count
-            if t.clear_requested:
-                count += 1
-                if count == 2: t.draft = 'new human text'
-            return old_frame()
-        t.frame = frame
-        with self.assertRaisesRegex(m.DeliveryError, 'input-changed-after-clear'):
-            deliver(t)
-        self.assertEqual(t.actions, ['C-u'])
-
     def test_literal_and_typed_modes_conflict_before_input(self):
         t = ClaudeExitTerminal()
         with self.assertRaisesRegex(m.DeliveryError, 'conflicting-input-modes'):
@@ -538,7 +341,13 @@ class DeliveryTests(unittest.TestCase):
             pending = Path(tmp) / 'pending'
             pending.mkdir()
             err = io.StringIO()
-            with patch.object(m, 'options', return_value=m.options(['%1', '--typed-command', '/x '])), patch.object(m, 'Tmux', return_value=SimpleNamespace(identity='0:%1', pane='%1')), patch.object(m, 'pane_lock', return_value=nullcontext()), patch.object(m.Sender, 'deliver', return_value={'status': 'delivered'}), redirect_stdout(io.StringIO()), patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)), redirect_stderr(err):
+            with (patch.dict(os.environ, XDG_STATE_HOME=tmp),
+                  patch.object(m, 'options', return_value=m.options(['%1', '--typed-command', '/x '])),
+                  patch.object(m, 'Tmux', return_value=Terminal()),
+                  patch.object(m, 'pane_lock', return_value=nullcontext()),
+                  patch.object(m.Sender, 'deliver', return_value={'status': 'delivered'}),
+                  patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)),
+                  redirect_stdout(io.StringIO()), redirect_stderr(err)):
                 self.assertEqual(m.main(), 2)
             result = json.loads(err.getvalue())
             self.assertEqual(result['input_method'], 'typed')
@@ -614,28 +423,6 @@ class DeliveryTests(unittest.TestCase):
             deliver(t)
         self.assertEqual(t.enters, 0)
 
-    def test_stable_draft_cosubmitted_codex_and_claude(self):
-        for harness in ('codex', 'claude'):
-            with self.subTest(harness=harness):
-                t = Terminal(draft='stale TICK')
-                t.harness = harness
-                original = t.frame
-                fixtures = Path(__file__).with_name('fixtures') / 'claude-send'
-                def initial():
-                    if not t.pastes:
-                        x, y = map(int, (fixtures / (harness + '-stable-draft.cursor')).read_text().split(':'))
-                        return m.Frame((fixtures / (harness + '-stable-draft.ansi')).read_text(), x, y)
-                    return original()
-                t.frame = initial
-                try:
-                    result = deliver(t)
-                except m.DeliveryError as error:
-                    self.fail("stable draft deferred: " + error.reason)
-                self.assertEqual(t.submitted, 'stale TICK\nhello')
-                self.assertEqual((t.pastes, t.enters), (1, 1))
-                self.assertEqual(result['stale_draft_length'], len('stale TICK'))
-                self.assertNotIn('stale TICK', json.dumps(result))
-
     def test_claude_image_placeholder_fixture_defers_before_any_input(self):
         frame = codex_fixture_frame('SYNTHETIC-claude-image-placeholder')
         self.assertEqual((m.composer(frame).harness, m.composer(frame).text),
@@ -689,125 +476,6 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(deliver(t)['status'], 'delivered')
         self.assertEqual((t.pastes, t.enters), (1, 1))
 
-    def test_image_placeholder_guard_mutation_would_cosubmit(self):
-        # Kill the one guard in a virtual terminal to prove the safety test
-        # distinguishes it from ordinary stable-draft co-submission.
-        t = Terminal(draft='[Image #1]')
-        t.harness = 'claude'
-        with patch.object(m, 'IMAGE_PLACEHOLDER', re.compile(r'(?!)')):
-            self.assertEqual(deliver(t)['status'], 'delivered')
-        self.assertEqual(t.submitted, '[Image #1]\nhello')
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_stable_home_draft_navigates_then_appends_both_harnesses(self):
-        for harness in ('codex', 'claude'):
-            with self.subTest(harness=harness):
-                t = Terminal(draft='stale TICK')
-                t.home, t.harness = True, harness
-                try:
-                    result = deliver(t)
-                except m.DeliveryError as error:
-                    self.fail('Home draft deferred: ' + error.reason)
-                self.assertEqual(result['status'], 'delivered')
-                self.assertEqual(t.actions, ['C-e' if harness == 'claude' else 'End', 'paste', 'Enter'])
-                self.assertEqual(t.submitted, 'stale TICK\nhello')
-
-    def test_home_end_delayed_repaint_waits_without_more_keys(self):
-        for harness in ('codex', 'claude'):
-            with self.subTest(harness=harness):
-                t = Terminal(draft='stale TICK')
-                t.home, t.harness, t.end_paint_delay = True, harness, .5
-                try:
-                    result = deliver(t, stable_wait=0, max_wait=1)
-                except m.DeliveryError as error:
-                    self.fail('unchanged Home repaint deferred: ' + error.reason)
-                self.assertEqual(result['status'], 'delivered')
-                self.assertEqual(t.actions, ['C-e' if harness == 'claude' else 'End', 'paste', 'Enter'])
-                self.assertGreaterEqual(t.paste_at, t.end_requested_at + .5)
-                self.assertEqual(t.submitted, 'stale TICK\nhello')
-
-    def test_home_end_unknown_repaint_then_known_end(self):
-        for harness in ('codex', 'claude'):
-            with self.subTest(harness=harness):
-                t = Terminal(draft='stale TICK')
-                t.home, t.harness, t.end_unknown_frames = True, harness, 2
-                try:
-                    result = deliver(t, stable_wait=0, max_wait=1)
-                except m.DeliveryError as error:
-                    self.fail('unknown repaint deferred before budget: ' + error.reason)
-                self.assertEqual(result['status'], 'delivered')
-                self.assertEqual(t.actions, ['C-e' if harness == 'claude' else 'End', 'paste', 'Enter'])
-                self.assertEqual(t.submitted, 'stale TICK\nhello')
-
-    def test_home_end_persistent_unknown_times_out_without_input(self):
-        t = Terminal(draft='stale TICK')
-        t.home, t.end_unknown_frames = True, 99
-        o = SimpleNamespace(max_wait=1, stable_wait=0, poll_interval=.25, backoff=False)
-        sender = m.Sender(t, o, t.payload, Path('/unused'), t.clock, t.sleep)
-        with self.assertRaisesRegex(m.DeliveryError, 'cursor-navigation-unverified'):
-            sender.deliver()
-        self.assertEqual(t.now, 1)
-        self.assertFalse(sender.pasted)
-        self.assertEqual(t.actions, ['End'])
-
-    def test_home_end_known_changed_frames_fail_without_wait_or_input(self):
-        for kind in ('text', 'harness', 'modal', 'middle', 'empty'):
-            with self.subTest(kind=kind):
-                t = Terminal(draft='stale TICK')
-                t.home = True
-                original = t.frame
-                def changed_frame():
-                    if t.end_requested_at is not None:
-                        if kind == 'modal':
-                            return m.Frame('Would you like to proceed?\n› yes\n', 2, 1)
-                        if kind == 'text':
-                            t.draft = 'human changed text'
-                        if kind == 'harness':
-                            t.harness = 'claude'
-                        if kind == 'empty':
-                            t.draft = ''
-                    frame = original()
-                    if t.end_requested_at is not None and kind == 'middle':
-                        frame.x = 4
-                    return frame
-                t.frame = changed_frame
-                o = SimpleNamespace(max_wait=1, stable_wait=0, poll_interval=.25, backoff=False)
-                sender = m.Sender(t, o, t.payload, Path('/unused'), t.clock, t.sleep)
-                with self.assertRaisesRegex(m.DeliveryError, 'cursor-navigation-unverified'):
-                    sender.deliver()
-                self.assertEqual(t.now, t.end_requested_at)
-                self.assertFalse(sender.pasted)
-                self.assertEqual(t.actions, ['End'])
-
-    def test_home_end_not_moving_or_text_changes_defers_without_paste(self):
-        for harness in ('codex', 'claude'):
-            for change in (False, True):
-                with self.subTest(harness=harness, change=change):
-                    t = Terminal(draft='stale TICK')
-                    t.home, t.harness, t.end_moves = True, harness, change
-                    original = t.keys
-                    def keys(*keys):
-                        original(*keys)
-                        if change and keys == (('C-e' if harness == 'claude' else 'End'),):
-                            t.draft = 'human changed text'
-                    t.keys = keys
-                    with self.assertRaisesRegex(m.DeliveryError, 'cursor-navigation-unverified'):
-                        deliver(t)
-                    self.assertEqual(t.actions, ['C-e' if harness == 'claude' else 'End'])
-                    self.assertEqual((t.pastes, t.enters), (0, 0))
-
-    def test_stable_draft_requires_cursor_at_end(self):
-        t = Terminal(draft='stale TICK')
-        original = t.frame
-        def midtext():
-            frame = original()
-            frame.x = 4
-            return frame
-        t.frame = midtext
-        with self.assertRaisesRegex(m.DeliveryError, 'existing-input'):
-            deliver(t)
-        self.assertEqual(t.actions, [])
-
     def test_zero_window_still_observes_twice(self):
         t = Terminal(draft='stale TICK')
         original = t.frame
@@ -845,93 +513,14 @@ class DeliveryTests(unittest.TestCase):
         original = t.frame
         def changing_once():
             if t.frames == 1:
-                t.draft = 'second'
+                t.draft = ''
             return original()
         t.frame = changing_once
         o = SimpleNamespace(max_wait=1, stable_wait=0, poll_interval=.25, backoff=True)
         sender = m.Sender(t, o, t.payload, Path('/unused'), t.clock, t.sleep)
-        self.assertEqual(sender.ready()[1].text, 'second')
+        self.assertEqual(sender.ready()[1].kind, 'empty')
         self.assertGreaterEqual(t.frames, 3)
         self.assertEqual(t.actions, [])
-
-    def test_append_failure_metadata_and_allocation_not_attempted(self):
-        for allocation_failure in (True, False):
-            with self.subTest(allocation_failure=allocation_failure), tempfile.TemporaryDirectory() as tmp:
-                pending = Path(tmp) / 'pending'
-                pending.mkdir()
-                t = Terminal(draft='stale TICK', mutate=not allocation_failure)
-                t.identity = '0:%1'
-                o = m.options(['%1', '--stable-window', '0', '--submit-delay', '0', '--poll-interval', '.01', 'hello'])
-                err = io.StringIO()
-                allocation = patch.object(m.tempfile, 'NamedTemporaryFile', side_effect=OSError('private detail')) if allocation_failure else nullcontext()
-                with patch.object(m, 'options', return_value=o), patch.object(m, 'Tmux', return_value=t), patch.object(m, 'pane_lock', return_value=nullcontext()), patch.object(m.tempfile, 'mkdtemp', return_value=str(pending)), allocation, redirect_stderr(err):
-                    self.assertEqual(m.main(), 2 if allocation_failure else 3)
-                result = json.loads(err.getvalue())
-                self.assertEqual(result['stale_draft_length'], 10)
-                self.assertEqual(result['input_attempted'], not allocation_failure)
-                self.assertEqual(result['paste_attempted'], not allocation_failure)
-                self.assertNotIn('stale TICK', err.getvalue())
-                self.assertEqual((pending / 'message').read_bytes(), b'hello')
-
-    def test_collapsed_append_stops_and_cannot_replay(self):
-        for harness in ('codex', 'claude'):
-            t = Terminal(draft='stale TICK', collapsed=True)
-            t.harness = harness
-            with self.assertRaisesRegex(m.DeliveryError, 'mixed-input'):
-                deliver(t)
-            self.assertEqual((t.pastes, t.enters), (1, 0))
-            first_actions = list(t.actions)
-            with self.assertRaisesRegex(m.DeliveryError, 'existing-input'):
-                deliver(t)
-            self.assertEqual(t.actions, first_actions)
-
-    def test_stale_draft_combined_enter_recovery(self):
-        t = Terminal(draft='stale TICK', dropped=1)
-        self.assertEqual(deliver(t)['enters'], 2)
-        self.assertEqual((t.pastes, t.submitted), (1, 'stale TICK\nhello'))
-
-    def test_stale_draft_failure_keeps_only_outgoing_pending(self):
-        t = Terminal(draft='stale TICK', mutate=True)
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / 'message'
-            path.write_text(t.payload)
-            o = SimpleNamespace(max_wait=8, stable_wait=3, poll_interval=.25,
-                                backoff=False, submit_delay=1, render_wait=3,
-                                receipt_wait=8, retry_wait=3)
-            sender = m.Sender(t, o, t.payload, path, t.clock, t.sleep)
-            with self.assertRaisesRegex(m.DeliveryError, 'mixed-input'):
-                sender.deliver()
-            self.assertEqual(path.read_text(), 'hello')
-            self.assertEqual(list(Path(tmp).iterdir()), [path])
-            self.assertEqual(t.enters, 0)
-
-    def test_combined_residue_two_attempts_never_repastes(self):
-        for harness in ('codex', 'claude'):
-            with self.subTest(harness=harness):
-                t = Terminal(draft='stale TICK', dropped=99)
-                t.harness = harness
-                with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
-                    deliver(t)
-                self.assertEqual(t.draft, 'stale TICK\nhello')
-                first_actions = list(t.actions)
-                try:
-                    deliver(t)
-                except m.DeliveryError:
-                    pass
-                self.assertEqual(t.actions, first_actions, 'retained combined input was replayed')
-                self.assertEqual(t.pastes, 1)
-
-    def test_mixed_own_payload_residue_both_harnesses(self):
-        for harness in ('codex', 'claude'):
-            for draft in ('hello human', 'human hello', 'human he\nllo'):
-                with self.subTest(harness=harness, draft=draft):
-                    t = Terminal(draft=draft)
-                    t.harness = harness
-                    try:
-                        deliver(t)
-                    except m.DeliveryError:
-                        pass
-                    self.assertEqual(t.actions, [], 'recognizable outgoing content was replayed')
 
     def test_observe_private_draft_file_utf8_in_ascii_locale(self):
         import os
@@ -956,12 +545,18 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(path.read_bytes(), 'caf\u00e9'.encode('utf-8'))
 
-    def test_partial_outgoing_overlap_is_still_a_stale_draft(self):
-        for draft in ('he human', 'world hell', 'ello'):
-            t = Terminal(draft=draft)
-            self.assertEqual(deliver(t)['status'], 'delivered')
-            self.assertEqual(t.submitted, draft + '\nhello')
-            self.assertEqual(t.pastes, 1)
+    def test_stable_unproven_drafts_defer_with_no_keys(self):
+        for harness in ('codex', 'claude'):
+            for draft in ('foreign ' + 'x' * 581, 'part of hello', '/compact', '!command',
+                          'first line\n  second line', '   ', '\n  '):
+                for home in (False, True):
+                    with self.subTest(harness=harness, draft=draft, home=home):
+                        t = Terminal(draft=draft)
+                        t.harness, t.home = harness, home
+                        with self.assertRaisesRegex(m.DeliveryError, 'existing-input'):
+                            deliver(t)
+                        self.assertEqual(t.actions, [])
+                        self.assertEqual(t.draft, draft)
 
     def test_existing_ambiguous_payload_never_reappended(self):
         for draft in ('hello', '[Pasted text #1 +20 lines]', '[Pasted Content 5 chars]'):
@@ -1187,6 +782,77 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
                             receipt_wait=5, retry_wait=1)
                 self.assertEqual(t.accepted_at, None)
                 self.assertEqual(t.pastes, 1)
+
+    def test_osc8_url_delivers_with_a_fresh_receipt(self):
+        url = 'https://example.org/relay?q=one&next=two'
+        for end, dropped in (('\x1b\\', 0), ('\x07', 0), ('\x1b\\', 2)):
+            with self.subTest(terminator=end, dropped_enters=dropped):
+                t = Terminal(payload=f'Read {url} please', dropped=dropped)
+                decorated = f'\x1b]8;id=relay;{url}{end}{url}\x1b]8;;{end}'
+                t.history = f'› Read {decorated} please\n\n'
+                original = t.frame
+
+                def styled():
+                    frame = original()
+                    frame.raw = frame.raw.replace(url, decorated)
+                    history = frame.history[len(t.history):].replace(url, decorated)
+                    frame.history = t.history + history
+                    return frame
+
+                t.frame = styled
+                if dropped:
+                    with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
+                        deliver(t)
+                    self.assertEqual(t.actions, ['paste', 'Enter', 'Enter'])
+                    continue
+                self.assertEqual(deliver(t)['receipt'], 'submitted')
+                self.assertEqual(t.submitted, t.payload)
+                self.assertEqual(t.actions, ['paste', 'Enter'])
+
+    def test_wrapped_osc8_url_delivers_with_row_local_pairs(self):
+        url = 'https://example.org/' + 'segment-' * 28 + 'end?q=one'
+        t = Terminal(payload=f'Read {url}')
+        # tmux capture -e reopens and closes the same hyperlink on each row.
+        pieces = (url[:153], url[153:])
+        rows = [f'  \x1b]8;;{url}\x1b\\{part}\x1b]8;;\x1b\\' for part in pieces]
+        rendered = 'Read\n' + '\n'.join(rows)
+        original = t.frame
+
+        def wrapped():
+            frame = original()
+            if t.draft:
+                frame.y += len(rows)
+                frame.x = 2 + len(pieces[-1])
+            frame.raw = frame.raw.replace(t.payload, rendered)
+            frame.history = frame.history.replace(t.payload, rendered)
+            return frame
+
+        t.frame = wrapped
+        self.assertEqual(deliver(t)['receipt'], 'submitted')
+        self.assertEqual(t.submitted, t.payload)
+        self.assertEqual(t.actions, ['paste', 'Enter'])
+
+    def test_osc8_rejects_malformed_and_mixed_visible_input(self):
+        url = 'https://example.org/link'
+        open_link = f'\x1b]8;;{url}\x1b\\'
+        close_link = '\x1b]8;;\x1b\\'
+        for rendered in (open_link + url, url + close_link, open_link + open_link + url + close_link,
+                         '\x1b]8;' + url + close_link,
+                         '\x1b]0;title\x07' + open_link + url + close_link,
+                         open_link + url + close_link + ' extra text'):
+            with self.subTest(rendered=rendered):
+                t = Terminal(payload=url)
+                original = t.frame
+
+                def styled():
+                    frame = original()
+                    frame.raw = frame.raw.replace(url, rendered)
+                    return frame
+
+                t.frame = styled
+                with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'):
+                    deliver(t)
+                self.assertEqual(t.actions, ['paste'])
 
     def test_codex_unknown_footer_ambiguous_bold_receipt_fails_closed(self):
         base = codex_fixture_frame('SYNTHETIC-codex-idle-unrecognized-footer')
@@ -1500,543 +1166,6 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
                 self.assertEqual(records[('queued', m.normalized(payload))], 0)
                 self.assertEqual(records[('submitted', m.normalized(payload))], 0)
 
-    def test_measured_codex_stale_append_content_marker_submits(self):
-        draft = 'MSG-STABLE-OFFER: no tools for this smoke'
-        t = Terminal(payload='x' * 1515, draft=draft)
-        raw = (Path(__file__).parent / 'fixtures/claude-send/codex-stale-append-content.ansi').read_text()
-        row = next(i for i, line in enumerate(m.styles.strip_ansi(raw).splitlines()) if line.startswith('› '))
-        original_frame, original_paste = t.frame, t.paste
-        def paste(path):
-            original_paste(path)
-            self.assertEqual(path.read_text(), '\n' + t.payload)
-            t.draft = draft + '[Pasted Content 1516 chars]'
-        def frame():
-            if t.pastes and t.accepted_at is None: return m.Frame(raw, 70, row, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        result = deliver(t)
-        self.assertEqual(result['status'], 'delivered')
-        self.assertEqual(result['stale_draft_length'], 41)
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_measured_claude_stale_append_marker_submits_once_with_or_without_hint(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        t = Terminal(payload='x' * 1368, draft=draft)
-        t.harness = 'claude'
-        raw = (Path(__file__).parent / 'fixtures/claude-send/claude-stale-append-pasted-text.ansi').read_text()
-        x, y = map(int, (Path(__file__).parent / 'fixtures/claude-send/claude-stale-append-pasted-text.cursor').read_text().split())
-        for with_hint in (False, True):
-            with self.subTest(with_hint=with_hint):
-                terminal = Terminal(payload='x' * 1368, draft=draft)
-                terminal.harness = 'claude'
-                original_frame, original_paste = terminal.frame, terminal.paste
-                def paste(path):
-                    original_paste(path)
-                    self.assertEqual(path.read_text(), '\n' + terminal.payload)
-                    terminal.draft = draft + '[Pasted text #1 +1 lines]'
-                def frame():
-                    if terminal.pastes and terminal.accepted_at is None:
-                        measured = (raw + '  paste again to expand\n') if with_hint else raw
-                        return m.Frame(measured, x, y, measured)
-                    return original_frame()
-                terminal.paste, terminal.frame = paste, frame
-                result = deliver(terminal)
-                self.assertEqual(result['status'], 'delivered')
-                self.assertEqual(result['stale_draft_length'], len(draft))
-                self.assertEqual((terminal.pastes, terminal.enters), (1, 1))
-
-    def test_measured_claude_multiline_append_preserves_exact_separator(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        payload = 'First logical row.\nSecond row 世界 😀'
-        t = Terminal(payload=payload, draft=draft)
-        t.harness = 'claude'
-        raw = (Path(__file__).parent / 'fixtures/claude-send/claude-stale-append-multiline.ansi').read_text()
-        x, y = map(int, (Path(__file__).parent / 'fixtures/claude-send/claude-stale-append-multiline.cursor').read_text().split())
-        original_frame = t.frame
-        def frame():
-            if t.pastes and t.accepted_at is None:
-                return m.Frame(raw, x, y, raw)
-            return original_frame()
-        t.frame = frame
-        result = deliver(t)
-        self.assertEqual(result['receipt'], 'submitted')
-        self.assertEqual(t.submitted, draft + '\n' + payload)
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_multiline_original_draft_plus_collapsed_append_submits(self):
-        draft = 'First stable row\nSecond stable row 世界'
-        t = Terminal(payload='x' * 1368, draft=draft)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #1 +1 lines]'
-        def frame():
-            if t.pastes and t.accepted_at is None:
-                first, second = draft.split('\n')
-                suffix = '[Pasted text #1 +1 lines]'
-                raw = '──────────────\n❯\u00a0' + first + '\n  ' + second + suffix + '\n──────────────\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(second + suffix), 2, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        result = deliver(t)
-        self.assertEqual(result['status'], 'delivered')
-        self.assertEqual(result['stale_draft_length'], len(draft))
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_exact_claude_append_requires_same_harness_and_end_cursor(self):
-        for failure in ('harness', 'cursor'):
-            with self.subTest(failure=failure):
-                t = Terminal(payload='a short payload', draft='stable draft')
-                t.harness = 'claude'
-                original_frame = t.frame
-                def frame():
-                    if t.pastes and t.accepted_at is None:
-                        f = screen(t.draft, t.history, harness='codex' if failure == 'harness' else 'claude')
-                        if failure == 'cursor':
-                            f.x -= 1
-                        return f
-                    return original_frame()
-                t.frame = frame
-                with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'):
-                    deliver(t)
-                self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_exact_claude_append_is_single_enter(self):
-        t = Terminal(payload='a short payload', draft='stable draft')
-        t.harness = 'claude'
-        result = deliver(t)
-        self.assertEqual(result['receipt'], 'submitted')
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_combined_receipt_matches_captured_blank_separator_block(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        payload = (CO_SUBMIT_FIXTURES / 'claude-co-submit-payload.txt').read_text()
-        frame = claude_co_submit_frame()
-        inp = m.composer(frame)
-        self.assertEqual((inp.kind, inp.harness), ('empty', 'claude'))
-        self.assertEqual(m.records(frame, inp)[('submitted', m.normalized(draft))], 1)
-        self.assertEqual(m.claude_combined_receipts(frame, inp, draft, payload), 1)
-        padded = frame.raw.replace(
-            f'❯ {draft}\n\n  After the current task completes,',
-            f'❯ {draft}\n   \n  After the current task completes,', 1)
-        padded_frame = m.Frame(padded, frame.x, frame.y, padded)
-        self.assertEqual(m.claude_combined_receipts(
-            padded_frame, m.composer(padded_frame), draft, payload), 1)
-
-    def test_claude_combined_receipt_requires_one_complete_owned_block(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        payload = (CO_SUBMIT_FIXTURES / 'claude-co-submit-payload.txt').read_text()
-        fixture = (CO_SUBMIT_FIXTURES / 'claude-co-submit-receipt.ansi').read_text()
-        cases = (
-            ('wrong draft prefix', fixture.replace('❯ Disposable retirement rehearsal reminder.',
-                                                    '❯ Different ordinary draft.', 1)),
-            ('wrong payload', fixture.replace('ACK-QUEUE-3155db7fcc5e', 'ACK-QUEUE-wrong')),
-            ('assistant prose', fixture.replace('❯ Disposable retirement rehearsal reminder.',
-                                                '● Disposable retirement rehearsal reminder.', 1)),
-            ('indented assistant prompt glyph', fixture.replace(
-                '❯ Disposable retirement rehearsal reminder.',
-                '  ❯ Disposable retirement rehearsal reminder.', 1)),
-            ('cropped header', fixture.replace('❯ Disposable retirement rehearsal reminder.',
-                                               '  Disposable retirement rehearsal reminder.', 1)),
-            ('archived composer', fixture.replace('❯ Disposable retirement rehearsal reminder.',
-                                                  '──────────────\n❯ Disposable retirement rehearsal reminder.', 1)),
-            ('archived composer with cropped opening rule', fixture.replace(
-                '\n\n● ACK-QUEUE-', '\n\n────────────────────────────────────────────────────────────────────────────────\n● ACK-QUEUE-', 1)),
-            ('mixed continuation', fixture.replace('preserve this line as message bod\n\n● ACK-',
-                                                   'preserve this line as message bod\n  unrelated row\n\n● ACK-', 1)),
-            ('extra blank paragraph', fixture.replace(
-                '❯ Disposable retirement rehearsal reminder.\n\n  After the current task',
-                '❯ Disposable retirement rehearsal reminder.\n\n\n  After the current task', 1)),
-        )
-        for reason, raw in cases:
-            with self.subTest(reason=reason):
-                lines = raw.splitlines()
-                prompt = next(i for i, row in enumerate(lines) if row == '❯\u00a0')
-                frame = m.Frame(raw, 2, prompt, raw)
-                inp = m.composer(frame)
-                self.assertEqual(m.claude_combined_receipts(frame, inp, draft, payload), 0)
-        blank_terminal = claude_co_submit_frame(receipt=False)
-        self.assertEqual(m.claude_combined_receipts(
-            blank_terminal, m.composer(blank_terminal), draft, payload), 0)
-        frame = claude_co_submit_frame()
-        inp = m.composer(frame)
-        for unsupported in (m.Input('unknown', harness='claude'),
-                            m.Input('modal', harness='claude'),
-                            m.Input(inp.kind, inp.text, inp.start, inp.end, inp.cursor, 'codex')):
-            with self.subTest(kind=unsupported.kind, harness=unsupported.harness):
-                self.assertEqual(m.claude_combined_receipts(frame, unsupported, draft, payload), 0)
-
-    def test_claude_combined_receipt_is_new_relative_to_same_parser_baseline(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        payload = (CO_SUBMIT_FIXTURES / 'claude-co-submit-payload.txt').read_text()
-        old = claude_co_submit_frame()
-        old_history = ('Tool output before\n  ❯ ' + draft +
-                       '\nTool output after\n' + old.history)
-        old_with_quote = m.Frame(old.raw, old.x, old.y, old_history)
-        old_input = m.composer(old_with_quote)
-        expected_form = ('submitted', m.normalized(draft))
-        self.assertEqual(m.records(old_with_quote, old_input)[expected_form], 2)
-        self.assertEqual(m.records(old_with_quote, old_input,
-                                   strict_claude_submitted=True)[expected_form], 1)
-        baseline = m.claude_combined_receipts(old_with_quote, old_input, draft, payload)
-        self.assertEqual(baseline, 1)
-        rows = old.raw.splitlines()
-        start = next(i for i, row in enumerate(rows)
-                     if row == '❯ Disposable retirement rehearsal reminder.')
-        end = next(i for i, row in enumerate(rows[start:], start)
-                   if row == '● ACK-QUEUE-3155db7fcc5e')
-        rows[end + 1:end + 1] = [''] + rows[start:end + 1]
-        raw = '\n'.join(rows) + '\n'
-        prompt = next(i for i, row in enumerate(rows) if row == '❯\u00a0')
-        frame = m.Frame(raw, 2, prompt, raw)
-        current = m.claude_combined_receipts(frame, m.composer(frame), draft, payload)
-        self.assertEqual(current, 2)
-        self.assertGreater(current, baseline)
-
-    def test_new_combined_block_before_first_enter_does_not_authorize_an_enter(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        payload = (CO_SUBMIT_FIXTURES / 'claude-co-submit-payload.txt').read_text()
-
-        class AlreadySubmitted(Terminal):
-            def frame(self):
-                if self.pastes:
-                    return claude_co_submit_frame()
-                return super().frame()
-
-        t = AlreadySubmitted(payload=payload, draft=draft)
-        t.harness = 'claude'
-        frame = claude_co_submit_frame()
-        self.assertEqual(m.claude_combined_receipts(
-            frame, m.composer(frame), draft, payload), 1)
-        with self.assertRaisesRegex(m.DeliveryError, 'paste-not-observed'):
-            deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_claude_co_submit_accepts_new_measured_full_user_receipt(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        payload = (CO_SUBMIT_FIXTURES / 'claude-co-submit-payload.txt').read_text()
-        t = Terminal(payload=payload, draft=draft)
-        t.harness = 'claude'
-        original_paste = t.paste
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #3 +2 lines]'
-        def frame():
-            if t.accepted_at is not None:
-                return claude_co_submit_frame()
-            return screen(t.draft, harness='claude')
-        t.paste, t.frame = paste, frame
-        result = deliver(t)
-        self.assertEqual((result['status'], result['receipt'], result['enters']),
-                         ('delivered', 'submitted', 1))
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_co_submit_does_not_reuse_old_identical_receipt(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        payload = (CO_SUBMIT_FIXTURES / 'claude-co-submit-payload.txt').read_text()
-        t = Terminal(payload=payload, draft=draft, dropped=1)
-        t.harness = 'claude'
-        original_paste = t.paste
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #3 +2 lines]'
-        def frame():
-            return claude_co_submit_frame(t.draft)
-        t.paste, t.frame = paste, frame
-        with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
-            deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_cosubmit_ignores_indented_quote_receipts_after_dropped_enter(self):
-        draft, payload = 'Stable ordinary draft.', 'hello'
-        for suffix in ('[Pasted text #3 +1 lines]', '\n' + payload):
-            with self.subTest(suffix=suffix):
-                t = Terminal(payload=payload, draft=draft, dropped=1)
-                t.harness = 'claude'
-                original_paste = t.paste
-
-                def paste(path):
-                    original_paste(path)
-                    t.draft = draft + suffix
-
-                original_frame = t.frame
-
-                def frame():
-                    if t.pastes and t.enters:
-                        if suffix.startswith('\n'):
-                            quote_body = '  ❯ ' + draft + '\n  ' + payload
-                            expected_form = m.normalized(draft + suffix)
-                        else:
-                            quote_body = '  ❯ ' + draft + suffix
-                            expected_form = m.normalized(draft + suffix)
-                        quote = 'Tool output before\n' + quote_body + '\nTool output after\n'
-                        receipt_frame = screen(t.draft, history=quote, harness='claude')
-                        receipt_input = m.composer(receipt_frame)
-                        # The unfiltered generic parser sees these deliberate
-                        # quote-shaped rows; only the scoped co-submit filter
-                        # rejects the indented non-user prompt.
-                        self.assertEqual(m.records(receipt_frame, receipt_input)
-                                         [('submitted', expected_form)], 1)
-                        self.assertEqual(m.records(receipt_frame, receipt_input,
-                                                   strict_claude_submitted=True)
-                                         [('submitted', expected_form)], 0)
-                        return screen(t.draft, history=quote, harness='claude')
-                    return original_frame()
-
-                t.paste, t.frame = paste, frame
-                with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
-                    deliver(t)
-                self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_cosubmit_ignores_old_indented_full_body_in_sender_baseline(self):
-        draft, payload = 'Stable ordinary draft.', 'hello'
-        old_quote = ('Tool output before\n  ❯ ' + draft + '\n  ' + payload +
-                     '\nTool output after\n')
-        t = Terminal(payload=payload, draft=draft)
-        t.harness = 'claude'
-        t.history = old_quote
-        result = deliver(t)
-        self.assertEqual((result['status'], result['receipt']), ('delivered', 'submitted'))
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_measured_claude_marker_rejects_unowned_shapes(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        marker = '[Pasted text #1 +1 lines]'
-        cases = (
-            ('Other stable draft.' + marker, 'paste again to expand', 'claude', 0),
-            (draft + '[Pasted text #1 +2 lines]', 'paste again to expand', 'claude', 0),
-            (draft + '[Pasted text #1 +20 lines]', 'paste again to expand', 'claude', 0),
-            (draft + '[Pasted text #1]', 'paste again to expand', 'claude', 0),
-            (draft + marker + ' extra composer text', '', 'claude', 0),
-            (draft + marker + marker, '', 'claude', 0),
-            (draft + 'x' + marker, '', 'claude', 0),
-            (draft + marker, 'paste again to expand', 'claude', -1),
-            (draft + marker, 'paste again to expand', 'codex', 0),
-            ('Disposable retirement rehearsal\nreminder.' + marker, 'paste again to expand', 'claude', 0),
-        )
-        for text, hint, harness, cursor_delta in cases:
-            with self.subTest(text=text, hint=hint, harness=harness, cursor_delta=cursor_delta):
-                t = Terminal(payload='x' * 1368, draft=draft)
-                t.harness = 'claude'
-                original_frame, original_paste = t.frame, t.paste
-                def paste(path):
-                    original_paste(path)
-                    t.draft, t.harness = text, harness
-                def frame():
-                    if t.pastes and t.accepted_at is None:
-                        if harness == 'claude':
-                            prompt = '❯\u00a0' + text
-                            raw = '──────────────\n' + prompt + '\n──────────────\n'
-                            if hint:
-                                raw += '  ' + hint + '\n'
-                            cursor = 2 + m.styles.cell_width(text) + cursor_delta
-                            row = 1
-                        else:
-                            raw = '› ' + text + '\n\n  Any model · branch\n'
-                            cursor = 2 + m.styles.cell_width(text) + cursor_delta
-                            row = 0
-                        return m.Frame(raw, cursor, row, raw)
-                    return original_frame()
-                t.paste, t.frame = paste, frame
-                with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'):
-                    deliver(t)
-                self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_claude_collapsed_append_draft_with_unicode_cursor_width(self):
-        draft = 'Cue 世界 cafe\u0301 😀'
-        t = Terminal(payload='x' * 1368, draft=draft)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #2 +1 lines]'
-        def frame():
-            if t.pastes and t.accepted_at is None:
-                text = draft + '[Pasted text #2 +1 lines]'
-                raw = '──────────────\n❯\u00a0' + text + '\n──────────────\n  paste again to expand\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(text), 1, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        self.assertEqual(deliver(t)['receipt'], 'submitted')
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_collapsed_append_line_count_includes_separator(self):
-        draft = 'stale 世界'
-        payload = 'x' * 683 + '\n' + 'y' * 684
-        t = Terminal(payload=payload, draft=draft)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #2 +2 lines]'
-        def frame():
-            if t.pastes and t.accepted_at is None:
-                text = draft + '[Pasted text #2 +2 lines]'
-                raw = '──────────────\n❯\u00a0' + text + '\n──────────────\n  paste again to expand\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(text), 1, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        self.assertEqual(deliver(t)['receipt'], 'submitted')
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_collapsed_append_lost_enter_is_not_retried(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        t = Terminal(payload='x' * 1368, draft=draft, dropped=1)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #3 +1 lines]'
-        def frame():
-            if t.pastes and t.accepted_at is None:
-                text = draft + '[Pasted text #3 +1 lines]'
-                raw = '──────────────\n❯\u00a0' + text + '\n──────────────\n  paste again to expand\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(text), 1, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        with self.assertRaisesRegex(m.DeliveryError, 'receipt-timeout'):
-            deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 1))
-
-    def test_claude_collapsed_append_modal_and_unknown_never_enter(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        for kind in ('modal', 'unknown'):
-            with self.subTest(kind=kind):
-                t = Terminal(payload='x' * 1368, draft=draft)
-                t.harness = 'claude'
-                original_frame, original_paste = t.frame, t.paste
-                def paste(path):
-                    original_paste(path)
-                    t.draft = draft + '[Pasted text #4 +1 lines]'
-                def frame():
-                    if t.pastes and t.accepted_at is None:
-                        if kind == 'modal':
-                            return m.Frame('Would you like to proceed?\n❯ yes\n', 2, 1)
-                        return m.Frame('', -1, -1)
-                    return original_frame()
-                t.paste, t.frame = paste, frame
-                with self.assertRaises(m.DeliveryError):
-                    deliver(t)
-                self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_claude_collapsed_append_change_after_evidence_defers(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        t = Terminal(payload='x' * 1368, draft=draft)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        samples = 0
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #5 +1 lines]'
-        def frame():
-            nonlocal samples
-            if t.pastes and t.accepted_at is None:
-                samples += 1
-                text = draft + ('[Pasted text #5 +1 lines]' if samples <= 1 else '[Pasted text #5 +1 lines] changed')
-                raw = '──────────────\n❯\u00a0' + text + '\n──────────────\n  paste again to expand\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(text), 1, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'):
-            deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_claude_collapsed_append_marker_ordinal_change_before_enter_defers(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        t = Terminal(payload='x' * 1368, draft=draft)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        samples = 0
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #1 +1 lines]'
-        def frame():
-            nonlocal samples
-            if t.pastes and t.accepted_at is None:
-                samples += 1
-                text = draft + f'[Pasted text #{1 if samples == 1 else 2} +1 lines]'
-                raw = '──────────────\n❯\u00a0' + text + '\n──────────────\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(text), 1, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        with self.assertRaisesRegex(m.DeliveryError, 'input-changed-after-paste'):
-            deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_claude_collapsed_append_marker_change_at_enter_revalidation_defers(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        t = Terminal(payload='x' * 1368, draft=draft)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        samples = 0
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #1 +1 lines]'
-        def frame():
-            nonlocal samples
-            if t.pastes and t.accepted_at is None:
-                samples += 1
-                ordinal = 1 if samples <= 5 else 2
-                text = draft + f'[Pasted text #{ordinal} +1 lines]'
-                raw = '──────────────\n❯\u00a0' + text + '\n──────────────\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(text), 1, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        with self.assertRaisesRegex(m.DeliveryError, 'input-changed-before-enter'):
-            deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_claude_collapsed_append_unknown_then_new_marker_defers(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        t = Terminal(payload='x' * 1368, draft=draft)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        samples = 0
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #1 +1 lines]'
-        def frame():
-            nonlocal samples
-            if t.pastes and t.accepted_at is None:
-                samples += 1
-                if samples == 2:
-                    return m.Frame('', -1, -1)
-                ordinal = 1 if samples == 1 else 2
-                text = draft + f'[Pasted text #{ordinal} +1 lines]'
-                raw = '──────────────\n❯\u00a0' + text + '\n──────────────\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(text), 1, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        with self.assertRaisesRegex(m.DeliveryError, 'input-changed-after-paste'):
-            deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_claude_collapsed_append_bare_draft_change_defers(self):
-        draft = 'Disposable retirement rehearsal reminder.'
-        t = Terminal(payload='x' * 1368, draft=draft)
-        t.harness = 'claude'
-        original_frame, original_paste = t.frame, t.paste
-        samples = 0
-        def paste(path):
-            original_paste(path)
-            t.draft = draft + '[Pasted text #1 +1 lines]'
-        def frame():
-            nonlocal samples
-            if t.pastes and t.accepted_at is None:
-                samples += 1
-                if samples == 2:
-                    return screen(draft, harness='claude')
-                ordinal = 1 if samples == 1 else 2
-                text = draft + f'[Pasted text #{ordinal} +1 lines]'
-                raw = '──────────────\n❯\u00a0' + text + '\n──────────────\n'
-                return m.Frame(raw, 2 + m.styles.cell_width(text), 1, raw)
-            return original_frame()
-        t.paste, t.frame = paste, frame
-        with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'):
-            deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 0))
-
     def test_main_rejects_bare_carriage_return_before_tmux_io(self):
         with tempfile.TemporaryDirectory() as tmp:
             payload = Path(tmp) / 'payload'
@@ -2047,86 +1176,6 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
                 self.assertEqual(m.main(), 1)
             tmux.assert_not_called()
             self.assertIn('without control characters', err.getvalue())
-
-    def test_stale_append_content_unicode_counts_recover_once(self):
-        payload = 'emoji 😀 context'
-        for count in {len('\n' + payload), len(('\n' + payload).encode('utf-16-le')) // 2}:
-            t = Terminal(payload=payload, draft='stale TICK', dropped=1)
-            original = t.paste
-            def paste(path):
-                original(path)
-                t.draft = 'stale TICK' + f'[Pasted Content {count} chars]'
-            t.paste = paste
-            self.assertEqual(deliver(t)['status'], 'delivered')
-            self.assertEqual((t.pastes, t.enters), (1, 2))
-
-    def test_stale_append_content_rejects_every_mixed_shape(self):
-        marker = '[Pasted Content 6 chars]'
-        for text, harness in (
-                ('stale TICK[Pasted Content 5 chars]', 'codex'),
-                ('stale TICK' + marker + ' human', 'codex'),
-                ('human stale TICK' + marker, 'codex'),
-                ('stale TIC' + marker, 'codex'), (marker, 'codex'),
-                ('stale TICK\n' + marker, 'codex'),
-                ('stale TICK[Pasted text #1 +20 lines]', 'codex'),
-                ('stale TICK' + marker + marker, 'codex'),
-                ('stale TICK' + marker, 'claude')):
-            with self.subTest(text=text, harness=harness):
-                t = Terminal(draft='stale TICK')
-                original = t.paste
-                def paste(path):
-                    original(path)
-                    t.draft, t.harness = text, harness
-                t.paste = paste
-                with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'): deliver(t)
-                self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_stale_append_content_old_marker_or_replay_never_repastes(self):
-        for draft in ('stale TICK[Pasted Content 6 chars]', 'stale TICK[pasted content 6 chars]',
-                      'stale TICK[PASTED CONTENT 6 CHARS]', 'stale TICK[pasted text #1 +2 lines]', 'stale TICK hello'):
-            t = Terminal(draft=draft)
-            with self.assertRaises(m.DeliveryError): deliver(t)
-            self.assertEqual(t.actions, [])
-
-    def test_stale_append_content_cannot_change_harness_or_cursor(self):
-        for initial_harness, wrong_cursor in (('claude', False), ('codex', True)):
-            t = Terminal(draft='stale TICK')
-            t.harness = initial_harness
-            original_paste, original_frame = t.paste, t.frame
-            def paste(path):
-                original_paste(path)
-                t.draft, t.harness = 'stale TICK[Pasted Content 6 chars]', 'codex'
-            def frame():
-                f = original_frame()
-                if t.pastes and wrong_cursor: f.x -= 1
-                return f
-            t.paste, t.frame = paste, frame
-            with self.assertRaisesRegex(m.DeliveryError, 'mixed-input-after-paste'): deliver(t)
-            self.assertEqual((t.pastes, t.enters), (1, 0))
-
-    def test_stale_append_content_two_attempts_never_repastes(self):
-        t = Terminal(draft='stale TICK', dropped=99)
-        original = t.paste
-        def paste(path):
-            original(path)
-            t.draft = 'stale TICK[Pasted Content 6 chars]'
-        t.paste = paste
-        with self.assertRaises(m.DeliveryError): deliver(t)
-        actions = list(t.actions)
-        with self.assertRaises(m.DeliveryError): deliver(t)
-        self.assertEqual(t.actions, actions)
-        self.assertEqual((t.pastes, t.enters), (1, 2))
-
-    def test_stale_append_content_cannot_use_old_receipt(self):
-        t = Terminal(draft='stale TICK', dropped=99)
-        t.history = '› stale TICK[Pasted Content 6 chars]\n\n'
-        original = t.paste
-        def paste(path):
-            original(path)
-            t.draft = 'stale TICK[Pasted Content 6 chars]'
-        t.paste = paste
-        with self.assertRaises(m.DeliveryError): deliver(t)
-        self.assertEqual((t.pastes, t.enters), (1, 2))
 
     def test_content_character_count_marker(self):
         for payload in ['x' * 1034, 'hello\nworld', 'emoji 😀']:
@@ -2227,11 +1276,171 @@ assert screen.observe(frame, 'outgoing', 6, 1, pathlib.Path(sys.argv[2])) == 'dr
         self.assertEqual(t.actions, ['Space', 'BSpace'])
 
 
+class PasteJournalTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        environment = patch.dict(os.environ, XDG_STATE_HOME=temp.name,
+                                 CLAUDE_SEND_LOCK_DIR=str(self.root / 'locks'))
+        environment.start()
+        self.addCleanup(environment.stop)
+        pending = patch.object(m.tempfile, 'tempdir', temp.name)
+        pending.start()
+        self.addCleanup(pending.stop)
+
+    def send(self, terminal):
+        sender_type = m.Sender
+
+        def sender(*args, **kwargs):
+            return sender_type(*args, clock=terminal.clock, sleep=terminal.sleep, **kwargs)
+
+        args = ['tmux-message.py', '%1', '--stable-window', '0', '--submit-delay', '0', terminal.payload]
+        out, err = io.StringIO(), io.StringIO()
+        with (patch.object(sys, 'argv', args), patch.object(m, 'Tmux', return_value=terminal),
+              patch.object(m, 'Sender', side_effect=sender), patch.object(m.signal, 'signal'),
+              redirect_stdout(out), redirect_stderr(err)):
+            code = m.main()
+        return code, json.loads((out if code == 0 else err).getvalue())
+
+    def command(self, *args):
+        out, err = io.StringIO(), io.StringIO()
+        with (patch.object(m, 'Tmux') as tmux, redirect_stdout(out), redirect_stderr(err)):
+            code = m.journal_command(args)
+        tmux.assert_not_called()
+        return code, json.loads((out if code == 0 else err).getvalue())
+
+    def test_zero_enter_record_survives_retry_reuse_and_explicit_resolution(self):
+        t = Terminal(payload='Synthetic stranded payload', mutate=True)
+        paste = t.paste
+
+        def inspect_then_paste(path):
+            attempts = self.command('--unresolved')[1]
+            self.assertEqual(len(attempts), 1)
+            self.assertIsNone(attempts[0]['outcome'])
+            self.assertEqual(Path(attempts[0]['pending_file']), path)
+            paste(path)
+
+        t.paste = inspect_then_paste
+        code, result = self.send(t)
+        self.assertEqual((code, t.actions), (3, ['paste']))
+        attempt_id = result['attempt_id']
+        pending = Path(result['pending_file'])
+        self.assertTrue(result['submit_not_attempted'])
+        self.assertEqual((pending.stat().st_mode & 0o777, pending.parent.stat().st_mode & 0o777), (0o600, 0o700))
+        self.assertEqual(pending.read_text(), t.payload)
+        record, = self.command('--unresolved')[1]
+        self.assertEqual(record['receiver'], t.receiver_identity())
+        self.assertEqual(record['sender']['pid'], os.getpid())
+        self.assertEqual(record['outcome'], {'status': 'ambiguous', 'reason': 'mixed-input-after-paste',
+                                             'enters': 0, 'submit_not_attempted': True, 'enter_confirmed': False})
+
+        retry = Terminal(payload='Different outgoing payload')
+        code, deferred = self.send(retry)
+        self.assertEqual((code, retry.actions, retry.frames), (2, [], 0))
+        self.assertEqual(deferred['blocking_attempt_id'], attempt_id)
+        self.assertFalse(deferred['paste_attempted'])
+        self.assertEqual(self.command('--unresolved')[1], [record])
+
+        retry.pane_pid = '201'  # Same tmux pane ID following respawn.
+        self.assertEqual(self.send(retry)[0], 0)
+        self.assertEqual(self.command('--unresolved')[1], [record])
+
+        code, _ = self.command('--resolve', attempt_id, '--disposition', 'receiver-replaced')
+        self.assertEqual(code, 0)
+        self.assertEqual(self.command('--unresolved')[1], [])
+        self.assertFalse(pending.exists())
+        self.assertEqual(self.command('--resolve', attempt_id, '--disposition', 'receiver-replaced')[0], 0)
+        self.assertEqual(self.command('--resolve', attempt_id, '--disposition', 'draft-removed')[0], 2)
+        disposition = json.loads((pending.parent / 'resolution.json').read_text())
+        self.assertEqual(disposition['disposition'], 'receiver-replaced')
+
+    def test_attempt_state_failure_prevents_paste(self):
+        t = Terminal()
+        with patch.object(m, 'write_private', side_effect=OSError('synthetic disk fault')):
+            code, result = self.send(t)
+        self.assertEqual((code, result['reason'], t.actions), (2, 'attempt-state-unavailable', []))
+        self.assertFalse(result['input_attempted'])
+        self.assertEqual(self.command('--unresolved')[1], [])
+
+    def test_target_lost_before_paste_leaves_no_unresolved_attempt(self):
+        t = Terminal()
+        with patch.object(t, 'check_receiver', side_effect=m.DeliveryError('receiver-changed')):
+            code, result = self.send(t)
+        self.assertEqual((code, result['reason'], t.actions), (2, 'receiver-changed', []))
+        self.assertFalse(result['paste_attempted'])
+        self.assertEqual(self.command('--unresolved')[1], [])
+
+    def test_enter_failure_records_attempt_instead_of_zero_enter(self):
+        t = Terminal()
+        with patch.object(t, 'keys', side_effect=OSError('uncertain Enter')):
+            code, result = self.send(t)
+        self.assertEqual((code, result['enters'], result['submit_not_attempted']), (3, 1, False))
+        self.assertEqual(self.command('--unresolved')[1][0]['outcome']['enters'], 1)
+
+    def test_confirmed_enter_timeout_does_not_block_new_send(self):
+        t = Terminal(dropped=2)
+        code, result = self.send(t)
+        self.assertEqual((code, result['reason'], result['enters']), (3, 'receipt-timeout', 2))
+        self.assertFalse(result['submit_not_attempted'])
+        self.assertNotIn('attempt_id', result)
+        self.assertEqual(Path(result['pending_file']).read_text(), t.payload)
+        self.assertEqual(self.command('--unresolved')[1], [])
+        replacement = Terminal(payload='A new message to the same empty receiver')
+        self.assertEqual(self.send(replacement)[0], 0)
+        self.assertEqual(replacement.submitted, replacement.payload)
+
+    def test_confirmed_enter_preserves_original_if_temporary_copy_fails(self):
+        t = Terminal(dropped=2)
+        with patch.object(m, 'private_pending', side_effect=OSError('synthetic scratch failure')):
+            code, result = self.send(t)
+        self.assertEqual((code, result['reason'], result['enters']), (3, 'receipt-timeout', 2))
+        self.assertEqual(self.command('--unresolved')[1], [])
+        self.assertEqual(Path(result['pending_file']).read_text(), t.payload)
+        self.assertEqual(self.send(Terminal(payload='Fresh payload'))[0], 0)
+
+    def test_crash_leaves_unknown_enter_state_and_payload(self):
+        t = Terminal()
+        with patch.object(t, 'keys', side_effect=SystemExit(99)), self.assertRaises(SystemExit):
+            self.send(t)
+        record, = self.command('--unresolved')[1]
+        self.assertIsNone(record['outcome'])
+        self.assertEqual(Path(record['pending_file']).read_text(), t.payload)
+        retry = Terminal(payload='Fresh payload after interrupted send')
+        code, result = self.send(retry)
+        self.assertEqual((code, result['blocking_attempt_id'], retry.actions), (2, record['id'], []))
+
+    def test_crash_during_completed_cleanup_does_not_strand_payload(self):
+        t = Terminal()
+        with patch.object(m.PasteJournal, 'cleanup_completed', side_effect=SystemExit(99)):
+            with self.assertRaises(SystemExit):
+                self.send(t)
+        root = self.root / 'tmux-message'
+        completed, = root.iterdir()
+        self.assertTrue(completed.name.startswith('.'))
+        self.assertTrue((completed / 'message').exists())
+        self.assertEqual(self.command('--unresolved')[1], [])
+        self.assertFalse(completed.exists())
+
+    def test_crash_after_resolution_publish_reclaims_bytes_on_next_listing(self):
+        code, report = self.send(Terminal(mutate=True))
+        self.assertEqual(code, 3)
+        pending = Path(report['pending_file'])
+        with patch.object(m.PasteJournal, 'purge_resolved_payload', side_effect=SystemExit(99)):
+            with self.assertRaises(SystemExit):
+                self.command('--resolve', report['attempt_id'], '--disposition', 'draft-removed')
+        metadata = pending.parent / 'resolution.json'
+        original = metadata.read_bytes()
+        self.assertTrue(pending.exists())
+        self.assertEqual(self.command('--unresolved')[1], [])
+        self.assertFalse(pending.exists())
+        self.assertEqual(metadata.read_bytes(), original)
+
+
 class DiagnosticTests(unittest.TestCase):
     """Owned terminal frames only; no live pane or private incident content."""
 
     def invoke(self, terminal, diagnostic_file=None, extra=()):
-        terminal.identity = '0:%1'
         args = ['tmux-message.py', '%1', '--stable-window', '0', '--submit-delay', '0',
                 '--max-wait', '1', '--render-wait', '.03', '--receipt-wait', '.03',
                 '--poll-interval', '.01']
@@ -2240,19 +1449,13 @@ class DiagnosticTests(unittest.TestCase):
         args += list(extra)
         args += [terminal.payload]
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(sys, 'argv', args), patch.object(m, 'Tmux', return_value=terminal), \
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, XDG_STATE_HOME=tmp), \
+                patch.object(m.tempfile, 'tempdir', tmp), \
+                patch.object(sys, 'argv', args), patch.object(m, 'Tmux', return_value=terminal), \
                 patch.object(m, 'pane_lock', return_value=nullcontext()), \
                 redirect_stdout(out), redirect_stderr(err):
             rc = m.main()
         result = json.loads((out if rc == 0 else err).getvalue())
-        # This invocation created the synthetic pending file; remove exactly it.
-        pending = result.get('pending_file')
-        if pending:
-            path = Path(pending)
-            self.assertEqual(path.name, 'message')
-            self.assertTrue(path.parent.name.startswith('tmux-message-'))
-            path.unlink()
-            path.parent.rmdir()
         return rc, result
 
     def test_opt_in_mixed_capture_is_useful_and_text_free(self):
@@ -2418,8 +1621,8 @@ class DiagnosticTests(unittest.TestCase):
                 on_rc, on_result = self.invoke(on, private / 'record.json', extra=extra)
                 self.assertEqual(on_rc, off_rc)
                 self.assertEqual(on.actions, off.actions)
-                self.assertEqual({k: v for k, v in on_result.items() if k not in {'diagnostic_status', 'pending_file'}},
-                                 {k: v for k, v in off_result.items() if k != 'pending_file'})
+                self.assertEqual({k: v for k, v in on_result.items() if k not in {'diagnostic_status', 'pending_file', 'attempt_id'}},
+                                 {k: v for k, v in off_result.items() if k not in {'pending_file', 'attempt_id'}})
                 self.assertEqual(on_result['diagnostic_status'], 'written')
                 self.assertTrue((private / 'record.json').exists())
                 artifact = (private / 'record.json').read_text()
@@ -2532,8 +1735,8 @@ class DiagnosticTests(unittest.TestCase):
             with patch.object(m.StructuralDiagnostic, 'to_bytes', side_effect=OSError('PRIVATE_EXCEPTION')):
                 on_rc, on_result = self.invoke(on, private / 'record.json')
             self.assertEqual((on_rc, on.actions), (off_rc, off.actions))
-            self.assertEqual({k: v for k, v in on_result.items() if k not in {'pending_file', 'diagnostic_status'}},
-                             {k: v for k, v in off_result.items() if k != 'pending_file'})
+            self.assertEqual({k: v for k, v in on_result.items() if k not in {'pending_file', 'diagnostic_status', 'attempt_id'}},
+                             {k: v for k, v in off_result.items() if k not in {'pending_file', 'attempt_id'}})
             self.assertEqual(on_result['diagnostic_status'], 'write-failed')
             self.assertFalse((private / 'record.json').exists())
 
@@ -2558,8 +1761,8 @@ class DiagnosticTests(unittest.TestCase):
                 on_rc, on_result = self.invoke(on, private / 'record.json')
             self.assertEqual((off_rc, on_rc), (143, 143))
             self.assertEqual(off.actions, on.actions)
-            self.assertEqual({k: v for k, v in on_result.items() if k not in {'pending_file', 'diagnostic_status'}},
-                             {k: v for k, v in off_result.items() if k != 'pending_file'})
+            self.assertEqual({k: v for k, v in on_result.items() if k not in {'pending_file', 'diagnostic_status', 'attempt_id'}},
+                             {k: v for k, v in off_result.items() if k not in {'pending_file', 'attempt_id'}})
             self.assertTrue((private / 'record.json').exists())
 
     def test_unsafe_path_components_and_owner_stop_before_input(self):
@@ -2652,7 +1855,8 @@ class VerifyCompactTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             pending = Path(tmp) / 'pending'
             pending.mkdir(mode=0o700)
-            with (patch.object(sys, 'argv', argv),
+            with (patch.dict(os.environ, XDG_STATE_HOME=tmp),
+                  patch.object(sys, 'argv', argv),
                   patch.object(m, 'Tmux', return_value=terminal) as resolve,
                   patch.object(m, 'Sender', side_effect=sender),
                   patch.object(m, 'pane_lock', return_value=nullcontext()),

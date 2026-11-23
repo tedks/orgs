@@ -116,7 +116,6 @@ def terminal(directory, mode):
     pending = b''
     pasting = False
     pasted_payload = False
-    paste_prefix = b''
     pastes = enters = exit_enters = 0
     history = ''
     event = None
@@ -161,8 +160,6 @@ def terminal(directory, mode):
     def draw():
         plain_draft = not pasted_payload
         collapsed = f'[Pasted Content {len(draft.decode(errors="replace"))} chars]' if draft and not plain_draft else draft.decode(errors='replace')
-        if mode == 'stable-draft' and pasted_payload and paste_prefix:
-            collapsed = paste_prefix.decode(errors='replace') + f"[Pasted Content {len(draft[len(paste_prefix):].decode(errors='replace'))} chars]"
         body = history + '\r\n› ' + collapsed + '\r\n\r\n  Test model · branch\r\n'
         if mode.startswith('claude'):
             if mode == 'claude-ghost' and event and not draft:
@@ -225,7 +222,7 @@ def terminal(directory, mode):
                     sys.stdout.write('\r\n\x1b[JToken usage: total=42\r\nTo continue this session, run:\r\n  codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\r\n')
                     sys.stdout.flush()
                 return
-            if mode == 'draft' and (directory / 'human-cleared-draft').exists():
+            if mode in ('draft', 'stable-draft') and (directory / 'human-cleared-draft').exists():
                 draft = b''
                 mode = 'done'
                 draw()
@@ -235,7 +232,6 @@ def terminal(directory, mode):
             while pending:
                 if pending.startswith(b'\x1b[200~'):
                     pastes += 1
-                    paste_prefix = draft
                     pasting = True
                     pasted_payload = True
                     pending = pending[6:]
@@ -330,8 +326,6 @@ def terminal(directory, mode):
                                 hook.write_text('#!/bin/sh\nexit 1\n')
                                 hook.chmod(0o700)
                         history = ('❯' if mode.startswith('claude') else '›') + ' [Pasted Content ' + str(len(payload)) + ' chars]\r\n'
-                        if mode == 'stable-draft' and paste_prefix:
-                            history = '› ' + paste_prefix.decode(errors='replace') + '[Pasted Content ' + str(len(payload) - len(paste_prefix.decode(errors='replace'))) + ' chars]\r\n'
                         if mode.startswith('claude'):
                             history = '• Messages to be submitted after next tool call\r\n  ↳ [Pasted Content ' + str(len(payload)) + ' chars]\r\n'
                         if mode.startswith('ambiguous'):
@@ -522,6 +516,9 @@ class Tests(unittest.TestCase):
         ditz.chmod(0o700)
         self.env = dict(os.environ, AGENT_SKILLS_CONFIG=str(config), SPAWN_TMUX_LABEL=self.label, RETIRE_REPO=str(self.repo), RETIRE_PRIVATE_CHECK=str(checker), RETIRE_SPAWN_SKILL=str(shared.parent), RETIRE_TEST_PYTHON=sys.executable)
         self.env['RETIRE_DITZ'] = str(ditz)
+        self.env['XDG_STATE_HOME'] = str(self.directory / 'state')
+        self.env['TMPDIR'] = str(self.directory)
+        self.env['CLAUDE_SEND_LOCK_DIR'] = str(self.directory / 'sender-locks')
         self.env.pop('SPAWN_TMUX_SOCKET', None)
         self.env.pop('TMUX', None)
 
@@ -929,12 +926,24 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.git('show', 'origin/master:' + state['shard']), path.with_suffix('.publication').joinpath(state['shard']).read_text().strip())
         self.assertEqual(json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))['status'], 'retired')
 
-    def test_stable_ordinary_offer_draft_is_co_submitted(self):
+    def test_stable_ordinary_draft_defers_offer(self):
         self.actor('stable-draft')
         result = self.invoke()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.observed()['pastes'], 1)  # combined offer; typed Codex exit
-        self.assertEqual(self.state()[1]['offer']['stale_draft_length'], len('human unfinished draft'))
+        self.assertEqual(result.returncode, 2, result.stderr)
+        path, state = self.state()
+        offer = state['offer']
+        self.assertEqual((offer['status'], offer['reason']), ('deferred', 'existing-input'))
+        self.assertFalse(offer['input_attempted'])
+        self.assertEqual(self.observed()['pastes'], 0)
+        self.assertEqual(self.observed()['enters'], 0)
+        self.assertIn('› human unfinished draft', self.command(*self.tmux, 'capture-pane', '-p', '-t', self.pane))
+        (self.directory / 'human-cleared-draft').touch()
+        self.wait_for(lambda: 'human unfinished draft' not in
+                      self.command(*self.tmux, 'capture-pane', '-p', '-t', self.pane))
+        resumed = self.invoke('--resume', str(path), '--retry-deferred', 'offer')
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        self.assertEqual(self.state()[1]['id'], state['id'])
+        self.assertEqual(self.observed()['pastes'], 1)
         self.assertEqual(self.observed()['exit_enters'], 1)
 
     def test_claude_stable_ordinary_draft_defers_literal_exit(self):
