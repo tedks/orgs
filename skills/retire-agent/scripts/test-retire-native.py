@@ -231,7 +231,8 @@ def main():
             prefix = r'^Resume this session with:[ \t]*\n' if harness == 'claude' else r'^Token usage: [^\n]+\nTo continue this session, run:[ \t]*\n'
             pattern = prefix + r'[ \t]*' + re.escape(notice) + r'[ \t]*$'
             deadline = time.monotonic() + 1200
-            command = [HERE / 'retire.sh', pane, '--retire', '--wait', '60', '--poll', '1']
+            base_command = [HERE / 'retire.sh', pane, '--retire', '--wait', '60', '--poll', '1']
+            command = base_command
             observations = []
             while True:
                 result = run(command, env=environment, timeout=240)
@@ -254,13 +255,13 @@ def main():
                     assert any(row in {f'› {draft}', f'❯ {draft}', f'❯\u00a0{draft}'} for row in screen.splitlines())
                     # Only this disposable fixture's exact draft is cleared.
                     require(run([*tmux, 'send-keys', '-t', pane, 'C-u']))
-                    command += ['--resume', pending['state'], '--retry-deferred', 'offer']
+                    command = [*base_command, '--resume', pending['state'], '--retry-deferred', 'offer']
                     draft_checked = True
                     continue
                 if (result.returncode != 2 or not pending.get('reason', '').startswith(('DONE not observed;', 'handoff verified; retirement pending original process end and fresh same-session exit notice'))
                         or time.monotonic() >= deadline):
                     require(result)
-                command = [HERE / 'retire.sh', pane, '--retire', '--resume', pending['state'], '--wait', '60', '--poll', '1']
+                command = [*base_command, '--resume', pending['state']]
             require(result)
             states = [json.loads(path.read_text()) for path in records.glob('*.json') if re.fullmatch(r'[0-9a-f]{32}', path.stem)]
             matching = [item for item in states if item['pane'] == pane]

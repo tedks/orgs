@@ -69,6 +69,10 @@ class Terminal:
         return {"pid": "100", "pane_id": self.pane, "socket_path": "/synthetic/tmux",
                 "start_time": "300", "pane_pid": self.pane_pid, "pane_tty": "/dev/pts/1"}
 
+    def check_receiver(self):
+        if hasattr(self, 'receiver') and self.receiver != self.receiver_identity():
+            raise m.DeliveryError('receiver-changed')
+
     def sleep(self, n): self.now += n
     def clock(self): return self.now
 
@@ -1359,6 +1363,14 @@ class PasteJournalTests(unittest.TestCase):
         self.assertFalse(result['input_attempted'])
         self.assertEqual(self.command('--unresolved')[1], [])
 
+    def test_target_lost_before_paste_leaves_no_unresolved_attempt(self):
+        t = Terminal()
+        with patch.object(t, 'check_receiver', side_effect=m.DeliveryError('receiver-changed')):
+            code, result = self.send(t)
+        self.assertEqual((code, result['reason'], t.actions), (2, 'receiver-changed', []))
+        self.assertFalse(result['paste_attempted'])
+        self.assertEqual(self.command('--unresolved')[1], [])
+
     def test_enter_failure_records_attempt_instead_of_zero_enter(self):
         t = Terminal()
         with patch.object(t, 'keys', side_effect=OSError('uncertain Enter')):
@@ -1377,6 +1389,15 @@ class PasteJournalTests(unittest.TestCase):
         replacement = Terminal(payload='A new message to the same empty receiver')
         self.assertEqual(self.send(replacement)[0], 0)
         self.assertEqual(replacement.submitted, replacement.payload)
+
+    def test_confirmed_enter_preserves_original_if_temporary_copy_fails(self):
+        t = Terminal(dropped=2)
+        with patch.object(m, 'private_pending', side_effect=OSError('synthetic scratch failure')):
+            code, result = self.send(t)
+        self.assertEqual((code, result['reason'], result['enters']), (3, 'receipt-timeout', 2))
+        self.assertEqual(self.command('--unresolved')[1], [])
+        self.assertEqual(Path(result['pending_file']).read_text(), t.payload)
+        self.assertEqual(self.send(Terminal(payload='Fresh payload'))[0], 0)
 
     def test_crash_leaves_unknown_enter_state_and_payload(self):
         t = Terminal()
@@ -1400,6 +1421,20 @@ class PasteJournalTests(unittest.TestCase):
         self.assertTrue((completed / 'message').exists())
         self.assertEqual(self.command('--unresolved')[1], [])
         self.assertFalse(completed.exists())
+
+    def test_crash_after_resolution_publish_reclaims_bytes_on_next_listing(self):
+        code, report = self.send(Terminal(mutate=True))
+        self.assertEqual(code, 3)
+        pending = Path(report['pending_file'])
+        with patch.object(m.PasteJournal, 'purge_resolved_payload', side_effect=SystemExit(99)):
+            with self.assertRaises(SystemExit):
+                self.command('--resolve', report['attempt_id'], '--disposition', 'draft-removed')
+        metadata = pending.parent / 'resolution.json'
+        original = metadata.read_bytes()
+        self.assertTrue(pending.exists())
+        self.assertEqual(self.command('--unresolved')[1], [])
+        self.assertFalse(pending.exists())
+        self.assertEqual(metadata.read_bytes(), original)
 
 
 class DiagnosticTests(unittest.TestCase):

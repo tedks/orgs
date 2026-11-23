@@ -77,7 +77,7 @@ An ordinary send publishes a private write-ahead record before pasting.
 for cooperating invocations. Each attempt has a unique ID, the resolved
 receiver, the sender process and available tmux context, and the path to
 the owner-only payload file. Listing reports metadata and finishes interrupted
-cleanup of completed attempts. An attempt with no outcome may still be active
+cleanup of completed or resolved attempts. An attempt with no outcome may still be active
 or have been interrupted. A controlled ambiguous outcome reports `enters`
 and `submit_not_attempted`. The latter says what the sender attempted.
 It provides no evidence of submission by the receiver or another actor.

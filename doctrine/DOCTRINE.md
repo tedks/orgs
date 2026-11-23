@@ -228,10 +228,10 @@ apart. Input that is changing means someone is typing: defer with bounded
 backoff and a stated timeout. A stable draft also defers. The sender
 preserves it without appending, submitting or clearing it. A modal still
 defers. Streaming agent output with an empty composer permits delivery.
-When paste evidence is ambiguous, preserve the outgoing payload privately
-and record possible stranded input. Resolve the attempt only with independent
-evidence. A pending file alone never authorizes replay. Keep unfinished human
-text and keys out of records. Screen inspection has races;
+When paste evidence is ambiguous, stop and preserve the outgoing payload
+and any stranded-paste record privately. Never clear, overwrite or blindly
+repaste. Resolve the attempt only with independent evidence. Keep unfinished
+human text and keys out of records. Screen inspection has races;
 bindings must state their limits and cannot promise atomic typing exclusion.
 Transport exit zero is not application receipt: verify submitted history or
 an explicit pending queue for the exact message. A queued message is received,
@@ -492,8 +492,9 @@ The distilled form, packed verbatim into every role prompt:
 > delivery: input that is changing between two looks means someone is
 > typing, so defer with bounded backoff and a timeout. Stable drafts and
 > modals also defer. Streaming output with an empty composer permits delivery.
-> Ambiguous input after paste calls for preserving the outgoing payload and
-> any unresolved attempt privately. Keep unfinished human input out of records.
+> Ambiguous input after paste means stop. Preserve the outgoing payload and
+> any unresolved attempt privately. Never clear, overwrite or blindly repaste.
+> A pending file alone never authorizes replay. Keep unfinished human input out of records.
 > Verify the exact message in submitted history or an explicit pending queue. A
 > queue receipt is not action completion. Retry submission only for exact
 > own unsent payload with no unrelated input/modal, keeping the same event id;

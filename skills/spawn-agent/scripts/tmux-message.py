@@ -772,6 +772,7 @@ def pane_lock(identity, timeout):
 
 
 ATTEMPT_ID = re.compile(r"[0-9a-f]{64}-[0-9a-f]{32}")
+DISPOSITIONS = ("receipt-confirmed", "acknowledged", "draft-removed", "receiver-replaced")
 
 
 def sync_directory(path):
@@ -832,8 +833,20 @@ class PasteJournal:
                     self.cleanup_completed(path)
                 except OSError:
                     pass
-            elif (path / "attempt.json").exists() and not (path / "resolution.json").exists():
-                attempts.append(path)
+            elif (path / "attempt.json").exists():
+                try:
+                    resolution = self.read_record(path, "resolution")
+                except (FileNotFoundError, ValueError):
+                    attempts.append(path)
+                else:
+                    disposition = resolution.get("disposition") if isinstance(resolution, dict) else None
+                    if disposition in (*DISPOSITIONS, "transport-finished"):
+                        try:
+                            self.purge_resolved_payload(path)
+                        except OSError:
+                            pass  # Retain the disposition and retry cleanup on a later listing.
+                    elif disposition != "enter-confirmed":
+                        attempts.append(path)
         return sorted(attempts)
 
     def prepare(self, tmux, payload):
@@ -896,14 +909,23 @@ class PasteJournal:
             # Keep a terminal disposition if this volume permits updating
             # the record but not renaming the entire attempt directory.
             self.mark_finished(path, "transport-finished")
-            (path / "message").unlink(missing_ok=True)
-            sync_directory(path)
+            self.purge_resolved_payload(path)
             return
         sync_directory(self.root)
         self.cleanup_completed(finished)
 
     def mark_finished(self, path, disposition):
         self.write_record(path, "resolution", {"disposition": disposition, "resolved_ns": time.time_ns()})
+
+    @staticmethod
+    def purge_resolved_payload(path):
+        payload = path / "message"
+        if payload.exists():
+            # A listing can see the atomic resolution rename before the
+            # resolving process fsyncs it. Flush it before erasing the bytes.
+            sync_directory(path)
+            payload.unlink(missing_ok=True)
+            sync_directory(path)
 
     @staticmethod
     def cleanup_completed(finished):
@@ -929,8 +951,7 @@ class PasteJournal:
             else:
                 if resolution["disposition"] != disposition:
                     raise DeliveryError("attempt-already-resolved")
-            (path / "message").unlink(missing_ok=True)
-            sync_directory(path)
+            self.purge_resolved_payload(path)
 
 
 class Sender:
@@ -1196,6 +1217,9 @@ class Sender:
         elif self.typed:
             self.type_payload()
         else:
+            # Receipt observation may read a retained dead pane. Establish
+            # liveness separately before marking an outgoing input attempt.
+            self.tmux.check_receiver()
             self.pasted = True
             self.diagnostic_phase = "post_paste"
             if self.diagnostic is not None:
@@ -1332,8 +1356,7 @@ def journal_command(argv):
     parser = argparse.ArgumentParser(description="Inspect or resolve a private paste attempt without pane input")
     if argv[0] == "--resolve":
         parser.add_argument("id")
-        parser.add_argument("--disposition", required=True,
-                            choices=("receipt-confirmed", "acknowledged", "draft-removed", "receiver-replaced"))
+        parser.add_argument("--disposition", required=True, choices=DISPOSITIONS)
     o = parser.parse_args(argv[1:])
     if argv[0] == "--resolve" and not ATTEMPT_ID.fullmatch(o.id):
         parser.error("invalid attempt ID")

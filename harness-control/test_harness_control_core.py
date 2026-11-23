@@ -1830,8 +1830,12 @@ def live_integration():
     """Real private tmux + real detached worker + public transport, stand-in TUI."""
     if not shutil.which('tmux'):
         raise RuntimeError('tmux required for --live-integration')
-    with tempfile.TemporaryDirectory(prefix='harness-control-live-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='harness-control-live-') as temporary, patch.dict(os.environ):
         root = Path(temporary)
+        # The detached worker and its public sender share the fixture's
+        # writable private state, including in the Nix build sandbox.
+        os.environ['XDG_STATE_HOME'] = str(root / 'state')
+        os.environ['CLAUDE_SEND_LOCK_DIR'] = str(root / 'sender-locks')
         socket = root / 'tmux.sock'
         tmux = ['tmux', '-S', str(socket), '-f', '/dev/null']
         repo = root / 'repo'
