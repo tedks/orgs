@@ -15,6 +15,7 @@ import sys
 import unicodedata
 
 CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+OSC8_RE = re.compile(r"\x1b\]8;([^;\x00-\x1f\x7f-\x9f]*);([^\x00-\x1f\x7f-\x9f]*)(?:\x1b\\|\x07)")
 
 
 def claude_composer_frame(screen: str, cursor_y: int | None = None,
@@ -82,12 +83,36 @@ def dialog_active(screen: str, cursor_y: int | None = None) -> bool:
     return False
 
 
+def strip_hyperlinks(row: str) -> str:
+    """Remove paired OSC 8 framing from one captured row, retaining its label."""
+    if "\x1b]8;" not in row:
+        return row
+    parts = []
+    end = 0
+    opened = False
+    for match in OSC8_RE.finditer(row):
+        between = row[end:match.start()]
+        params, uri = match.groups()
+        if "\x1b]8;" in between or opened == bool(uri) or (not uri and params):
+            return row
+        parts.append(between)
+        opened = bool(uri)
+        end = match.end()
+    tail = row[end:]
+    if opened or "\x1b]8;" in tail:
+        return row
+    return "".join(parts) + tail
+
+
 def strip_ansi(text: str) -> str:
+    if "\x1b]8;" in text:
+        text = "\n".join(strip_hyperlinks(row) for row in text.split("\n"))
     return CSI_RE.sub("", text)
 
 
 def sgr_span(raw_line: str, needle: str, attribute: str) -> bool:
     """Return true only when every visible character has the named SGR style."""
+    raw_line = strip_hyperlinks(raw_line)
     chars = []
     flags = []
     styles = {"bold": False, "dim": False}

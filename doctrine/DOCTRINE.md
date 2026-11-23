@@ -225,15 +225,13 @@ evidence.
 
 Before control delivery, inspect the composer twice, one settle window
 apart. Input that is changing means someone is typing: defer with bounded
-backoff and a stated timeout. Input that is unchanged is a stale draft: never
-clear or overwrite it, but do not wait on it either; append the payload
-after it and submit both, recording that a draft was co-submitted (its
-length, never its contents). Two messages landing back to back is
-acceptable; a delivery blocked for hours behind a stale line is not. A modal
-still defers. Streaming agent output with an empty composer permits
-delivery. If input becomes ambiguous after a paste, do not submit, clear,
-overwrite or blindly repaste it. Preserve the outgoing payload privately for
-deliberate retry; never record unfinished human text or keys. Screen inspection has races;
+backoff and a stated timeout. A stable draft also defers. The sender
+preserves it without appending, submitting or clearing it. A modal still
+defers. Streaming agent output with an empty composer permits delivery.
+When paste evidence is ambiguous, preserve the outgoing payload privately
+and record possible stranded input. Resolve the attempt only with independent
+evidence. A pending file alone never authorizes replay. Keep unfinished human
+text and keys out of records. Screen inspection has races;
 bindings must state their limits and cannot promise atomic typing exclusion.
 Transport exit zero is not application receipt: verify submitted history or
 an explicit pending queue for the exact message. A queued message is received,

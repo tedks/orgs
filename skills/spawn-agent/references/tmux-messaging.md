@@ -7,50 +7,37 @@ session. Resolution uses `list-windows`/`list-panes`, never `display-message`,
 which may fall back to the active pane when a target is missing. Operations pin
 the resolved pane ID; deletion afterward causes failure rather than retargeting.
 
-The public sender uses `tmux-message.py`. It returns success only after observing
-new application receipt evidence. The older `claude-send.sh` remains available
-for compatibility, with transport-only semantics. Its measured busy Codex queue
-layouts verify only single-line input, so ordinary drafts there defer before
-input. Eligible command drafts can be cleared first; empty composers permit
-supported short messages. Both entry points use `--typed-command`
-explicitly for single-line slash commands; ordinary messages retain bracketed paste.
+The public sender uses `tmux-message.py` and returns success only with a
+new application receipt. Use this entry point for inter-agent traffic and
+lifecycle commands. The historical `claude-send.sh` is a separate
+transport-only command with its legacy interface and safety contract.
 
 ## Flow
 
-1. Resolve the target to a stable pane and acquire one per-pane sender lock.
-2. Compare the input text and relative cursor twice, one `--stable-window`
-   apart (default: submit-delay, normally eight seconds). Output moving above
-   the input does not count as typing. Changing input defers with bounded
-   backoff. Preserve an unchanged draft and append a newline plus the outgoing
-   payload; submit both only after verifying the combined input. Record only
-   draft length (`stale_draft_length`). Modals and unsupported layouts defer.
-   A draft must have a visibly verified end cursor. A stable single-line draft
-   at its canonical Home cursor may receive End, followed by verification that
-   its text is unchanged and its cursor is at the known end. Repaint polling
-   stays within the original readiness budget. Unchanged Home drafts or
-   incomplete repaint frames receive no further keys while waiting; known
-   changed text, harness, modal or another cursor position stops the attempt. Other non-end
-   positions defer. Collapsed markers and
-   recognizable full outgoing content already in the draft remain ambiguous
-   and defer. This prevents a retained combined input from receiving the same
-   payload twice after a failed attempt. The replay guard compares full payload
-   content ignoring whitespace; independently authored text containing the
-   same content also conservatively defers. A Claude `Try …`
-   suggestion retains the conservative Space/Backspace probe; suggestions are
-   disabled fleet-wide, so normal idle Claude input is empty.
-3. Snapshot receipt history, recheck input, and paste actual text once through
-   tmux bracketed paste. For new input, compare the result with the expected
-   text, tolerating wrapping/whitespace layout, or recognize a newly introduced
-   collapsed paste marker. For co-submission, require the exact combined input
-   or a measured harness-specific append marker described below.
-4. Send Enter after paste evidence and the settling delay. A Claude
-   stable-draft co-submission gets one Enter maximum. Other ordinary deliveries
-   retain one bounded Enter retry if the same input remains after the retry
-   interval. Wait for a new submitted user row or pending queue entry. An
-   unclear result is ambiguous and may leave a combined draft and hidden paste
-   unsent; never paste again or send another Enter after ambiguity.
-5. Once the input empties, only wait for confirmation. Disappearance alone is
-   not confirmation, and cannot authorize Enter into the next empty input.
+1. Resolve the target to an exact pane, observe its receiver identity and
+   acquire the shared sender lock. Defer if this identity has an unresolved
+   paste. Receiver checks use the socket, server PID and start time, pane ID,
+   pane PID and terminal device. A server restart or pane respawn can produce
+   a new identity without consuming the old attempt.
+2. Compare input and relative cursor at least twice across
+   `--stable-window` (default eight seconds). Require a recognized empty
+   composer at its start cursor with no visible draft rows. A stable draft,
+   including a command-shaped draft or collapsed marker, defers as
+   `existing-input` before paste, Enter, cursor navigation or clearing.
+   `--backoff` can wait for the receiver's composer to become empty. Modals,
+   image placeholders and unsupported layouts defer. The measured Claude
+   idle-suggestion probe and literal-exit handling retain their checks.
+3. For bracketed paste, persist the pending bytes and attempt metadata under
+   the pane lock. Recheck input and snapshot the receipt baseline. Paste the
+   outgoing bytes once. Compare the rendered input with the payload,
+   tolerating terminal wrapping, or require a fresh whole-paste marker.
+   Paired OSC 8 hyperlinks on a captured row contribute only their visible
+   labels. Other OSC controls, malformed and unbalanced links, and unrelated
+   visible text cannot match the payload through this handling.
+4. After the settling delay, send Enter only with fresh evidence of this
+   attempt's input. Allow one bounded Enter-only retry for ordinary delivery
+   while the same input remains. When the composer empties, only wait for a
+   new receipt. Disappearance alone provides no confirmation.
 
 New receipt means an additional matching record compared with the pre-paste
 history. A collapsed receipt can match a marker observed in this attempt's
@@ -79,87 +66,46 @@ length. Visible text outside this whole-paste marker is mixed input and stops
 submission. Existing `[Pasted text …]` markers retain their surrounding-text
 checks. A retained file alone never establishes which paste is on screen.
 
-For ordinary co-submission, Codex 0.157.1 can display the unchanged draft
-immediately followed by `[Pasted Content N chars]`, with the appended newline
-inside that collapsed block. The public sender accepts this measured shape
-only when the original draft prefix is exact, the marker is the entire remaining
-input, the original and current harness are Codex, and the cursor is at the
-verified end. N must equal the newline plus outgoing payload's Unicode
-code-point or UTF-16-unit count. Readiness rejects pre-existing paste markers
-case-insensitively, so this evidence belongs to the current paste. Changed
-prefixes, extra text, wrong counts and unsupported markers cannot authorize
-Enter. A new matching submitted or queued receipt is still required; no replay
-is introduced. Other Codex wrapped/collapsed co-submission shapes remain
-unsupported.
+## Unresolved paste records
 
-Claude Code 2.1.283 can replace a long bracketed paste appended to a stable
-ordinary draft with `[Pasted text #N +K lines]` while leaving the exact original
-draft prefix visible. The sender accepts only this measured co-submit shape when
-the prefix is exact, the marker is the only suffix, K equals one plus the
-outgoing payload's newline count, the current and original harness are Claude,
-and the cursor is at the verified end. The transient `paste again to expand`
-hint is transient and is ignored. The current paste operation
-appends one newline and the outgoing payload, and readiness excludes old paste
-markers, so this marker is consistent with the one fresh paste. Its hidden
-bytes cannot be inspected, so the marker does not prove the pasted contents.
-After the sender first recognizes this shape, any change to the owned input
-before submission defers. Other Claude markers, extra text, changed prefixes,
-wrapped prefixes, and cursor or harness changes defer. All Claude stable-draft
-co-submissions send Enter at most once and require a new submitted or queued
-receipt; they never retry Enter or re-paste after ambiguity. Visible full-text
-co-submission also requires the exact draft + newline + payload, the same
-harness, and an end cursor.
+An ordinary send publishes a private write-ahead record before pasting.
+`tmux-message unresolved` lists attempts in
+`${XDG_STATE_HOME:-~/.local/state}/tmux-message`. Use the same state home
+for cooperating invocations. Each attempt has a unique ID, the resolved
+receiver, the sender process and available tmux context, and the path to
+the owner-only payload file. Listing reads metadata and prints no payload
+bytes or composer text. An attempt that has no outcome may still be active
+or have been interrupted. A controlled ambiguous outcome reports `enters`
+and `submit_not_attempted`. The latter says what the sender attempted.
+It provides no evidence of submission by the receiver or another actor.
+A failed Enter operation can leave its effect unknown even when the sender
+counted the call.
 
-The compatibility `claude-send.sh` uses the same exact Claude co-submit input
-predicate and freezes its first recognized text/cursor fingerprint through its
-single Enter. It keeps its legacy `status=sent receipt=unverified` result and
-does not claim application delivery. It preserves exact visible hard-newline
-rows, including matching trailing blank rows through the cursor; cropped views,
-unsupported wrapped-prefix layouts, changed rows, and misplaced cursors remain
-ambiguous. Its legacy Codex collapsed-append recognition retains its existing
-visible-input limits.
+A confirmed transport receipt removes the attempt. A controlled ambiguity
+after at least one completed Enter operation retains the ordinary temporary
+pending file and releases the unresolved gate. A possible zero-Enter
+ambiguity or crash stays discoverable and blocks sends to that receiver
+identity. Other senders cannot overwrite the record, and a later pane or
+server incarnation with reused numeric IDs cannot silently consume it.
 
-For Claude 2.1.283's measured submitted-row layout, the native receipt may show
-the draft after `❯`, one blank separator row, then the payload on continuation
-rows with the measured two-space indent. The sender checks that complete block
-against the same expected co-submit body and the pre-paste count, using the
-existing receipt normalization for terminal wrapping. This public receipt
-check supports only the measured single blank separator; extra blank paragraphs
-and cropped views remain ambiguous. It only counts an explicit new column-zero
-`❯` user row before a recognized current composer;
-assistant prose, an archived composer, an incomplete or cropped block, and an
-unchanged old body do not confirm delivery. Other blank-row or queued layouts
-remain subject to the ordinary receipt parser and may stay ambiguous.
+Observe the exact receiver and identify this attempt before recording a
+disposition. Use `receipt-confirmed` for independently verified fresh
+application receipt, `acknowledged` for an attributable response,
+`draft-removed` when the operator confirmed removal of the stranded draft,
+or `receiver-replaced` when the original receiver is gone. For example:
 
-## Stable command drafts
+```bash
+tmux-message resolve ATTEMPT_ID --disposition receipt-confirmed
+```
 
-A stable command-shaped draft is cleared without executing it before the
-outgoing message is sent. The message supplies context that may pre-empt the
-command. This is the explicit exception to ordinary draft preservation.
-Only an exact visible single-line command in a recognized composer is eligible:
-slash command syntax follows the validated `--typed-command` grammar and
-200-byte limit; a supported single-line `!` shortcut follows the same visible
-shape limits. Real command-clear smokes cover slash drafts; `!` eligibility
-is tested only in synthetic recognized prompt frames. A bash-mode prompt with
-a different glyph remains unknown and defers; real `!` clearing is unverified.
-Command names are recognized syntactically, so an existing draft
-such as `/tmp is full again` is command-shaped. Outgoing slash-looking prose
-still uses ordinary paste unless `--typed-command` is explicit.
-
-Recheck the stable draft, verify its end cursor, send Ctrl-U once, and wait
-within the original readiness budget for an empty composer of the same
-harness. Incomplete repaint and unchanged command frames receive no further
-keys. Known new text, modal, harness or cursor changes stop the attempt. Recheck
-empty input before dispatching the outgoing payload. Never execute the discarded
-command or retry clearing blindly. Long, malformed, multiline or unsupported
-command-like drafts defer; replay residue and collapsed markers take precedence
-and cannot authorize clearing.
-
-Results include `cleared_command_draft_length` only after empty input is
-verified, and `clear_attempted` whenever clearing was attempted, never the
-command's contents. A failure after a clear attempt is ambiguous even if
-`input_attempted` and `paste_attempted` are false: those fields describe outgoing
-input only. The retained pending file still contains only the outgoing payload.
+Resolution is metadata-only and works even after the receiver has exited.
+It uses the same lock as delivery, records the disposition, and deletes the
+payload bytes. Repeating the same disposition can finish pending cleanup.
+A different disposition cannot overwrite it. A resolution is the operator's
+recorded observation. It does not send Enter, clear a pane, verify a receipt
+automatically, or replay a payload. Where authorized separately, deliberate
+Enter-only recovery still requires fresh identification of the exact
+retained paste, a compatible receiver, and no unrelated input or modal.
 
 ## Options
 
@@ -235,10 +181,8 @@ and `-`), optionally followed by a space and arguments. Controls, newlines,
 leading whitespace, trailing Unicode whitespace or semicolons, commands over 200 UTF-8 bytes,
 and ordinary prose are rejected. These limits avoid tmux argument loss and
 ambiguous wrapped or trimmed composer evidence. Ordinary messages retain
-bracketed paste. Typed commands require an empty composer: joining a draft
-would change command semantics, so ordinary stable drafts defer in this mode.
-Eligible command drafts are cleared and verified empty first. Typed
-input requires exact visible command text; a collapsed paste marker cannot
+bracketed paste. Typed commands require an empty composer and exact visible command text after
+typing. A collapsed paste marker cannot
 authorize its Enter. Failure JSON distinguishes `input_attempted` from
 `paste_attempted` and labels `input_method`; an ambiguous typed attempt must
 never be blindly replayed. `--typed-command` and `--literal-exit` cannot be combined.
@@ -246,18 +190,16 @@ never be blindly replayed. `--typed-command` and `--literal-exit` cannot be comb
 Payloads are nonblank UTF-8 with no control characters except newlines. Message
 bytes, including trailing whitespace/newlines, are preserved in the paste.
 
-Exit 0 emits delivered JSON on stdout. Failures emit JSON on stderr. Exit 2
-means deferred before a clear or outgoing input attempt. Cursor navigation and
-the suggestion probe may still have occurred. Exit 3 means ambiguous after a clear
-or outgoing input attempt.
-Use `input_attempted` to determine whether outgoing input may have occurred.
-Either `clear_attempted` or `input_attempted` indicates possible composer mutation;
-`paste_attempted` applies to bracketed paste, except that the legacy
-`--literal-exit` mode retains its compatibility meaning of any input attempt.
-Both literal modes report `input_method: "typed"`. Signals retain conventional
-128+signal exit codes except for the selected compaction mode after input. Unsuccessful attempts retain the outgoing message in a private temporary
-directory (700) with a private file (600). Remove that file/directory after
-resolving it. No human draft or pane contents are logged automatically.
+Exit 0 emits delivered JSON on stdout. Failures emit JSON on stderr.
+Exit 2 means deferred before outgoing input. Exit 3 means ambiguous after
+outgoing input may have occurred. The Claude suggestion probe can still
+have occurred before a deferral. Use `input_attempted` to determine whether
+outgoing input may have occurred. `paste_attempted` applies to bracketed
+paste, with its compatibility meaning for `--literal-exit`. Signals retain
+conventional 128+signal exit codes except for selected compaction after input.
+Unsuccessful sends retain the outgoing message privately, either as an
+unresolved attempt or as a private temporary file. Remove temporary payloads
+after disposition. If private storage fails, the result reports the failure.
 
 ## Verify a typed Codex compaction
 
@@ -339,8 +281,7 @@ an unsupported layout, modal or ambiguous attempt. The result also carries a
 reason, paste-attempted flag and Enter count. An orchestrator may delegate this
 inspection to an agent; there is no compulsory model call or model dependency
 inside the sender. The inspecting agent must check for receipt before taking
-any further action. Changing input normally needs only bounded backoff; an unchanged draft is
-co-submitted with ordinary messages. Typed commands still require empty input.
+any further action. Changing input normally needs only bounded backoff. Stable drafts defer.
 
 Screen interpretation uses semantic prompt/frame/footer and queue markers,
 relative cursor position, and before/after receipt counts, not model identity

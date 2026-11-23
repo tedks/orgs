@@ -108,10 +108,10 @@ successor acts.
 Pin the explicit pane and verify its identity before each send. Use the shared
 `tmux-message` sender for composer protection and new application receipts.
 An ambiguous send never authorizes another paste. The sender observes input
-twice eight seconds apart and co-submits ordinary stable drafts with the offer;
-a stable command-shaped draft follows its published clear-and-verify exception.
-Claude exit uses the shared `--literal-exit` guard; Codex exit uses
-`--typed-command`. Both require an empty composer and defer for ordinary drafts.
+twice eight seconds apart. Existing drafts defer the offer or exit. The
+controller preserves the composer and returns to the pending handoff.
+Claude exit uses the shared `--literal-exit` guard and Codex exit uses
+`--typed-command`.
 Changing input, a modal, missing evidence, or changed process identity defers
 retirement.
 

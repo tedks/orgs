@@ -145,48 +145,38 @@ acceptance, not completion of the task. Busy agent output can continue.
 
 Observe the composer twice, one `--stable-window` apart (default: the
 `--submit-delay`, normally eight seconds). Changing text or cursor returns
-`human-typing`; use `--backoff --max-wait 60` for bounded waiting. An unchanged
-draft is preserved: append a newline and the outgoing message, verify the
-combined input, then submit both. Results record only the co-submitted draft
-length, never its contents. A Claude composer containing `[Image #N]`, even
-when the marker wraps across rows, defers as `image-placeholder`; the image is
-opaque and must never be co-submitted. This check precedes command-draft
-handling. Exception to co-submission: a verified stable command-shaped draft
-is cleared without execution, then the outgoing message is sent only after
-empty input is verified. Its context may pre-empt the command. Results include
-`cleared_command_draft_length` after empty input is verified, and
-`clear_attempted` whenever clearing was attempted, never draft contents.
-Changing input, replay residue, modals and unsupported layouts still defer.
-Claude Code status footers such as usage limits, auto-update errors, and
-feedback-draft counts do not by themselves return `modal`. Delivery requires
-the measured Claude composer frame at the cursor. Known dialogs return `modal`,
-and unfamiliar Claude choice layouts defer as unknown input without paste or Enter.
-For ordinary co-submission, the public sender supports measured Codex and
-Claude append shapes: Codex's unchanged draft prefix plus one fresh Content
-marker whose count covers the appended newline and payload; Claude's exact
-draft prefix plus one fresh `[Pasted text #N +K lines]` marker whose K equals
-one plus the payload newline count. Claude's transient `paste again to expand`
-hint is ignored. Both require the same harness and verified end cursor. Claude
-stable-draft co-submissions send Enter at most once and require a new receipt.
-Other unsupported combined layouts remain closed.
-Claude prompt suggestions are disabled fleet-wide; an ambiguous suggestion
-frame retains the conservative probe. One pane lock serializes cooperating
-senders; it cannot lock out human typing.
+`human-typing`. Use `--backoff --max-wait 60` to wait for empty input.
+An unchanged draft, including a command-shaped draft or collapsed paste
+marker, defers as `existing-input`. The sender leaves draft bytes and
+cursor alone. A Claude `[Image #N]` placeholder defers as
+`image-placeholder`. Known dialogs return `modal`. An unfamiliar layout
+defers without paste or Enter. Claude's idle suggestion probe preserves
+actual text, and its measured literal-exit route keeps its existing checks.
+One pane lock serializes cooperating senders. Human typing can occur between
+observations.
 
-Use `--typed-command` for slash commands such as `/compact`, `/exit`, and
-`/status`: these are literal keys,
-with the same draft preservation and receipt checks. Claude may treat a pasted
-slash command as ordinary text. This option accepts one single-line slash command and optional arguments; it
-rejects control characters, newlines, leading whitespace, and ordinary prose.
-Typed commands require an empty composer: appending them to a draft would
-turn the command into ordinary message text. Ordinary stable drafts therefore defer
-for command delivery; eligible command drafts are cleared first.
+Use `--typed-command` for literal slash commands such as `/compact` and
+`/status`. The option accepts one single-line slash command with optional
+arguments and requires an empty composer. Retirement uses the documented
+`--literal-exit` option for Claude and `--typed-command` for Codex.
 
-Results are JSON: exit 0 is `status=delivered` with a `submitted`, `queued`, or
-`command` receipt. Exit 2 is deferred before paste; exit 3 is ambiguous after
-paste may have occurred. Failure reports include `reason`, `pending_file`,
-`pane` when resolved, and `needs_review`. The private file holds the actual
-outgoing message; it is never automatically replayed.
+Results are JSON. Exit 0 is `status=delivered` with a `submitted`,
+`queued`, or `command` receipt. Exit 2 is deferred before outgoing input.
+Exit 3 is ambiguous after outgoing input may have occurred. Failure reports
+include `reason`, `pending_file`, `pane` when resolved, and `needs_review`.
+`submit_not_attempted=true` records that the sender made zero Enter
+attempts after ordinary paste. Receiver state requires independent evidence.
+
+Run `tmux-message unresolved` to discover owner-only records of possible
+stranded pastes, including crashes with unknown Enter state. A live receiver
+with an unresolved attempt defers with `blocking_attempt_id`. A known
+positive-Enter timeout follows the existing ambiguous pending-file path and
+has no unresolved gate. After checking the matching attempt independently,
+run `tmux-message resolve ATTEMPT_ID --disposition DISPOSITION`. Resolution
+records the operator's finding and removes the stored payload without sending
+pane input. See [transport details](references/tmux-messaging.md) for
+dispositions and the record location. Pending files never authorize replay.
+
 For a future attempt explicitly selected for structural diagnosis, `send` accepts
 `--diagnostic-file ABSOLUTE_NEW_PATH`. It records bounded, redacted composer
 structure from that invocation's existing samples only. The parent directory
@@ -220,7 +210,7 @@ The scoped parser suite runs with
 `nix develop --command bazel test //skills/spawn-agent:tmux_message_test`.
 
 For `needs_review=true`, read the pane and inspect the reported stage. If a new
-receipt is visible, record acceptance. If this attempt's paste is still in the
+receipt is visible, record acceptance and resolve the attempt when it has an ID. If this attempt's paste is still in the
 input, the operator permits deliberate Enter-only recovery based on sufficient evidence
 including its collapsed paste marker. Preserve unrelated/mixed drafts and
 modals. Do not repaste an ambiguous attempt. Return to other useful work when

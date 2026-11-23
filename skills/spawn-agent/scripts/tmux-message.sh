@@ -5,10 +5,11 @@
 set -euo pipefail
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-source "$SCRIPT_DIR/tmux-ctx.sh"
 usage() {
     echo 'Usage: tmux-message.sh send TARGET [sender options] MESSAGE' >&2
     echo '       tmux-message.sh read TARGET' >&2
+    echo '       tmux-message.sh unresolved' >&2
+    echo '       tmux-message.sh resolve ATTEMPT_ID --disposition DISPOSITION' >&2
     exit 2
 }
 (($# >= 1)) || usage
@@ -20,11 +21,14 @@ case "$command" in
         target=$1; shift
         exec python3 "$SCRIPT_DIR/tmux-message.py" "$target" "$@";;
     read)
+        source "$SCRIPT_DIR/tmux-ctx.sh"
         (($# == 1)) || usage
         [[ -n "$1" && "$1" != -* ]] || usage
         identity=$("$SCRIPT_DIR/tmux-resolve.sh" "$1")
         pane=${identity#*:}
         [[ "$pane" =~ ^%[0-9]+$ ]] || { echo 'Invalid tmux pane identity.' >&2; exit 2; }
         exec "${TMUX_CMD[@]}" capture-pane -e -p -t "$pane" -S -200;;
+    unresolved|resolve)
+        exec python3 "$SCRIPT_DIR/tmux-message.py" "--$command" "$@";;
     *) usage;;
 esac
