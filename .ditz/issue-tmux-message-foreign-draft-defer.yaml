@@ -1,0 +1,22 @@
+id: tmux-message-foreign-draft-defer
+title: Defer ordinary tmux messages before pasting into an unowned composer draft
+desc: 'A second sender detected an existing draft left by a failed first send, appended
+  its own message and left both in the composer. Both subsequently appeared together
+  as a single user turn. A stable draft is not proof of ownership. An ordinary sender
+  seeing a foreign or unproven draft should defer before modifying the composer and
+  report paste_attempted false. Preserve existing input. Handle concurrent sends and
+  retries and distinguish a submitted message from a stranded paste. Related issues:
+  tmux-message-codex-osc8 and tmux-message-enters0-stranded-paste.'
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-23T19:18:56-00:00
+references: []
+log_events:
+- time: 2026-11-23T19:18:56-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
