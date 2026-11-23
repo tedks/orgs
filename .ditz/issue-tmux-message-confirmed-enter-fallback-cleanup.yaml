@@ -1,0 +1,22 @@
+id: tmux-message-confirmed-enter-fallback-cleanup
+title: Make confirmed-Enter fallback payload cleanup idempotent
+desc: When saving a temporary pending copy fails after a completed Enter operation,
+  the shared sender keeps its sole private copy in the state directory and leaves
+  the receiver ungated. Document how to dispose of that reported pending file. Distinguish
+  failure to create the temporary copy from failure to finish cleanup after creating
+  it, so the sender does not replace an existing cleanup disposition or leave a redundant
+  private copy after a recoverable filesystem fault. Preserve metadata and keep this
+  path free of pane input.
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-23T19:50:14-00:00
+references: []
+log_events:
+- time: 2026-11-23T19:50:14-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
