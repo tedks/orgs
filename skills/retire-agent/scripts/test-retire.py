@@ -26,15 +26,17 @@ sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 SHARED = Path(os.environ.get('RETIRE_TEST_SHARED_SCRIPTS', str(HERE.parents[1] / 'spawn-agent' / 'scripts')))
 # Sanitized real Claude Code 2.1.332 rows from the marker down (see its header).
-CLAUDE_HINT_FIXTURE = [row for row in (HERE / 'fixtures/claude-2.1.332-clear-hint-agent-footer.txt').read_text().split('\n')
-                       if row and not row.startswith('#')]
+# Read lazily: node-entrypoint tests run a copy of this file from another directory.
+CLAUDE_HINT_FIXTURE = 'fixtures/claude-2.1.332-clear-hint-agent-footer.txt'
 CLAUDE_HINT_EVENT = 'feedfacecafebeef0123456789abcdef'
 CLAUDE_HINT_WIDTH = 381
 
 
 def claude_hint_rows(mode, event, disposition):
     """The fixture rows with this test's event, and one named twin change."""
-    rows = [row.replace(CLAUDE_HINT_EVENT, event) for row in CLAUDE_HINT_FIXTURE]
+    real = [row.replace(CLAUDE_HINT_EVENT, event) for row in (HERE / CLAUDE_HINT_FIXTURE).read_text().split('\n')
+            if row and not row.startswith('#')]
+    rows = list(real)
     if disposition == 'DECLINED':
         rows[0] = rows[0].replace('RETIRE-DONE-', 'RETIRE-DECLINED-')
     marker, hint, permission = rows[0], rows[1], rows[6]
@@ -64,7 +66,7 @@ def claude_hint_rows(mode, event, disposition):
         rows[0] = marker.replace('●', '❯', 1)
     if mode not in ('claude-hint', 'claude-hint-ambiguous', 'claude-hint-decline', 'done-claude-hint'):
         # A twin must differ from the real rows, or its refusal proves nothing.
-        assert rows != [row.replace(CLAUDE_HINT_EVENT, event) for row in CLAUDE_HINT_FIXTURE], mode
+        assert rows != real, mode
     return rows
 
 
