@@ -18,24 +18,35 @@ import zlib
 
 HOME_PREFIX = "/ho" + "me/"
 UUID = r"[0-9a-f]{8}(?:[-_][0-9a-f]{4}){3}[-_][0-9a-f]{12}"
-COMPACT_UUID = r"[0-9a-f]{12}[1-8][0-9a-f]{3}[89ab][0-9a-f]{15}"
-ID_SUFFIX = r"[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?(?![a-z0-9])"
-PATH_TOKEN = r"""(?:\\ |[^\s"'\x60<>|,;{}\[\]()\\])"""
+COMPACT_UUID = re.compile(r"[0-9a-f]{12}[1-8][0-9a-f]{3}[89ab][0-9a-f]{15}", re.I)
+HEX_TOKEN = re.compile(r"(?<![a-z0-9])[0-9a-f]{32,}(?![a-z0-9])", re.I)
+DELIMITED_UUID = re.compile(UUID, re.I)
+ID_SUFFIX = r"[a-z0-9][a-z0-9_-]*(?![a-z0-9_-])"
 HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "Users/", "/" + "root/")
-HOME_PATHS = (
-    "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + ")" + PATH_TOKEN + "*"
-    + r"|(?<![\w~])~[A-Za-z_][A-Za-z0-9_.-]*" + PATH_TOKEN + "*"
+HOME_START = re.compile(
+    "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + r")|(?<![\w~])~[A-Za-z_][A-Za-z0-9_.-]*"
 )
 IDENTIFIERS = (
-    ("uuid", re.compile(UUID, re.I)),
-    ("codex-id", re.compile(rf"(?<![0-9a-f]){COMPACT_UUID}(?![0-9a-f])", re.I)),
-    ("request-id", re.compile(r"(?<![a-z0-9])req_" + ID_SUFFIX, re.I)),
-    ("message-id", re.compile(r"(?<![a-z0-9])msg_" + ID_SUFFIX, re.I)),
-    ("tool-id", re.compile(r"(?<![a-z0-9])toolu_" + ID_SUFFIX, re.I)),
-    ("home-path", re.compile(HOME_PATHS)),
-    ("pane-id", re.compile(r"(?:(?<![\w%])|(?<=-t)|(?<=\bpane))%[0-9]+(?![\w%$]|\.[0-9])", re.I)),
-    ("opaque", re.compile(r"[a-zA-Z0-9+/_-]{200,}={0,2}")),
+    ("pane-id", re.compile(r"(?:(?<![\w%])|(?<=_)|(?<=-t)|(?<=\bpane))%[0-9]+(?![\w%$]|\.[0-9])", re.I)),
 )
+PREFIXES = (
+    ("request-id", "req"),
+    ("message-id", "msg"),
+    ("tool-id", "toolu"),
+    ("response-id", "resp"),
+    ("reasoning-id", "rs"),
+    ("function-call-id", "fc"),
+    ("call-id", "call"),
+)
+PREFIXED_IDS = tuple(
+    (rule, re.compile(r"(?<![a-z0-9])" + prefix + "_" + ID_SUFFIX, re.I))
+    for rule, prefix in PREFIXES
+)
+BASE64_CHARS = r"[A-Za-z0-9+/_-]"
+BASE64_LINE = re.compile(BASE64_CHARS + r"+={0,2}")
+BASE64_RUN = re.compile(BASE64_CHARS + r"{200,}={0,2}")
+FORMAT_PERCENT = re.compile(r"(%%3[0-9](?![%\w$]|\.[0-9]))")
+GIT_OPTIONS = ("--no-replace-objects",)
 ESCAPE = re.compile(r"\\(?:u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|x([0-9a-fA-F]{2})|([0-7]{1,3})|(.))")
 SIMPLE_ESCAPES = dict(a="\a", b="\b", f="\f", n="\n", r="\r", t="\t", v="\v")
 ENCODING_DEPTH = 4
@@ -53,10 +64,14 @@ def normalized(value):
     ))
 
 
-def list_entries(path):
-    for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
-        entry = normalized(line).strip()
+def list_entries(path, *, deny=False):
+    text = path.read_bytes().decode("utf-8-sig").replace("\r\n", "\n")
+    for number, line in enumerate(text.split("\n"), 1):
+        line = normalized(line)
+        entry = line.strip()
         if entry and not entry.startswith("#"):
+            if deny and any(unicodedata.category(char) == "Cc" for char in line):
+                raise ValueError("Deny entries must be free of control characters.")
             yield entry, number
 
 
@@ -110,8 +125,13 @@ def decoded_escape(match):
 
 
 def decoded_percent(text):
-    # Preserve the escaped literal percent in format strings such as %%30.
-    return "%%".join(unquote(part, errors="surrogateescape") for part in text.split("%%"))
+    # A format literal such as %%30 must not turn into a pane target.
+    pieces = FORMAT_PERCENT.split(text)
+    return (
+        "%%".join(unquote(part, errors="surrogateescape") for part in text.split("%%")),
+        "".join(piece if index % 2 else unquote(piece, errors="surrogateescape")
+                for index, piece in enumerate(pieces)),
+    )
 
 
 def text_views(line):
@@ -123,8 +143,10 @@ def text_views(line):
     for _ in range(ENCODING_DEPTH):
         next_views = []
         for text in pending:
-            for decoded in (decoded_percent(text) if "%" in text else text,
-                            ESCAPE.sub(decoded_escape, text) if "\\" in text else text):
+            views = decoded_percent(text) if "%" in text else ()
+            if "\\" in text:
+                views = (*views, ESCAPE.sub(decoded_escape, text))
+            for decoded in views:
                 if decoded not in seen:
                     seen.add(decoded)
                     next_views.append(decoded)
@@ -134,16 +156,95 @@ def text_views(line):
         pending = next_views
 
 
+def uuid_matches(line):
+    dashed = list(DELIMITED_UUID.finditer(line))
+    right_edges = {match.end() for match in dashed}
+    for match in dashed:
+        start, end = match.span()
+        # Include adjacent alphanumeric text in the exact allow-list check.
+        while start and line[start - 1].isalnum():
+            start -= 1
+        while end < len(line) and line[end].isalnum():
+            end += 1
+        yield "uuid", line[start:end], start + 1, None
+    for match in HEX_TOKEN.finditer(line):
+        token = match[0]
+        # Short prefixes or suffixes sometimes get glued to a compact ID.
+        # A compact suffix can also follow the last group of a dashed ID.
+        if (32 <= len(token) <= 39 and (
+            COMPACT_UUID.fullmatch(token[:32]) or COMPACT_UUID.fullmatch(token[-32:])
+        )) or (match.end() - 32 in right_edges and COMPACT_UUID.fullmatch(token[-32:])):
+            yield "codex-id", token, match.start() + 1, None
+
+
+def home_tokens(line):
+    consumed = 0
+    for root in HOME_START.finditer(line):
+        start, end = root.span()
+        if start < consumed:
+            continue
+        outer_quote = line[start - 1] if start and line[start - 1] in "\"'" else None
+        quote = outer_quote
+        parts = [root[0]]
+        while end < len(line):
+            char = line[end]
+            if char == quote:
+                end += 1
+                if outer_quote and (end == len(line) or line[end].isspace()
+                                    or line[end] in ",.:;})]>"):
+                    break
+                outer_quote = None
+                quote = None
+                continue
+            if char == "\\" and end + 1 < len(line) and line[end + 1] in " \\\"'":
+                end += 1
+                char = line[end]
+            elif not quote:
+                if char.isspace() or char in "\x60<>|;{}":
+                    break
+                if char in "\"'":
+                    if line.find(char, end + 1) < 0:
+                        break
+                    quote = char
+                    end += 1
+                    continue
+            parts.append(char)
+            end += 1
+        consumed = end
+        yield "home-path", "".join(parts), start + 1, None
+
+
+def opaque_path(value):
+    return ("/" in value and "+" not in value and "=" not in value
+            and (value.startswith("/") or "-" in value or "_" in value
+                 or re.match(r"[a-z][a-z0-9]{0,23}/", value)))
+
+
+def opaque_body(value):
+    return (len(value.rstrip("=")) >= 200
+            and re.search("[A-Z]", value) and re.search("[a-z]", value)
+            and re.search("[0-9]", value)
+            and not opaque_path(value))
+
+
 def matches(line, deny):
+    yield from uuid_matches(line)
+    yield from home_tokens(line)
     for rule, pattern in IDENTIFIERS:
         for match in pattern.finditer(line):
-            value = match[0]
+            yield rule, match[0], match.start() + 1, None
+    for rule, pattern in PREFIXED_IDS:
+        for match in pattern.finditer(line):
+            suffix = match[0].split("_", 1)[1]
             if rule in ("request-id", "message-id", "tool-id"):
-                # Ignore short all-letter source words that resemble a prefix.
-                suffix = value.split("_", 1)[1]
                 if len(suffix) < 8 and suffix.isalpha():
                     continue
-            yield rule, value, match.start() + 1, None
+            elif len(suffix) < 8 or (len(suffix) < 20 and not any(c.isdigit() for c in suffix)):
+                continue
+            yield rule, match[0], match.start() + 1, None
+    for match in BASE64_RUN.finditer(line):
+        if opaque_body(match[0]):
+            yield "opaque", match[0], match.start() + 1, None
     yield from deny_matches(line, deny)
 
 
@@ -189,6 +290,13 @@ def block_lines(blocks):
         yield b"".join(pending)
 
 
+def git_environment():
+    # Inherited Git overrides can redirect -C to a different repository
+    # or change which object store or history that repository exposes.
+    env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    return dict(env, GIT_NO_LAZY_FETCH="1", GIT_OPTIONAL_LOCKS="0")
+
+
 class Audit:
     def __init__(self, allow, deny, scope, raw=False):
         self.allowed_ids = {entry.casefold() for entry in allow}
@@ -199,6 +307,8 @@ class Audit:
         self.key = os.urandom(32)
         self.names = {}
         self.files = self.messages = self.commits = self.bytes = 0
+        self.empty_trees = 0
+        self.base = self.tip = None
         self.hard = self.review = 0
 
     def digest(self, value):
@@ -302,6 +412,17 @@ class Audit:
             self.lines((bytes(value),), location, surface, member=member)
 
     def lines(self, stream, location, surface, *, member=None, count_bytes=True):
+        wrapped = []
+        start = None
+
+        def flush():
+            if len(wrapped) > 1:
+                body = "".join(wrapped)
+                if opaque_body(body):
+                    self.record("opaque", location, surface, start, value=body,
+                                context="\n".join(wrapped), member=member)
+            wrapped.clear()
+
         for number, data in enumerate(stream, 1):
             if count_bytes:
                 self.bytes += len(data)
@@ -310,9 +431,20 @@ class Audit:
                 if "\x00" in line:
                     raise ValueError("NUL in text")
             except ValueError:
+                flush()
                 self.record("undecodable", location, surface, number, member=member)
                 continue
             self.text(line, location, surface, number, member)
+            part = line.strip()
+            if not BASE64_LINE.fullmatch(part) or (len(part) >= 200 and opaque_path(part)):
+                flush()
+                continue
+            if not wrapped:
+                start = number
+            wrapped.append(part)
+            if part.endswith("="):
+                flush()
+        flush()
 
     def filesystem(self, root):
         if root.is_symlink() or not root.is_dir():
@@ -352,11 +484,11 @@ class Audit:
                     self.record("unreadable", name, "entry")
 
     def git_range(self, repo, revisions, changed):
-        env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_OPTIONAL_LOCKS="0")
+        env = git_environment()
 
         def git(*args):
             return subprocess.run(
-                ["git", "--no-replace-objects", "-C", str(repo), *args],
+                ["git", *GIT_OPTIONS, "-C", str(repo), *args],
                 env=env, check=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             ).stdout
 
@@ -364,8 +496,7 @@ class Audit:
             if git("rev-parse", "--is-shallow-repository").strip() != b"false":
                 self.record("incomplete-git", "<range>", "git")
                 return
-            grafts = env.get("GIT_GRAFT_FILE") or os.fsdecode(
-                git("rev-parse", "--git-path", "info/grafts").rstrip(b"\n"))
+            grafts = os.fsdecode(git("rev-parse", "--git-path", "info/grafts").rstrip(b"\n"))
             grafts_path = repo / grafts
             try:
                 if not stat.S_ISREG(grafts_path.stat().st_mode):
@@ -377,11 +508,17 @@ class Audit:
                         return
             except FileNotFoundError:
                 pass
-            ends = [git("rev-parse", "--verify", "--end-of-options", ref + "^{commit}").strip()
-                    for ref in revisions.split("..")]
+            base_ref, tip_ref = revisions.split("..")
+
+            def resolve(ref):
+                return git("rev-parse", "--verify", "--end-of-options", ref + "^{commit}").decode("ascii").strip()
+
+            self.tip = resolve(tip_ref)
+            self.base = resolve(base_ref) if base_ref else None
             if changed:
-                git("merge-base", "--is-ancestor", *ends)
-            commits = git("rev-list", "--reverse", b"..".join(ends), "--").decode("ascii").splitlines()
+                git("merge-base", "--is-ancestor", self.base, self.tip)
+            selection = f"{self.base}..{self.tip}" if self.base else self.tip
+            commits = git("rev-list", "--reverse", selection, "--").decode("ascii").splitlines()
             for commit in commits:
                 self.commits += 1
                 headers, separator, message = git("cat-file", "commit", commit).partition(b"\n\n")
@@ -391,7 +528,10 @@ class Audit:
                     self.lines(io.BytesIO(message), f"{commit}:<message>", "message")
                 else:
                     self.record("incomplete-git", f"{commit}:<message>", "git")
+                before = self.files
                 self.git_tree(git, commit, changed)
+                if not changed and self.files == before:
+                    self.empty_trees += 1
         except (OSError, ValueError, subprocess.CalledProcessError):
             self.record("incomplete-git", "<range>", "git")
 
@@ -428,21 +568,33 @@ class Audit:
                 self.contents(stream, location, surface)
 
     def empty(self):
-        return not (self.files if self.scope == "tree" else self.commits)
+        if self.scope == "tree":
+            return not self.files
+        return not self.commits or (self.scope == "full-tree" and self.empty_trees > 0)
 
     def summary(self):
-        print(json.dumps(dict(
+        fields = dict(
             scope=self.scope, partial=self.scope == "changed-files",
             files=self.files, bytes=self.bytes, commits=self.commits, messages=self.messages,
             hard=self.hard, review=self.review,
-        )))
+        )
+        if self.scope != "tree":
+            fields.update(base=self.base, tip=self.tip, empty_trees=self.empty_trees)
+        print(json.dumps(fields))
+
+
+def load_list(path, kind):
+    try:
+        return list(list_entries(path, deny=kind == "deny"))
+    except (OSError, UnicodeError) as error:
+        raise ValueError(f"The {kind} list could not be read as UTF-8.") from error
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--tree", type=Path, help="directory to audit")
-    source.add_argument("--git-range", metavar="BASE..TIP", help="audit each commit tree and message")
+    source.add_argument("--git-range", metavar="[BASE]..TIP", help="audit each commit tree and message")
     parser.add_argument("--repo", type=Path, default=Path("."), help="Git repository")
     parser.add_argument("--changed", action="store_true", help="audit changed file post-images only")
     parser.add_argument("--allow-list", type=Path, help="one exact synthetic identifier or path per line")
@@ -456,29 +608,22 @@ def main(argv=None):
         parser.error("--changed requires --git-range")
     if args.git_range is not None:
         endpoints = args.git_range.split("..")
-        if len(endpoints) != 2 or not all(
-            ref and not ref.startswith(".") and not ref.endswith(".") for ref in endpoints
-        ):
-            parser.error("--git-range requires an explicit BASE..TIP")
+        if (len(endpoints) != 2 or not endpoints[1] or
+                any(ref.startswith(".") or ref.endswith(".") for ref in endpoints)):
+            parser.error("--git-range requires BASE..TIP or ..TIP")
+        if args.changed and not endpoints[0]:
+            parser.error("--changed requires an explicit BASE")
     try:
-        allow = {entry for entry, _ in list_entries(args.allow_list)} if args.allow_list else set()
+        allow = {entry for entry, _ in load_list(args.allow_list, "allow")} if args.allow_list else set()
         deny = []
         if not args.deny_list and not args.allow_empty_deny_list:
             raise ValueError("Supply a nonempty deny list or explicitly waive it.")
         for list_number, path in enumerate(args.deny_list, 1):
-            try:
-                entries = list(list_entries(path))
-            except FileNotFoundError:
-                if not args.allow_empty_deny_list:
-                    raise
-                continue
+            entries = load_list(path, "deny")
             if not entries and not args.allow_empty_deny_list:
                 raise ValueError("Every supplied deny list must contain an entry.")
             deny.extend((entry, list_number, number) for entry, number in entries)
         patterns = deny_patterns(deny)
-    except (OSError, UnicodeError):
-        print("Configuration error: a supplied list could not be read as UTF-8.", file=sys.stderr)
-        return 2
     except ValueError as error:
         print(f"Configuration error: {error}", file=sys.stderr)
         return 2
@@ -490,7 +635,7 @@ def main(argv=None):
         audit.git_range(args.repo, args.git_range, args.changed)
     audit.summary()
     if not audit.hard and audit.empty() and not args.allow_empty_scan:
-        print("Configuration error: the selected scan is empty.", file=sys.stderr)
+        print("Configuration error: the selection is empty or contains an empty commit tree.", file=sys.stderr)
         return 2
     return int(bool(audit.hard or audit.review))
 

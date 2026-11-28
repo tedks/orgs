@@ -57,7 +57,9 @@ class PublicationGuard(unittest.TestCase):
         if not shutil.which("git"):
             self.skipTest("Git is needed for commit range tests")
         self.git("init")
-        self.git("commit", "--allow-empty", "-m", "Base tree")
+        self.write("ordinary", "seed.txt")
+        self.git("add", ".")
+        self.git("commit", "-m", "Base tree")
         return self.git("rev-parse", "HEAD")
 
     def git_scan(self, range_, *args, repo=None):
@@ -90,10 +92,22 @@ class PublicationGuard(unittest.TestCase):
     def test_codex_id(self):
         value = "".join(("02dd5aabc4a9", "7c2d", "a111", "abcddcba3210"))
         self.identifier_twin("codex-id", value)
-        for ordinary in (value[:12] + "0" + value[13:], value[:16] + "d" + value[17:], "f" + value):
+        for ordinary in (value[:12] + "0" + value[13:], value[:16] + "d" + value[17:], "f" * 40):
             with self.subTest(ordinary=ordinary):
                 self.write(ordinary)
                 self.assertEqual(self.scan()[0], 0)
+
+    def test_compact_extended_tokens(self):
+        compact = "".join(("02dd5aabc4a9", "7c2d", "a111", "abcddcba3210"))
+        dashed = "-".join(("bd5aab34", "c2df", "4276", "8111", "abcddcba3210"))
+        self.allow.write_text(f"{compact}\n{dashed}\n", encoding="utf-8")
+        self.write(f"f{compact}\n{dashed}{compact}")
+        rc, records, _ = self.scan("--allow-list", self.allow)
+        self.assertEqual(rc, 1)
+        self.assertEqual([(r["line"], r["rule"]) for r in records[:-1]],
+                         [(1, "codex-id"), (2, "uuid"), (2, "codex-id")])
+        self.write(f"{compact}\n{dashed}\n{'f' * 40}")
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
 
     def test_uuid_boundaries_and_separators(self):
         parts = ("bd5aab34", "c2df", "4276", "8111", "abcddcba3210")
@@ -111,6 +125,37 @@ class PublicationGuard(unittest.TestCase):
         self.write("\n".join("prefix" + value for value in IDs))
         self.assertEqual(self.scan()[0], 0)
 
+    def check_prefixed_id(self, prefix, rule):
+        value = prefix + "_" + "a2c6d9" * 4
+        self.write(f"prefix_{value}")
+        self.assertEqual([r["rule"] for r in self.scan()[1][:-1]], [rule])
+        self.write(f"prefix{value}\n{prefix}_count")
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_response_id_boundary(self):
+        self.check_prefixed_id("resp", "response-id")
+
+    def test_reasoning_id_boundary(self):
+        self.check_prefixed_id("rs", "reasoning-id")
+
+    def test_function_call_id_boundary(self):
+        self.check_prefixed_id("fc", "function-call-id")
+
+    def test_call_id_boundary(self):
+        self.check_prefixed_id("call", "call-id")
+
+    def test_allow_id_is_exact(self):
+        allowed = "req_" + "a2c6d9" * 4
+        self.allow.write_text(allowed, encoding="utf-8")
+        for suffix in ("Z9", "_", "-"):
+            with self.subTest(suffix=suffix):
+                self.write(allowed + suffix)
+                rc, results, _ = self.scan("--allow-list", self.allow)
+                self.assertEqual(rc, 1)
+                self.assertEqual([r["rule"] for r in results[:-1]], ["request-id"])
+        self.write(allowed)
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
+
     def test_home_path(self):
         self.identifier_twin("home-path", guard.HOME_PREFIX + "example/sample")
         self.write(guard.HOME_PREFIX + "example/sample-secret")
@@ -126,6 +171,22 @@ class PublicationGuard(unittest.TestCase):
         self.write(paths[0] + ":private")
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 1)
 
+    def test_home_path_punctuation_and_quoted_space(self):
+        allowed = guard.HOME_PREFIX + "example/item"
+        self.allow.write_text(allowed, encoding="utf-8")
+        for tail in (",tail", "[tail]", "(tail)", '" tail"', r"\ tail"):
+            with self.subTest(tail=tail):
+                self.write(allowed + tail)
+                rc, results, _ = self.scan("--allow-list", self.allow)
+                self.assertEqual(rc, 1)
+                self.assertEqual([r["rule"] for r in results[:-1]], ["home-path"])
+        self.write(f'"{allowed} tail"')
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 1)
+        self.write(f'"{allowed}"" tail"')
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 1)
+        self.write(f'{{"cwd":"{allowed}","next":0}}')
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
+
     def test_pane_id(self):
         pane = "%" + "6281"
         self.identifier_twin("pane-id", pane)
@@ -139,6 +200,15 @@ class PublicationGuard(unittest.TestCase):
         self.write(f"-t{pane}\npane{pane}")
         self.assertEqual([r["rule"] for r in self.scan()[1][:-1]], ["pane-id"] * 2)
         self.write(f"percentage{pane}\n{pane}s\n{pane}$s")
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_underscore_pane_in_filename(self):
+        prefix = "pane_"
+        pane = "%" + "12"
+        self.write("ordinary", name=f"{prefix}{pane}.log")
+        self.assertEqual([(r["rule"], r["surface"]) for r in self.scan()[1][:-1]],
+                         [("pane-id", "name")])
+        (self.tree / f"{prefix}{pane}.log").rename(self.tree / f"{prefix}{pane}.2f")
         self.assertEqual(self.scan()[0], 0)
 
     def test_deny_list_whole_word_and_redaction(self):
@@ -175,6 +245,15 @@ class PublicationGuard(unittest.TestCase):
         self.assertEqual({(r["list"], r["entry"]) for r in records[:-1]}, {(1, 1), (2, 2)})
         self.write(f"x{TERM}\tvalley")
         self.assertEqual(self.scan("--deny-list", other)[0], 0)
+
+    def test_overlapping_occurrences_of_one_deny_entry(self):
+        self.deny.write_text("a-a", encoding="utf-8")
+        self.write("xa-a-a")
+        rc, rows, _ = self.scan()
+        self.assertEqual(rc, 1)
+        self.assertEqual([(r["column"], r["entry"]) for r in rows[:-1]], [(4, 1)])
+        self.write("xa-ax")
+        self.assertEqual(self.scan()[0], 0)
 
     def test_deny_zero_width_and_ascii_policy(self):
         self.deny.write_text(TERM[:2] + "\u200c" + TERM[2:], encoding="utf-8")
@@ -249,6 +328,30 @@ class PublicationGuard(unittest.TestCase):
         path.write_bytes(compressed("first") + compressed("second"))
         self.assertEqual(self.scan()[0], 0)
 
+    def gzip_field(self, flag, payload):
+        stream = bytearray(gzip.compress(b"ordinary\n", mtime=0))
+        stream[3] |= flag
+        stream[10:10] = payload
+        (self.tree / "archive.gz").write_bytes(stream)
+
+    def test_gzip_extra_field_is_reported(self):
+        self.gzip_field(4, b"\x05\x00AB\x01\x00x")
+        rc, rows, _ = self.scan()
+        self.assertEqual(rc, 1)
+        self.assertEqual([(r["rule"], r["surface"], r["member"]) for r in rows[:-1]],
+                         [("undecodable", "gzip-extra", 1)])
+        self.gzip_field(4, b"\x00\x00")
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_gzip_comment_is_reported(self):
+        self.gzip_field(16, TERM.encode() + b"\0")
+        rc, rows, _ = self.scan()
+        self.assertEqual(rc, 1)
+        self.assertEqual([(r["rule"], r["surface"], r["member"]) for r in rows[:-1]],
+                         [("deny-list", "gzip-comment", 1)])
+        self.gzip_field(16, b"neutral\0")
+        self.assertEqual(self.scan()[0], 0)
+
     def test_escaped_json_string(self):
         value = guard.HOME_PREFIX + "example"
         self.write(json.dumps({"path": value}).replace("/", r"\/"))
@@ -274,6 +377,14 @@ class PublicationGuard(unittest.TestCase):
                 self.write(content.replace(TERM[1:], "neutral"))
                 self.assertEqual(self.scan()[0], 0)
 
+    def test_percent_escape_after_percent(self):
+        escaped = f"%%{ord(TERM[0]):02X}" + TERM[1:]
+        self.write(escaped)
+        self.assertEqual([(r["rule"], r["view"]) for r in self.scan()[1][:-1]],
+                         [("deny-list", "decoded")])
+        self.write(escaped.replace(TERM[1:], "neutral") + " %%30")
+        self.assertEqual(self.scan()[0], 0)
+
     def test_opaque_boundary(self):
         chunk = "Rk9vXy9-" * 25
         self.write(chunk)
@@ -282,6 +393,23 @@ class PublicationGuard(unittest.TestCase):
         self.assertEqual([r["rule"] for r in records[:-1]], ["opaque"])
         self.assertNotIn(chunk, json.dumps(records))
         self.write(chunk[:-1])
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_wrapped_opaque_body(self):
+        chunk = "Rk9vXy9-" * 10
+        self.write(f"prefix!\n{chunk}\n{chunk}\n{chunk}\n")
+        rc, rows, _ = self.scan()
+        self.assertEqual(rc, 1)
+        self.assertEqual([(r["rule"], r["line"]) for r in rows[:-1]], [("opaque", 2)])
+        self.write(f"{chunk}\n{chunk}\nordinary text\n{chunk}")
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_opaque_precision(self):
+        chunk = "Rk9vXy9-" * 25
+        self.write(chunk)
+        self.assertEqual(self.scan()[0], 1)
+        self.write("A" * 220 + "\n" + "/" + "IndexedPath9/" * 20 + "\n"
+                   + "source/" + "IndexedPath9/" * 20)
         self.assertEqual(self.scan()[0], 0)
 
     def test_unreadable_gzip_and_special_file(self):
@@ -324,7 +452,33 @@ class PublicationGuard(unittest.TestCase):
         rc, _, error = self.scan()
         self.assertEqual(rc, 2)
         self.assertNotIn(str(self.deny), error)
-        self.assertEqual(self.scan("--allow-empty-deny-list")[0], 0)
+        self.assertEqual(self.scan("--allow-empty-deny-list")[0], 2)
+
+    def test_deny_entries_reject_controls(self):
+        self.write(TERM)
+        for control in ("\x00", "\t", "\r", "\x7f"):
+            with self.subTest(control=control):
+                self.deny.write_text(TERM[:2] + control + TERM[2:] + "\n", encoding="utf-8")
+                rc, _, error = self.scan()
+                self.assertEqual(rc, 2)
+                self.assertIn("control", error)
+                self.assertNotIn(TERM[:3], error)
+        self.deny.write_bytes(TERM.encode() + b"\r\n")
+        self.assertEqual(self.scan()[0], 1)
+
+    def test_allow_and_deny_list_load_errors(self):
+        self.write("ordinary")
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 2)
+        self.assertIn("allow list", self.scan("--allow-list", self.allow)[2])
+        self.deny.unlink()
+        rc, _, error = self.scan("--allow-empty-deny-list")
+        self.assertEqual(rc, 2)
+        self.assertIn("deny list", error)
+        self.assertNotIn(str(self.deny), error)
+        self.deny.write_text(TERM, encoding="utf-8")
+        self.allow.write_text("", encoding="utf-8")
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
+
 
     def test_empty_tree_requires_waiver(self):
         rc, results, _ = self.scan()
@@ -332,6 +486,16 @@ class PublicationGuard(unittest.TestCase):
         self.assertEqual((results[-1]["scope"], results[-1]["files"]), ("tree", 0))
         self.assertEqual(self.scan("--allow-empty-scan")[0], 0)
         self.write("")
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_tree_empty_directory_name(self):
+        self.write("ordinary")
+        directory = self.tree / TERM
+        directory.mkdir()
+        rc, rows, _ = self.scan()
+        self.assertEqual(rc, 1)
+        self.assertEqual([(r["rule"], r["surface"]) for r in rows[:-1]], [("deny-list", "name")])
+        directory.rename(self.tree / "ordinary")
         self.assertEqual(self.scan()[0], 0)
 
     def test_redacted_names_and_keyed_digests(self):
@@ -365,8 +529,9 @@ class PublicationGuard(unittest.TestCase):
 
     def test_git_range_audits_intermediate_commits_and_messages(self):
         self.init_git()
+        (self.tree / "seed.txt").unlink()
         self.write(TERM, "legacy.txt")
-        self.git("add", ".")
+        self.git("add", "-A")
         self.git("commit", "-m", "Older file")
         base = self.git("rev-parse", "HEAD")
         self.write(TERM)
@@ -405,6 +570,66 @@ class PublicationGuard(unittest.TestCase):
         self.git("commit", "--allow-empty", "-m", "Next")
         self.assertEqual(self.git_scan(f"{base}..HEAD")[0], 0)
 
+    def test_full_git_range_rejects_empty_commit_tree(self):
+        base = self.init_git()
+        empty = self.git("mktree", input="")
+        commit = self.git("commit-tree", empty, "-p", base, "-m", "Empty")
+        full = self.git("rev-parse", f"{base}^{{tree}}")
+        tip = self.git("commit-tree", full, "-p", commit, "-m", "Restore")
+        rc, rows, _ = self.git_scan(f"{base}..{tip}")
+        self.assertEqual(rc, 2)
+        self.assertEqual((rows[-1]["commits"], rows[-1]["empty_trees"]), (2, 1))
+        self.assertEqual(self.git_scan(f"{base}..{tip}", "--allow-empty-scan")[0], 0)
+        self.git("commit", "--allow-empty", "-m", "Same tree")
+        self.assertEqual(self.git_scan(f"{base}..HEAD")[0], 0)
+
+    def test_git_resolved_endpoints_and_whole_history(self):
+        base = self.init_git()
+        self.git("branch", "base")
+        self.git("commit", "--allow-empty", "-m", "Next")
+        tip = self.git("rev-parse", "HEAD")
+        rc, rows, _ = self.git_scan("..HEAD")
+        self.assertEqual(rc, 0)
+        self.assertEqual((rows[-1]["base"], rows[-1]["tip"], rows[-1]["commits"]), (None, tip, 2))
+        rc, rows, _ = self.git_scan("base..HEAD", "--changed")
+        self.assertEqual(rc, 0)
+        self.assertEqual((rows[-1]["base"], rows[-1]["tip"], rows[-1]["commits"]), (base, tip, 1))
+        with self.assertRaises(SystemExit) as rejected:
+            self.git_scan("..HEAD", "--changed")
+        self.assertEqual(rejected.exception.code, 2)
+
+    def test_git_ignores_repository_selection_environment(self):
+        self.init_git()
+        self.git("branch", "base")
+        self.git("commit", "--allow-empty", "-m", TERM)
+        other = self.root / "other"
+        other.mkdir()
+        self.git("-C", str(other), "init")
+        (other / "seed.txt").write_text("ordinary", encoding="utf-8")
+        self.git("-C", str(other), "add", ".")
+        self.git("-C", str(other), "commit", "-m", "Base tree")
+        self.git("-C", str(other), "branch", "base")
+        self.git("-C", str(other), "commit", "--allow-empty", "-m", "Ordinary")
+        with patch.dict(os.environ, GIT_DIR=str(other / ".git"), GIT_WORK_TREE=str(other)):
+            rc, rows, _ = self.git_scan("base..HEAD")
+            self.assertEqual(rc, 1)
+            self.assertEqual([r["surface"] for r in rows[:-1]], ["message"])
+        with patch.dict(os.environ, GIT_DIR=str(self.tree / ".git"), GIT_WORK_TREE=str(self.tree)):
+            self.assertEqual(self.git_scan("base..HEAD", repo=other)[0], 0)
+
+    def test_git_ignores_replace_refs(self):
+        base = self.init_git()
+        tree = self.git("rev-parse", "HEAD^{tree}")
+        private = self.git("commit-tree", tree, "-p", base, "-m", TERM)
+        clean = self.git("commit-tree", tree, "-p", base, "-m", "Ordinary")
+        self.git("replace", private, clean)
+        rc, rows, _ = self.git_scan(f"{base}..{private}")
+        self.assertEqual(rc, 1)
+        self.assertEqual([r["surface"] for r in rows[:-1]], ["message"])
+        self.git("replace", "-d", private)
+        self.git("replace", clean, private)
+        self.assertEqual(self.git_scan(f"{base}..{clean}")[0], 0)
+
     def test_changed_requires_ancestor(self):
         base = self.init_git()
         self.git("commit", "--allow-empty", "-m", "One history")
@@ -423,7 +648,7 @@ class PublicationGuard(unittest.TestCase):
         for directory, expected in ((TERM, 1), ("ordinary", 0)):
             tree = self.git("mktree", input=f"040000 tree {empty}\t{directory}\n")
             tip = self.git("commit-tree", tree, "-p", base, "-m", "Fixture directory")
-            for flags in ((), ("--changed",)):
+            for flags in (("--allow-empty-scan",), ("--changed",)):
                 rc, results, _ = self.git_scan(f"{base}..{tip}", *flags)
                 self.assertEqual(rc, expected)
                 self.assertEqual(results[-1]["files"], 0)
@@ -487,6 +712,25 @@ class PublicationGuard(unittest.TestCase):
         self.assertTrue(any(r["rule"] == "codex-id" for r in results[:-1]))
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
 
+    def test_mutation_runner_requires_passing_baseline(self):
+        def fail():
+            self.fail("Constructed baseline failure")
+
+        def check(baseline):
+            output = io.StringIO()
+            mutations = [("sample", "test_uuid", suppress_finding(rule="uuid"))]
+            rc = run_mutations(unittest.TestSuite([unittest.FunctionTestCase(baseline)]),
+                               mutations, output)
+            return rc, output.getvalue()
+
+        rc, log = check(fail)
+        self.assertEqual(rc, 1)
+        self.assertIn("Unmutated tests failed", log)
+        self.assertNotIn("KILLED", log)
+        rc, log = check(lambda: None)
+        self.assertEqual(rc, 0)
+        self.assertIn("Mutants killed: 1/1", log)
+
     def test_builder_record_contract(self):
         files = build_fixtures.build(self.tree, self.allow, seed=304)
         parts = []
@@ -536,9 +780,10 @@ def suppress_finding(*, rule=None, surface=None):
 
 
 def replace_pattern(rule, pattern):
-    return patch.object(guard, "IDENTIFIERS", tuple(
+    setting = "IDENTIFIERS" if rule == "pane-id" else "PREFIXED_IDS"
+    return patch.object(guard, setting, tuple(
         (name, re.compile(pattern, re.I) if name == rule else original)
-        for name, original in guard.IDENTIFIERS
+        for name, original in getattr(guard, setting)
     ))
 
 
@@ -547,13 +792,76 @@ def only_raw_deny_entries(entries):
             for term, source, line in entries]
 
 
+def baseline_passes(suite, stream):
+    result = unittest.TextTestRunner(stream=stream).run(suite)
+    if not result.wasSuccessful() or result.skipped:
+        print("Unmutated tests failed or were skipped. No mutant results credited.", file=stream)
+        return False
+    return True
+
+
+def run_mutations(baseline, mutations, stream):
+    if not baseline_passes(baseline, stream):
+        return 1
+    failures = 0
+    for disabled, method, mutation in mutations:
+        with mutation:
+            output = io.StringIO()
+            suite = unittest.TestSuite([PublicationGuard(method)])
+            result = unittest.TextTestRunner(stream=output).run(suite)
+        if result.failures and not result.errors:
+            failure = next(line for line in result.failures[0][1].splitlines()
+                           if line.startswith("AssertionError"))
+            print(f"KILLED {disabled}: {method} ({len(result.failures)} assertions): {failure}", file=stream)
+        else:
+            failures += 1
+            print(f"NOT KILLED {disabled}: {output.getvalue()}", file=stream)
+    print(f"Mutants killed: {len(mutations) - failures}/{len(mutations)}", file=stream)
+    return int(bool(failures))
+
+
 def mutation_check():
+    original_uuid = guard.uuid_matches
+    original_home = guard.home_tokens
+    original_deny = guard.deny_patterns
+    original_list_entries = guard.list_entries
+    original_load_list = guard.load_list
+    original_init = guard.Audit.__init__
+    original_summary = guard.Audit.summary
+
+    def only_plain_uuids(line):
+        return (result for result in original_uuid(line)
+                if result[0] != "codex-id" or len(result[1]) == 32)
+
+    def short_paths(line):
+        for rule, value, column, entry in original_home(line):
+            yield rule, re.split(r"[,()\[\] ]", value, maxsplit=1)[0], column, entry
+
+    class PrefixAllow(set):
+        def __contains__(self, value):
+            return any(value.startswith(allowed) for allowed in self)
+
+    def prefix_allow(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self.allowed_ids = PrefixAllow(self.allowed_ids)
+
+    def no_overlaps(entries):
+        return [(prefix, re.compile(pattern.pattern[3:-1], re.I), entry)
+                for prefix, pattern, entry in original_deny(entries)]
+
+    def without_endpoints(self):
+        self.base = self.tip = None
+        original_summary(self)
+
+    def permit_missing_deny(path, kind):
+        return [] if kind == "deny" and not path.exists() else original_load_list(path, kind)
+
     mutations = [(rule, method, suppress_finding(rule=rule)) for rule, method in RULE_TESTS.items()]
     mutations.extend([
         ("uuid-boundary", "test_uuid_boundaries_and_separators",
-         replace_pattern("uuid", r"(?<![0-9a-f])" + guard.UUID)),
+         patch.object(guard, "DELIMITED_UUID", re.compile(r"(?<![0-9a-f])" + guard.UUID, re.I))),
         ("compact-version", "test_codex_id",
-         replace_pattern("codex-id", r"(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])")),
+         patch.object(guard, "COMPACT_UUID", re.compile(r"[0-9a-f]{32}", re.I))),
         ("request-boundary", "test_request_boundaries_and_other_ids",
          replace_pattern("request-id", r"\breq_" + guard.ID_SUFFIX)),
         ("pane-boundary", "test_pane_boundaries",
@@ -569,21 +877,47 @@ def mutation_check():
         ("commit-header", "test_git_header_surfaces", suppress_finding(surface="commit-header")),
         ("empty-range-refusal", "test_empty_git_range_requires_waiver",
          patch.object(guard.Audit, "empty", lambda self: False)),
+        ("git-environment", "test_git_ignores_repository_selection_environment",
+         patch.object(guard, "git_environment", lambda: dict(os.environ))),
+        ("empty-full-commit-tree", "test_full_git_range_rejects_empty_commit_tree",
+         patch.object(guard.Audit, "empty", lambda self: not self.commits)),
+        ("complete-home-token", "test_home_path_punctuation_and_quoted_space",
+         patch.object(guard, "home_tokens", short_paths)),
+        ("underscore-pane", "test_underscore_pane_in_filename",
+         replace_pattern("pane-id", r"(?:(?<![\w%])|(?<=-t)|(?<=\bpane))%[0-9]+(?![\w%$]|\.[0-9])")),
+        ("compact-token", "test_compact_extended_tokens",
+         patch.object(guard, "uuid_matches", only_plain_uuids)),
+        ("wrapped-opaque", "test_wrapped_opaque_body",
+         patch.object(guard, "BASE64_LINE", re.compile(r"(?!)"))),
+        ("opaque-precision", "test_opaque_precision",
+         patch.object(guard, "opaque_body", lambda value: len(value.rstrip("=")) >= 200)),
+        ("exact-id-allowlist", "test_allow_id_is_exact", patch.object(guard.Audit, "__init__", prefix_allow)),
+        ("gzip-extra", "test_gzip_extra_field_is_reported", suppress_finding(surface="gzip-extra")),
+        ("gzip-comment", "test_gzip_comment_is_reported", suppress_finding(surface="gzip-comment")),
+        ("empty-directory-name", "test_tree_empty_directory_name", suppress_finding(surface="name")),
+        ("git-ignore-replace", "test_git_ignores_replace_refs", patch.object(guard, "GIT_OPTIONS", ())),
+        ("overlap-same-entry", "test_overlapping_occurrences_of_one_deny_entry",
+         patch.object(guard, "deny_patterns", no_overlaps)),
+        ("mutation-baseline", "test_mutation_runner_requires_passing_baseline",
+         patch.object(sys.modules[__name__], "baseline_passes", lambda suite, stream: True)),
+        ("resolved-endpoints", "test_git_resolved_endpoints_and_whole_history",
+         patch.object(guard.Audit, "summary", without_endpoints)),
+        ("adjacent-percent", "test_percent_escape_after_percent",
+         patch.object(guard, "decoded_percent", lambda text: (
+             "%%".join(guard.unquote(part, errors="surrogateescape") for part in text.split("%%")),
+         ))),
+        ("deny-control-entries", "test_deny_entries_reject_controls",
+         patch.object(guard, "list_entries", lambda path, **kwargs: original_list_entries(path))),
+        ("missing-deny-list", "test_allow_and_deny_list_load_errors",
+         patch.object(guard, "load_list", permit_missing_deny)),
+        ("allow-list-message", "test_allow_and_deny_list_load_errors",
+         patch.object(guard, "load_list", lambda path, kind: original_load_list(path, "deny"))),
     ])
-    failed = []
-    for disabled, method, mutation in mutations:
-        with mutation:
-            output = io.StringIO()
-            suite = unittest.TestSuite([PublicationGuard(method)])
-            result = unittest.TextTestRunner(stream=output).run(suite)
-        if result.failures and not result.errors:
-            failure = result.failures[0][1].strip().splitlines()[-1]
-            print(f"KILLED {disabled}: {method} ({len(result.failures)} assertions): {failure}")
-        else:
-            failed.append(disabled)
-            print(f"NOT KILLED {disabled}: {output.getvalue()}")
-    print(f"Mutants killed: {len(mutations) - len(failed)}/{len(mutations)}")
-    return bool(failed)
+    for rule, prefix in guard.PREFIXES[3:]:
+        method = "test_" + rule.replace("-", "_") + "_boundary"
+        mutations.append((rule + "-boundary", method, replace_pattern(rule, r"\b" + prefix + "_" + guard.ID_SUFFIX)))
+    baseline = unittest.defaultTestLoader.loadTestsFromTestCase(PublicationGuard)
+    return run_mutations(baseline, mutations, sys.stdout)
 
 
 if __name__ == "__main__":
