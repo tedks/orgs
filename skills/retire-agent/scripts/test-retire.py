@@ -1478,6 +1478,13 @@ class Tests(unittest.TestCase):
         with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
             self.assert_pending_exit_resume(path, state, 'pending original process end and fresh same-session exit notice')
 
+    def test_exit_capture_requires_pane_still_dead(self):
+        path, state = self.pending_fresh_exit_notice()
+        before = '            pane_after = self.exit_pane()  # Recheck continuity across the capture commands.'
+        entry = self.instrument(before, before + '\n            pane_after["pane_dead"] = "0"')
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            self.assert_pending_exit_resume(path, state, 'pending original process end and fresh same-session exit notice')
+
     def test_legacy_pending_exit_without_pre_exit_pin_is_refused(self):
         path, state = self.pending_fresh_exit_notice()
         with self.pause_pty_holder(state):
