@@ -151,8 +151,10 @@ Boundaries:
   the checkout is not edited, so a pull changes nothing about the service.
   The policy belongs to the selector's state: a host whose selector names
   the Orgs copy has it, a host on the dotfiles copy does not, and the
-  quota-service installer applies the same rule when it enables the unit
-  on a host that is already activated.
+  quota-service installer applies the same rule when it enables or
+  refreshes the unit on a host that is already activated. That installer
+  and the activation step share one lock, so a unit start never interleaves
+  with a switch.
 - **`token-usage paths`.** `install-token-tripwire` and
   `install-quota-service` import `token_usage` to learn the state directory.
   A read-only subcommand replaces those imports. It lands in dotfiles before
@@ -325,7 +327,10 @@ Removal of the dotfiles copy is not authorised by this spec.
      so activation itself adds no production writes; where the cron row is
      installed, a scheduled tick that started after the switch is confirmed
      by the host's own cron record of the row being run at a scheduled time
-     after the switch, together with a `calibration.jsonl` row, in the
+     after the switch (the cron service's journal or syslog line for that
+     row, compared in UTC; where the operator cannot read it, the evidence
+     is recorded as unavailable for that host and the dotfiles owner decides
+     whether to accept the store writes alone), together with a `calibration.jsonl` row, in the
      state directory `paths` reports, whose `ts` falls in that scheduled
      minute, `tripwire.json` replaced after that `ts`, and no new error
      line in the cron log (a skipped tick writes neither file and does not

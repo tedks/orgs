@@ -48,9 +48,14 @@
     interruption at any point brings all three to one consistent state.
   - The policy follows the selector: present exactly when the selector
     names the Orgs copy and the unit is installed. The quota-service
-    installer installs and verifies it before first starting the unit on a
-    host whose selector names the Orgs copy. Rerunning after an interruption
-    completes or reverses the switch from its record.
+    installer installs and verifies it before starting or restarting the
+    unit, on enable and on refresh, on a host whose selector names the Orgs
+    copy.
+  - The quota-service installer takes the same exclusive lock as activation
+    for the whole of any run that reads the selector, changes the policy or
+    starts, stops or restarts the unit, so the two never interleave. While
+    an interrupted activation's record is pending it does none of these and
+    says that activation must be rerun first.
   - Activation toward the dotfiles copy performs no check of the Orgs copy,
     cannot be blocked by it, and removes the per-host service policy.
   - Installers obtain the tool's paths from `token-usage paths --json` and
@@ -58,7 +63,8 @@
 - **Failure semantics:** a proxy whose selector names a directory or entry
   point that is missing or not executable prints one line to stderr naming
   the path and the remedy and exits 127. It never runs the other copy. The
-  serve unit does not restart on that status.
+  serve unit does not restart on that status while the Orgs copy is
+  selected.
 - **Intentionally unspecified:** every other file in the Orgs copy; module
   structure; the selector's exact path and the activation step's command
   line and record format; how the skills view is built.
@@ -85,8 +91,11 @@
   before the rename is resolved by a rerun with no policy left on a host
   still on the dotfiles copy; a failure after the rename restores selector,
   policy and unit together; enabling the unit on an already activated host
-  installs the policy before the first start; activation on a host without
-  the unit succeeds;
+  installs the policy before the first start, and a refresh restores a
+  missing one before restarting; an installer run that would start the unit
+  while an activation is in progress waits for it, and one that finds a
+  pending activation record refuses; activation on a host without the unit
+  succeeds;
   pulling the cutover change leaves the linked unit file unchanged.
 - **Interpretation register:** the Interpretations Log of
   `docs/specs/usage-tooling-migration.md`.
