@@ -15,3 +15,21 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-28T17:56:26-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Found on 2026-11-28 by the implementer of draft PR #70 and reproduced
+    by a council seat on a private server: with remain-on-exit on, tmux 3.8 shows
+    a dead pane with an empty pane_pid, where 3.6a keeps the original PID. retire.py
+    binds the exit notice to the pane''s root process identity, so on a server started
+    under 3.8 its end-of-process and exit-notice checks stop with ''pane root identity
+    changed'' and every retirement stays pending after the agent has exited, for both
+    harnesses. It fails closed. The host where this was found still runs a long-lived
+    3.6a server, with 3.8 as the installed binary, so the next server restart moves
+    every lane onto the failing path. The retire test suite skips its two end-to-end
+    exit tests on 3.8 and reports them as passed. Needed: a way to prove the pinned
+    process ended and the pane is the same one that does not depend on pane_pid after
+    death (for example recording pane id plus creation time and the pinned PID''s
+    start identity before exit, then checking /proc for process end), and the suite
+    must fail rather than skip when it cannot run those tests. Candidate work, not
+    assigned; it becomes urgent at the next tmux server restart.'
