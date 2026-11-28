@@ -1,0 +1,1417 @@
+{
+ "description": "Structure-only capture of one Claude Code 2.1.332 root turn (user input, tool round trips, final end_turn text, turn_duration) and two observed post-turn metadata tails. All ids, paths, text, numbers and timestamps are replaced; keys, value types, record order and the uuid/parentUuid chain are kept.",
+ "source_version": "2.1.332",
+ "baseline_after_row": 7,
+ "turn": [
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000001",
+   "isSidechain": false,
+   "promptId": "00000000-0000-4000-8000-000000000002",
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": "fixture"
+   },
+   "uuid": "00000000-0000-4000-8000-000000000003",
+   "timestamp": "fixture",
+   "permissionMode": "fixture",
+   "origin": {
+    "kind": "fixture"
+   },
+   "promptSource": "fixture",
+   "turnOrigin": "fixture",
+   "turnPromptId": "fixture",
+   "turnPosition": {
+    "promptIndex": 1,
+    "turnIndex": 1
+   },
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "type": "file-history-snapshot",
+   "messageId": "00000000-0000-4000-8000-000000000003",
+   "snapshot": {
+    "messageId": "00000000-0000-4000-8000-000000000003",
+    "trackedFileBackups": {
+     "key_0": {
+      "backupFileName": "fixture",
+      "version": 1,
+      "backupTime": "fixture",
+      "realParentDir": "fixture"
+     },
+     "key_1": {
+      "backupFileName": "fixture",
+      "version": 1,
+      "backupTime": "fixture",
+      "realParentDir": "fixture"
+     }
+    },
+    "timestamp": "fixture"
+   },
+   "isSnapshotUpdate": false
+  },
+  {
+   "type": "api-request",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "id": "00000000-0000-4000-8000-000000000004",
+   "timestamp": "fixture",
+   "version": "2.1.332",
+   "querySource": "fixture",
+   "shapeHash": "fixture",
+   "params": {
+    "model": "fixture",
+    "betas": [
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture"
+    ],
+    "max_tokens": 1,
+    "thinking": {
+     "type": "adaptive",
+     "display": "fixture"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "fixture"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "fixture"
+    }
+   },
+   "thread": {
+    "type": "create"
+   },
+   "echoWireToolInputs": true,
+   "base": "fixture",
+   "keep": 1,
+   "tail": [
+    "fixture",
+    "fixture"
+   ],
+   "cacheControl": [
+    {
+     "path": [
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture",
+      "scope": "fixture"
+     }
+    },
+    {
+     "path": [
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture"
+     }
+    },
+    {
+     "path": [
+      "fixture",
+      1,
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture"
+     }
+    }
+   ],
+   "requestDigest": "fixture"
+  },
+  {
+   "type": "tools-used",
+   "tools": [
+    "fixture",
+    "fixture",
+    "fixture",
+    "fixture",
+    "fixture",
+    "fixture"
+   ],
+   "sessionId": "12345678-1234-1234-1234-123456789abc"
+  },
+  {
+   "type": "data-flow-records",
+   "v": 1,
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "records": [
+    {
+     "response_id": "00000000-0000-4000-8000-000000000005",
+     "listed": [
+      "fixture"
+     ]
+    }
+   ]
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000003",
+   "isSidechain": false,
+   "message": {
+    "model": "fixture",
+    "id": "00000000-0000-4000-8000-000000000005",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+     {
+      "type": "thinking",
+      "thinking": "fixture",
+      "signature": "fixture"
+     }
+    ],
+    "container": null,
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+     "input_tokens": 1,
+     "cache_creation_input_tokens": 1,
+     "cache_read_input_tokens": 1,
+     "output_tokens": 1,
+     "output_tokens_details": {
+      "thinking_tokens": 1
+     },
+     "server_tool_use": {
+      "web_search_requests": 1,
+      "web_fetch_requests": 1
+     },
+     "service_tier": "fixture",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 1,
+      "ephemeral_5m_input_tokens": 1
+     },
+     "inference_geo": "fixture",
+     "iterations": [
+      {
+       "input_tokens": 1,
+       "output_tokens": 1,
+       "cache_read_input_tokens": 1,
+       "cache_creation_input_tokens": 1,
+       "cache_creation": {
+        "ephemeral_5m_input_tokens": 1,
+        "ephemeral_1h_input_tokens": 1
+       },
+       "type": "message"
+      }
+     ],
+     "speed": "fixture",
+     "fallback_credit": null
+    },
+    "input_transformations": [],
+    "diagnostics": {
+     "cache_miss_reason": {
+      "type": "previous_message_not_found"
+     }
+    },
+    "context_management": null
+   },
+   "thinkingDurationMs": 1,
+   "thinkingDisplay": "fixture",
+   "serverClassifierRequest": "fixture",
+   "apiBlockIndex": 1,
+   "requestId": "00000000-0000-4000-8000-000000000006",
+   "requestRef": "fixture",
+   "requestedModel": "fixture",
+   "promptCacheRequested": "fixture",
+   "type": "assistant",
+   "uuid": "00000000-0000-4000-8000-000000000007",
+   "timestamp": "fixture",
+   "advisorModel": "fixture",
+   "effort": "fixture",
+   "perTurnEffort": "fixture",
+   "madeBy": "fixture",
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000007",
+   "isSidechain": false,
+   "message": {
+    "model": "fixture",
+    "id": "00000000-0000-4000-8000-000000000005",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+     {
+      "type": "text",
+      "text": "fixture"
+     }
+    ],
+    "container": null,
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+     "input_tokens": 1,
+     "cache_creation_input_tokens": 1,
+     "cache_read_input_tokens": 1,
+     "output_tokens": 1,
+     "output_tokens_details": {
+      "thinking_tokens": 1
+     },
+     "server_tool_use": {
+      "web_search_requests": 1,
+      "web_fetch_requests": 1
+     },
+     "service_tier": "fixture",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 1,
+      "ephemeral_5m_input_tokens": 1
+     },
+     "inference_geo": "fixture",
+     "iterations": [
+      {
+       "input_tokens": 1,
+       "output_tokens": 1,
+       "cache_read_input_tokens": 1,
+       "cache_creation_input_tokens": 1,
+       "cache_creation": {
+        "ephemeral_5m_input_tokens": 1,
+        "ephemeral_1h_input_tokens": 1
+       },
+       "type": "message"
+      }
+     ],
+     "speed": "fixture",
+     "fallback_credit": null
+    },
+    "input_transformations": [],
+    "diagnostics": {
+     "cache_miss_reason": {
+      "type": "previous_message_not_found"
+     }
+    },
+    "context_management": null
+   },
+   "serverClassifierRequest": "fixture",
+   "apiBlockIndex": 1,
+   "requestId": "00000000-0000-4000-8000-000000000006",
+   "requestRef": "fixture",
+   "requestedModel": "fixture",
+   "promptCacheRequested": "fixture",
+   "type": "assistant",
+   "uuid": "00000000-0000-4000-8000-000000000008",
+   "timestamp": "fixture",
+   "advisorModel": "fixture",
+   "effort": "fixture",
+   "perTurnEffort": "fixture",
+   "madeBy": "fixture",
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000008",
+   "isSidechain": false,
+   "message": {
+    "model": "fixture",
+    "id": "00000000-0000-4000-8000-000000000005",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+     {
+      "type": "tool_use",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "name": "fixture",
+      "input": {
+       "replace_all": false,
+       "file_path": "fixture",
+       "old_string": "fixture",
+       "new_string": "fixture"
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ],
+    "container": null,
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+     "input_tokens": 1,
+     "cache_creation_input_tokens": 1,
+     "cache_read_input_tokens": 1,
+     "output_tokens": 1,
+     "output_tokens_details": {
+      "thinking_tokens": 1
+     },
+     "server_tool_use": {
+      "web_search_requests": 1,
+      "web_fetch_requests": 1
+     },
+     "service_tier": "fixture",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 1,
+      "ephemeral_5m_input_tokens": 1
+     },
+     "inference_geo": "fixture",
+     "iterations": [
+      {
+       "input_tokens": 1,
+       "output_tokens": 1,
+       "cache_read_input_tokens": 1,
+       "cache_creation_input_tokens": 1,
+       "cache_creation": {
+        "ephemeral_5m_input_tokens": 1,
+        "ephemeral_1h_input_tokens": 1
+       },
+       "type": "message"
+      }
+     ],
+     "speed": "fixture",
+     "fallback_credit": null
+    },
+    "input_transformations": [],
+    "diagnostics": {
+     "cache_miss_reason": {
+      "type": "previous_message_not_found"
+     }
+    },
+    "context_management": null
+   },
+   "toolInputStreamMs": 1,
+   "wireToolInputs": {
+    "00000000-0000-4000-8000-000000000009": {
+     "file_path": "fixture",
+     "old_string": "fixture",
+     "new_string": "fixture"
+    }
+   },
+   "serverClassifierRequest": "fixture",
+   "apiBlockIndex": 1,
+   "requestId": "00000000-0000-4000-8000-000000000006",
+   "requestRef": "fixture",
+   "requestedModel": "fixture",
+   "promptCacheRequested": "fixture",
+   "type": "assistant",
+   "uuid": "00000000-0000-4000-8000-000000000010",
+   "timestamp": "fixture",
+   "advisorModel": "fixture",
+   "effort": "fixture",
+   "perTurnEffort": "fixture",
+   "madeBy": "fixture",
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "type": "file-history-delta",
+   "messageId": "00000000-0000-4000-8000-000000000010",
+   "snapshotMessageId": "00000000-0000-4000-8000-000000000003",
+   "trackingPath": "fixture",
+   "backup": {
+    "backupFileName": "fixture",
+    "version": 1,
+    "backupTime": "fixture",
+    "realParentDir": "fixture"
+   },
+   "timestamp": "fixture"
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000010",
+   "isSidechain": false,
+   "promptId": "00000000-0000-4000-8000-000000000002",
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "tool_use_id": "00000000-0000-4000-8000-000000000009",
+      "type": "tool_result",
+      "content": "fixture"
+     }
+    ]
+   },
+   "uuid": "00000000-0000-4000-8000-000000000011",
+   "timestamp": "fixture",
+   "toolUseResult": {
+    "filePath": "fixture",
+    "oldString": "fixture",
+    "newString": "fixture",
+    "originalFile": "fixture",
+    "structuredPatch": [
+     {
+      "oldStart": 1,
+      "oldLines": 1,
+      "newStart": 1,
+      "newLines": 1,
+      "lines": [
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture",
+       "fixture"
+      ]
+     }
+    ],
+    "userModified": false,
+    "replaceAll": false,
+    "contentNotInModelContext": true
+   },
+   "sourceToolAssistantUUID": "00000000-0000-4000-8000-000000000010",
+   "permissionDecision": {
+    "decision": "fixture",
+    "source": "fixture",
+    "reasonType": "fixture"
+   },
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "type": "api-request-blob",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "hash": "fixture",
+   "message": {
+    "role": "assistant",
+    "content": [
+     {
+      "type": "thinking",
+      "thinking": "fixture",
+      "signature": "fixture"
+     },
+     {
+      "type": "text",
+      "text": "fixture"
+     },
+     {
+      "type": "tool_use",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "name": "fixture",
+      "input": {
+       "file_path": "fixture",
+       "old_string": "fixture",
+       "new_string": "fixture"
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "type": "api-request",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "id": "00000000-0000-4000-8000-000000000012",
+   "timestamp": "fixture",
+   "version": "2.1.332",
+   "querySource": "fixture",
+   "shapeHash": "fixture",
+   "params": {
+    "model": "fixture",
+    "betas": [
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture"
+    ],
+    "max_tokens": 1,
+    "thinking": {
+     "type": "adaptive",
+     "display": "fixture"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "fixture"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "fixture"
+    }
+   },
+   "thread": {
+    "type": "continue",
+    "previous_message_id": "fixture"
+   },
+   "echoWireToolInputs": true,
+   "base": "fixture",
+   "keep": 1,
+   "tail": [
+    "fixture",
+    "fixture"
+   ],
+   "cacheControl": [
+    {
+     "path": [
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture",
+      "scope": "fixture"
+     }
+    },
+    {
+     "path": [
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture"
+     }
+    },
+    {
+     "path": [
+      "fixture",
+      1,
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture"
+     }
+    }
+   ],
+   "requestDigest": "fixture"
+  },
+  {
+   "type": "data-flow-records",
+   "v": 1,
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "records": [
+    {
+     "response_id": "00000000-0000-4000-8000-000000000013",
+     "listed": [
+      "fixture"
+     ]
+    }
+   ]
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000011",
+   "isSidechain": false,
+   "attachment": {
+    "type": "deferred_tools_record",
+    "entries": [],
+    "toolInputCopies": [
+     {
+      "id": "00000000-0000-4000-8000-000000000009",
+      "copy": "fixture"
+     }
+    ]
+   },
+   "type": "attachment",
+   "uuid": "00000000-0000-4000-8000-000000000014",
+   "timestamp": "fixture",
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000014",
+   "isSidechain": false,
+   "message": {
+    "model": "fixture",
+    "id": "00000000-0000-4000-8000-000000000013",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+     {
+      "type": "tool_use",
+      "id": "00000000-0000-4000-8000-000000000015",
+      "name": "fixture",
+      "input": {
+       "command": "fixture"
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ],
+    "container": null,
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+     "input_tokens": 1,
+     "cache_creation_input_tokens": 1,
+     "cache_read_input_tokens": 1,
+     "output_tokens": 1,
+     "output_tokens_details": {
+      "thinking_tokens": 1
+     },
+     "server_tool_use": {
+      "web_search_requests": 1,
+      "web_fetch_requests": 1
+     },
+     "service_tier": "fixture",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 1,
+      "ephemeral_5m_input_tokens": 1
+     },
+     "inference_geo": "fixture",
+     "iterations": [
+      {
+       "input_tokens": 1,
+       "output_tokens": 1,
+       "cache_read_input_tokens": 1,
+       "cache_creation_input_tokens": 1,
+       "cache_creation": {
+        "ephemeral_5m_input_tokens": 1,
+        "ephemeral_1h_input_tokens": 1
+       },
+       "type": "message"
+      }
+     ],
+     "speed": "fixture",
+     "fallback_credit": null
+    },
+    "input_transformations": [],
+    "diagnostics": null,
+    "context_management": null
+   },
+   "toolInputStreamMs": 1,
+   "wireToolInputs": {
+    "00000000-0000-4000-8000-000000000015": {
+     "command": "fixture"
+    }
+   },
+   "serverClassifierRequest": "fixture",
+   "apiBlockIndex": 1,
+   "requestId": "00000000-0000-4000-8000-000000000016",
+   "requestRef": "fixture",
+   "requestedModel": "fixture",
+   "promptCacheRequested": "fixture",
+   "type": "assistant",
+   "uuid": "00000000-0000-4000-8000-000000000017",
+   "timestamp": "fixture",
+   "advisorModel": "fixture",
+   "effort": "fixture",
+   "perTurnEffort": "fixture",
+   "madeBy": "fixture",
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000017",
+   "isSidechain": false,
+   "promptId": "00000000-0000-4000-8000-000000000002",
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "tool_use_id": "00000000-0000-4000-8000-000000000015",
+      "type": "tool_result",
+      "content": "fixture",
+      "is_error": false
+     }
+    ]
+   },
+   "uuid": "00000000-0000-4000-8000-000000000018",
+   "timestamp": "fixture",
+   "toolUseResult": {
+    "stdout": "fixture",
+    "stderr": "fixture",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "staleReadFileStateHint": "fixture"
+   },
+   "sandboxed": false,
+   "sourceToolAssistantUUID": "00000000-0000-4000-8000-000000000017",
+   "permissionDecision": {
+    "decision": "fixture",
+    "source": "fixture",
+    "reasonType": "fixture"
+   },
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "type": "last-prompt",
+   "lastPrompt": "fixture",
+   "leafUuid": "00000000-0000-4000-8000-000000000018",
+   "sessionId": "12345678-1234-1234-1234-123456789abc"
+  },
+  {
+   "type": "ai-title",
+   "aiTitle": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc"
+  },
+  {
+   "type": "mode",
+   "mode": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc"
+  },
+  {
+   "type": "permission-mode",
+   "permissionMode": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc"
+  },
+  {
+   "type": "session-owner",
+   "accountUuid": "fixture",
+   "organizationUuid": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc"
+  },
+  {
+   "type": "atis-latch",
+   "atis": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc"
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000018",
+   "isSidechain": false,
+   "attachment": {
+    "type": "edited_text_file",
+    "filename": "fixture",
+    "snippet": "fixture",
+    "rereadEntry": {
+     "timestamp": 1,
+     "contentHash": "fixture",
+     "contentLength": 1,
+     "isPartialView": true
+    }
+   },
+   "type": "attachment",
+   "uuid": "00000000-0000-4000-8000-000000000019",
+   "timestamp": "fixture",
+   "rendered": [
+    {
+     "content": "fixture"
+    }
+   ],
+   "renderedRole": "fixture",
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "type": "api-request-blob",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "hash": "fixture",
+   "message": {
+    "role": "system",
+    "content": [
+     {
+      "type": "text",
+      "text": "fixture"
+     }
+    ]
+   }
+  },
+  {
+   "type": "api-request",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "id": "00000000-0000-4000-8000-000000000020",
+   "timestamp": "fixture",
+   "version": "2.1.332",
+   "querySource": "fixture",
+   "shapeHash": "fixture",
+   "params": {
+    "model": "fixture",
+    "betas": [
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture",
+     "fixture"
+    ],
+    "max_tokens": 1,
+    "thinking": {
+     "type": "adaptive",
+     "display": "fixture"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "fixture"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "fixture"
+    }
+   },
+   "thread": {
+    "type": "continue",
+    "previous_message_id": "fixture"
+   },
+   "echoWireToolInputs": true,
+   "base": "fixture",
+   "keep": 1,
+   "tail": [
+    "fixture",
+    "fixture",
+    "fixture"
+   ],
+   "cacheControl": [
+    {
+     "path": [
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture",
+      "scope": "fixture"
+     }
+    },
+    {
+     "path": [
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture"
+     }
+    },
+    {
+     "path": [
+      "fixture",
+      1,
+      "fixture",
+      1
+     ],
+     "value": {
+      "type": "ephemeral",
+      "ttl": "fixture"
+     }
+    }
+   ],
+   "requestDigest": "fixture"
+  },
+  {
+   "type": "data-flow-records",
+   "v": 1,
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "records": [
+    {
+     "response_id": "00000000-0000-4000-8000-000000000021",
+     "listed": [
+      "fixture"
+     ]
+    }
+   ]
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000019",
+   "isSidechain": false,
+   "message": {
+    "model": "fixture",
+    "id": "00000000-0000-4000-8000-000000000021",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+     {
+      "type": "text",
+      "text": "fixture"
+     }
+    ],
+    "container": null,
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+     "input_tokens": 1,
+     "cache_creation_input_tokens": 1,
+     "cache_read_input_tokens": 1,
+     "output_tokens": 1,
+     "output_tokens_details": {
+      "thinking_tokens": 1
+     },
+     "server_tool_use": {
+      "web_search_requests": 1,
+      "web_fetch_requests": 1
+     },
+     "service_tier": "fixture",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 1,
+      "ephemeral_5m_input_tokens": 1
+     },
+     "inference_geo": "fixture",
+     "iterations": [
+      {
+       "input_tokens": 1,
+       "output_tokens": 1,
+       "cache_read_input_tokens": 1,
+       "cache_creation_input_tokens": 1,
+       "cache_creation": {
+        "ephemeral_5m_input_tokens": 1,
+        "ephemeral_1h_input_tokens": 1
+       },
+       "type": "message"
+      }
+     ],
+     "speed": "fixture",
+     "fallback_credit": null
+    },
+    "input_transformations": [],
+    "diagnostics": null,
+    "context_management": null
+   },
+   "serverClassifierRequest": "fixture",
+   "apiBlockIndex": 1,
+   "requestId": "00000000-0000-4000-8000-000000000022",
+   "requestRef": "fixture",
+   "requestedModel": "fixture",
+   "promptCacheRequested": "fixture",
+   "type": "assistant",
+   "uuid": "00000000-0000-4000-8000-000000000023",
+   "timestamp": "fixture",
+   "advisorModel": "fixture",
+   "effort": "fixture",
+   "perTurnEffort": "fixture",
+   "madeBy": "fixture",
+   "session_id": "fixture",
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  },
+  {
+   "parentUuid": "00000000-0000-4000-8000-000000000023",
+   "isSidechain": false,
+   "type": "system",
+   "subtype": "turn_duration",
+   "durationMs": 1,
+   "messageCount": 1,
+   "timestamp": "fixture",
+   "uuid": "00000000-0000-4000-8000-000000000024",
+   "isMeta": false,
+   "userType": "fixture",
+   "entrypoint": "fixture",
+   "cwd": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "version": "2.1.332",
+   "gitBranch": "fixture",
+   "dataFlowOn": true
+  }
+ ],
+ "idle_tails": [
+  [
+   {
+    "type": "last-prompt",
+    "lastPrompt": "fixture",
+    "leafUuid": "00000000-0000-4000-8000-000000000025",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "ai-title",
+    "aiTitle": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "mode",
+    "mode": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "permission-mode",
+    "permissionMode": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "session-owner",
+    "accountUuid": "fixture",
+    "organizationUuid": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "atis-latch",
+    "atis": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "cost-state",
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "totalCostUSD": 1.0,
+    "totalAPIDuration": 1,
+    "totalAPIDurationWithoutRetries": 1,
+    "totalToolDuration": 1,
+    "totalLinesAdded": 1,
+    "totalLinesRemoved": 1,
+    "totalDuration": 1,
+    "startTime": 1,
+    "modelUsage": {
+     "key_0": {
+      "inputTokens": 1,
+      "outputTokens": 1,
+      "thinkingTokens": 1,
+      "cacheReadInputTokens": 1,
+      "cacheCreationInputTokens": 1,
+      "cacheCreationEphemeral5mInputTokens": 1,
+      "cacheCreationEphemeral1hInputTokens": 1,
+      "webSearchRequests": 1,
+      "costUSD": 1.0
+     },
+     "key_1": {
+      "inputTokens": 1,
+      "outputTokens": 1,
+      "thinkingTokens": 1,
+      "cacheReadInputTokens": 1,
+      "cacheCreationInputTokens": 1,
+      "cacheCreationEphemeral5mInputTokens": 1,
+      "cacheCreationEphemeral1hInputTokens": 1,
+      "webSearchRequests": 1,
+      "costUSD": 1.0
+     }
+    },
+    "hasUnknownModelCost": false
+   },
+   {
+    "type": "cost-state",
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "totalCostUSD": 1.0,
+    "totalAPIDuration": 1,
+    "totalAPIDurationWithoutRetries": 1,
+    "totalToolDuration": 1,
+    "totalLinesAdded": 1,
+    "totalLinesRemoved": 1,
+    "totalDuration": 1,
+    "startTime": 1,
+    "modelUsage": {
+     "key_0": {
+      "inputTokens": 1,
+      "outputTokens": 1,
+      "thinkingTokens": 1,
+      "cacheReadInputTokens": 1,
+      "cacheCreationInputTokens": 1,
+      "cacheCreationEphemeral5mInputTokens": 1,
+      "cacheCreationEphemeral1hInputTokens": 1,
+      "webSearchRequests": 1,
+      "costUSD": 1.0
+     },
+     "key_1": {
+      "inputTokens": 1,
+      "outputTokens": 1,
+      "thinkingTokens": 1,
+      "cacheReadInputTokens": 1,
+      "cacheCreationInputTokens": 1,
+      "cacheCreationEphemeral5mInputTokens": 1,
+      "cacheCreationEphemeral1hInputTokens": 1,
+      "webSearchRequests": 1,
+      "costUSD": 1.0
+     }
+    },
+    "hasUnknownModelCost": false
+   },
+   {
+    "type": "file-history-snapshot",
+    "messageId": "00000000-0000-4000-8000-000000000026",
+    "snapshot": {
+     "messageId": "00000000-0000-4000-8000-000000000026",
+     "trackedFileBackups": {
+      "key_0": {
+       "backupFileName": "fixture",
+       "version": 1,
+       "backupTime": "fixture",
+       "realParentDir": "fixture"
+      },
+      "key_1": {
+       "backupFileName": "fixture",
+       "version": 1,
+       "backupTime": "fixture",
+       "realParentDir": "fixture"
+      },
+      "key_2": {
+       "backupFileName": "fixture",
+       "version": 1,
+       "backupTime": "fixture",
+       "realParentDir": "fixture"
+      }
+     },
+     "timestamp": "fixture"
+    },
+    "isSnapshotUpdate": false
+   }
+  ],
+  [
+   {
+    "type": "last-prompt",
+    "lastPrompt": "fixture",
+    "leafUuid": "00000000-0000-4000-8000-000000000027",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "ai-title",
+    "aiTitle": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "mode",
+    "mode": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "permission-mode",
+    "permissionMode": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "session-owner",
+    "accountUuid": "fixture",
+    "organizationUuid": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "atis-latch",
+    "atis": "fixture",
+    "sessionId": "12345678-1234-1234-1234-123456789abc"
+   },
+   {
+    "type": "pr-link",
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "prNumber": 1,
+    "prUrl": "fixture",
+    "prRepository": "fixture",
+    "timestamp": "fixture"
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000028",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000029",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000030",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000031",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000032",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000033",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000034",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000035",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000036",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000037",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
+   }
+  ]
+ ]
+}

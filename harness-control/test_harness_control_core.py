@@ -4,6 +4,7 @@
 --mutation-check proves the guards/witness tests reject intentionally broken
 variants loaded from private temporary modules, without editing the worktree.
 """
+import copy
 from contextlib import nullcontext
 import hashlib
 import importlib.util
@@ -322,6 +323,100 @@ class ControlTests(unittest.TestCase):
         self.transcript.write_text('')
         self.rows(*self.codex_idle_rows(), {'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': 'child', 'root_turn_id': 'one'}}, {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'child'}})
         self.assertEqual('idle', self.native_idle_result(self.idle_record('codex'))['state'])
+
+    # Claude Code 2.1.332: structure-only capture of a real root turn and two
+    # real post-turn tails. The compact baseline falls mid-turn, as it does
+    # when an agent calls self_compact from inside its own turn.
+    CLAUDE_332 = json.loads((MODULE.parent / 'fixtures/claude-2.1.332-idle-turn.json').read_text())
+
+    def claude_332_record(self, before=None):
+        """Write the turn's rows up to the baseline; return a compact record."""
+        fixture = self.CLAUDE_332
+        self.transcript.write_text('')
+        self.rows(*copy.deepcopy(fixture['turn'][:fixture['baseline_after_row']] if before is None else before))
+        record = self.idle_record()
+        record['action'] = 'compact'
+        return record
+
+    def claude_332_rest(self):
+        return copy.deepcopy(self.CLAUDE_332['turn'][self.CLAUDE_332['baseline_after_row']:])
+
+    def test_claude_332_completed_turn_and_post_turn_metadata_read_idle(self):
+        for index, tail in enumerate([[]] + self.CLAUDE_332['idle_tails']):
+            with self.subTest(tail=index):
+                record = self.claude_332_record()
+                self.rows(*self.claude_332_rest(), *copy.deepcopy(tail))
+                result = self.native_idle_result(record)
+                self.assertEqual('idle', result['state'])
+                self.assertEqual(0, result['turns_seen'])
+        # The same tail still reads idle when every new kind follows the turn.
+        record = self.claude_332_record()
+        late = [{'type': kind, 'sessionId': SID, field: ({str: 'fixture', int: 1, list: [], dict: {}}[kinds])}
+                for kind, (field, kinds) in h._CLAUDE_METADATA.items()]
+        self.rows(*self.claude_332_rest(), *late)
+        self.assertEqual('idle', self.native_idle_result(record)['state'])
+
+    def test_claude_332_mid_turn_and_pending_tool_call_stay_busy(self):
+        rest = self.claude_332_rest()
+        tail = copy.deepcopy(self.CLAUDE_332['idle_tails'][1])
+        # Mid-turn: everything except the closing turn_duration.
+        record = self.claude_332_record()
+        self.rows(*rest[:-1], *tail)
+        self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+        # Pending tool call: the turn stops at an assistant tool_use row and the
+        # 2.1.332 bookkeeping rows that accompany it keep arriving.
+        pending = 1 + max(i for i, row in enumerate(rest) if row['type'] == 'assistant' and
+                          row['message']['stop_reason'] == 'tool_use')
+        self.assertEqual('tool_use', rest[pending - 1]['message']['content'][-1]['type'])
+        record = self.claude_332_record()
+        self.rows(*rest[:pending], *[row for row in rest if row['type'] in ('data-flow-records', 'tools-used', 'session-owner')], *tail)
+        self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+        # A closing turn_duration after a final tool_use (no end_turn text) is
+        # not a completed answer either.
+        record = self.claude_332_record()
+        ended_on_tool = copy.deepcopy(rest)
+        final = next(row for row in reversed(ended_on_tool) if row['type'] == 'assistant')
+        final['message']['stop_reason'] = 'tool_use'
+        final['message']['content'] = [{'type': 'tool_use', 'id': 'fixture', 'name': 'fixture', 'input': {}}]
+        self.rows(*ended_on_tool, *tail)
+        self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+        # Rows measured only inside turns clear idle until the next turn ends.
+        for kind in ('file-history-delta', 'data-flow-incomplete'):
+            with self.subTest(kind=kind):
+                record = self.claude_332_record()
+                self.rows(*copy.deepcopy(rest), {'type': kind, 'sessionId': SID, 'v': 1})
+                self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+
+    def test_claude_332_truncated_unknown_and_malformed_rows_fail_closed(self):
+        rest = self.claude_332_rest()
+        # Truncated record: the last tail row has no newline yet.
+        record = self.claude_332_record()
+        self.rows(*rest)
+        with self.transcript.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(self.CLAUDE_332['idle_tails'][1][-1])[:-5])
+        self.assertEqual('unknown', self.native_idle_result(record)['state'])
+        # Unknown kinds after the baseline still raise, including the measured
+        # but deliberately unaccepted continued-in row.
+        for kind in ('continued-in', 'session-owner-v2', 'fixture-new-kind'):
+            with self.subTest(kind=kind):
+                record = self.claude_332_record()
+                self.rows(*copy.deepcopy(rest), {'type': kind, 'sessionId': SID, 'continuedInSessionId': SID})
+                with self.assertRaisesRegex(h.ControlError, 'idle_record_shape_unknown'):
+                    self.real_native_idle(record)
+        # Accepted metadata must name this session and carry its typed field.
+        for kind, (field, kinds) in h._CLAUDE_METADATA.items():
+            good = {str: 'fixture', int: 1, list: [], dict: {}}[kinds]
+            wrong = 1 if kinds is str else 'fixture'
+            for row in ({'type': kind, 'sessionId': 'other', field: good},
+                        {'type': kind, field: good},
+                        {'type': kind, 'sessionId': SID},
+                        {'type': kind, 'sessionId': SID, field: wrong},
+                        {'type': kind, 'sessionId': SID, field: True}):
+                with self.subTest(kind=kind, row=sorted(row.items(), key=str)):
+                    record = self.claude_332_record()
+                    self.rows(*copy.deepcopy(rest), row)
+                    with self.assertRaisesRegex(h.ControlError, 'idle_metadata_malformed'):
+                        self.real_native_idle(record)
 
     def test_idle_wait_busy_then_new_idle_and_timeout_no_send(self):
         oid = self.request('exit')
@@ -2040,6 +2135,16 @@ def mutations():
         ('live_worker_receipt', 'return record  # live observer owns the final receipt, including continuation', 'pass  # broken: overwrites live observer receipt'),
         ('cancelled_observer_lease_race', atomic_claim, obsolete_lease_first),
         ('scope', "[identity.boot_id, identity.pid, identity.starttime, session_id]", "[identity.boot_id, identity.pid, identity.starttime, session_id, identity.cwd]"),
+        ('claude_332_owner_unknown', "'session-owner': ('accountUuid', str), ", ''),
+        ('claude_332_data_flow_unknown', "'data-flow-records': ('records', list), ", ''),
+        ('claude_332_delta_unknown', "'file-history-delta', 'data-flow-incomplete')", "'data-flow-incomplete')"),
+        ('claude_332_in_turn_rows_neutral', "if kind != 'file-history-snapshot':", "if kind not in ('file-history-snapshot', 'file-history-delta', 'data-flow-incomplete'):"),
+        ('claude_unknown_accepted', "if kind not in _CLAUDE_BUSY_OR_NEUTRAL:", 'if False:'),
+        ('claude_metadata_any_session', "row.get('sessionId') != record['session_id'] or not isinstance(value, types)", 'not isinstance(value, types)'),
+        ('claude_metadata_any_type', "row.get('sessionId') != record['session_id'] or not isinstance(value, types)", "row.get('sessionId') != record['session_id']"),
+        ('claude_metadata_bool_as_int', 'or isinstance(value, bool)):', '):'),
+        ('claude_final_tool_use_completes', "message.get('stop_reason') == 'end_turn' and", ''),
+        ('claude_partial_row_completes', "return {'state': 'unknown', 'reason': 'idle_transcript_incomplete'}", 'pass'),
     ]
     failures = []
     with tempfile.TemporaryDirectory() as directory:
