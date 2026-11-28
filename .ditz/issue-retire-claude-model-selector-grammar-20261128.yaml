@@ -15,3 +15,14 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-28T17:56:26-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Draft PR #70 accepts the exit notice ''claude --model <selector> --resume
+    <id>'' only for selectors made of letters, digits and hyphens, the forms measured
+    so far. The launcher forwards any non-empty --model value unchecked, so a lane
+    launched with a bracketed long-context alias or a dotted model id would exit and
+    stay pending at the exit-notice step. It fails closed. Options: the launcher refuses
+    a Claude --model outside the grammar the retirement step recognizes; or each further
+    form is measured from a real exit notice and added as its own exact alternative
+    with refused twins. Candidate work, not assigned.'
