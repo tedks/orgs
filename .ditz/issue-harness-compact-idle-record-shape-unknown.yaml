@@ -48,3 +48,18 @@ log_events:
     idle_record_shape_unknown and did not dispatch. This extends the reported symptom
     to a Claude target. Whether it shares a parser cause with the original Codex-target
     observation is unknown."
+- time: 2026-11-28T11:21:54-00:00
+  who: Ted Smith
+  what: commented
+  comment: '2026-11-28 recurrence on Claude Code, reported by a peer CTO: self_compact
+    failed with idle_record_shape_unknown on two Claude Code lanes on one host the
+    same night, one on Fable 5.2 (the lane never compacted and sat at roughly 650k
+    context) and one on Opus 5.5 (the operator delivered a manual /compact instead).
+    The original report here was a Codex pane, so the failure is not harness-specific.
+    Not diagnosed. Likely the same family as retire-claude-agent-indicator-footer-20261128
+    and spawn-agent-claude-task-rows-mixed-input: the Claude Code footer on this version
+    (2.1.332, with a background-agent indicator on the permission-mode row on at least
+    one of the lanes) is a shape the idle-record recognizer does not know. Impact:
+    a lane that relies on self_compact cannot compact at a checkpoint and needs a
+    peer to type /compact. Candidate work, not assigned; one fixture capture of the
+    current footer would serve all three issues.'
