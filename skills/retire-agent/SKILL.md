@@ -199,10 +199,13 @@ For an ordinary retirement, confirm these facts read-only before resuming.
 - The existing state records a submitted exit request or an ambiguous request
   with actual input, a positive Enter count, and a pre-request count for the
   shard's session UUID. The request targeted the live pinned process, and
-  all pinned original processes have ended.
+  all pinned original processes have ended. This recovery covers Claude
+  launched as the pane root. The pinned harness PID must equal the recorded
+  pane-root PID. With a shell or wrapper as the root, the model notice
+  leaves the receipt pending.
 - The retained dead pane is on the recorded socket and still reports the
-  pinned pane PID. Its final native model notice names the immutable shard's
-  UUID and is followed by tmux's own status-0 dead-pane row. The current
+  pinned pane PID in its exit metadata. Its final native model notice names
+  the immutable shard's UUID and is followed by tmux's own status-0 dead-pane row. The current
   same-session model count exceeds the saved model count. An older state
   with only a plain count uses zero as the model baseline.
 
