@@ -546,9 +546,8 @@ class Retirement:
                 self.state['native_marker_witness'] = True
         if not marker:
             return None
-        tail_rows = [i for i in range(position + 1, len(rows))
-                     if rows[i].strip() and not (len(rows[i].strip()) >= 3 and set(rows[i].strip()) == {'─'})]
-        tail = [rows[i] for i in tail_rows]
+        tail = [row for row in rows[position + 1:]
+                if row.strip() and not (len(row.strip()) >= 3 and set(row.strip()) == {'─'})]
         # Codex renders this measured UI duration/time line after a final reply
         # ("Worked for 2m 59s • 11:30 PM" or "• Worked for 19s • 19:35", with
         # hours for long turns, or the bare time for sub-minute turns).
@@ -574,29 +573,34 @@ class Retirement:
         # measured Claude frame has its upper rule directly above it, so
         # rows[-1] is that rule. Only ASCII padding is trimmed: any other
         # trailing cell is content and keeps completion pending.
+        # The hint is read by index, not from the filtered tail: it must be the
+        # row immediately after the marker and immediately above the rule, as
+        # measured, so no row (not even a rule-only one) can sit between.
         rule = rows[-1].rstrip(' ')
-        hint = tail[0].rstrip(' ') if tail else ''
+        hint = rows[position + 1].rstrip(' ') if position + 1 < len(rows) else ''
         claude_hint = (agent == 'claude'
-                       and tail_rows == [len(rows) - 2]
+                       and position + 3 == len(rows)
                        and len(hint) == len(rule) - 2
-                       and self.claude_hint_rendered(rows, tail_rows[0]))
+                       and self.claude_hint_rendered(rows, position))
         if tail and not (codex_footer or claude_footer or claude_hint):
             return None
         return marker[1]
 
-    def claude_hint_rendered(self, rows, index):
-        """Confirm the renderer's styling on the raw row holding the hint.
+    def claude_hint_rendered(self, rows, position):
+        """Confirm the renderer's styling on the raw row after the marker.
 
         The shared reader's rows are the visible screen's leading lines, so
-        rows[index] is visible line index. A frame that changed between the
-        two reads (other text from that index to the rule) stays pending.
+        rows[position] is visible line position. Marker, hint and rule must be
+        the same text in this second read, so a frame that changed between the
+        two reads stays pending, as does a failed or timed-out capture.
         """
         try:
             raw = checked(self.tmux + ['capture-pane', '-e', '-p', '-t', self.args.pane], strip=False).split('\n')
-        except Stop:
+        except (Stop, OSError, subprocess.SubprocessError):
             return False
-        plain = [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[index:len(rows)]]
-        return plain == rows[index:] and bool(re.fullmatch(_CLAUDE_CLEAR_HINT_SGR, raw[index]))
+        plain = [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[position:len(rows)]]
+        return (plain == rows[position:]
+                and bool(re.fullmatch(_CLAUDE_CLEAR_HINT_SGR, raw[position + 1])))
 
     def validate_shard(self, path):
         if path.is_symlink() or not path.is_file() or path.resolve() != self.path.parent / (self.state['id'] + '.shard'):

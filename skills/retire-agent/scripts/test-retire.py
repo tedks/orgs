@@ -72,6 +72,8 @@ def claude_hint_rows(mode, event, disposition):
         rows.insert(2, '')
     elif mode.endswith('nbsp'):
         rows[1] = hint + '\u00a0'  # One extra cell after the hint.
+    elif mode.endswith('rule-continuation'):
+        rows.insert(1, '  ' + '─' * 40)  # An assistant rule-only line before the real hint.
     elif mode.endswith('composer'):
         # The exact marker typed into the composer while the hint is visible.
         del rows[0]
@@ -3004,6 +3006,8 @@ class Tests(unittest.TestCase):
 
     def test_claude_clear_hint_after_duration_is_pending(self):
         # Unmeasured on 2.1.332: stays pending until a real capture shows it.
+        # Adjacency, right edge and styling each refuse it, so no single
+        # mutation turns this red; it stays as a regression.
         self.assert_completion_block_pending('claude-hint-duration')
 
     def test_claude_clear_hint_later_assistant_is_pending(self):
@@ -3031,9 +3035,36 @@ class Tests(unittest.TestCase):
         observer.tmux = ['sh', '-c', 'cat "$0"', str(screen)]  # Appended capture arguments are ignored.
         observer.args = SimpleNamespace(pane='%1')
         plain = [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[:3]]
-        self.assertTrue(observer.claude_hint_rendered(plain, 1))
+        self.assertTrue(observer.claude_hint_rendered(plain, 0))
         moved = plain[:1] + [plain[1].replace('276.8k', '101.5k')] + plain[2:]
-        self.assertFalse(observer.claude_hint_rendered(moved, 1))
+        self.assertFalse(observer.claude_hint_rendered(moved, 0))
+
+    def test_claude_hint_marker_changed_between_reads_is_pending(self):
+        # The genuine styled hint is unchanged, but the reader saw another
+        # marker row than the second capture holds: not one frame.
+        observer, plain = self.hint_frame_observer()
+        changed = [plain[0].replace('0' * 32, '1' * 32)] + plain[1:]
+        self.assertFalse(observer.claude_hint_rendered(changed, 0))
+
+    def test_claude_hint_capture_error_is_pending(self):
+        observer, plain = self.hint_frame_observer()
+        observer.tmux = [str(self.directory / 'missing-tmux')]
+        self.assertFalse(observer.claude_hint_rendered(plain, 0))
+
+    def hint_frame_observer(self):
+        spec = importlib.util.spec_from_file_location('retire-hint-frame-2', Path(os.environ.get('RETIRE_TEST_SCRIPT', str(HERE / 'retire.sh'))).with_name('retire.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        raw = claude_hint_rows('claude-hint', '0' * 32, 'DONE')
+        screen = self.directory / 'hint-screen-2'
+        screen.write_text('\n'.join(raw) + '\n')
+        observer = module.Retirement.__new__(module.Retirement)
+        observer.tmux = ['sh', '-c', 'cat "$0"', str(screen)]
+        observer.args = SimpleNamespace(pane='%1')
+        return observer, [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[:3]]
+
+    def test_claude_rule_only_continuation_before_hint_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-rule-continuation')
 
     def test_claude_unstyled_clear_hint_is_pending(self):
         self.assert_completion_block_pending('claude-hint-unstyled')
@@ -3052,7 +3083,20 @@ class Tests(unittest.TestCase):
 
     def test_claude_composer_marker_with_hint_is_pending(self):
         self.assert_completion_block_pending('claude-hint-composer')
-        self.assertNotIn('exit', self.state()[1])
+        state = self.state()[1]
+        self.assertNotIn('exit', state)
+        self.assertEqual(self.observed().get('exit_enters', 0), 0)
+        # The twin is real only if the exact marker is inside the recognized composer.
+        spec = importlib.util.spec_from_file_location('retire-hint-composer', SHARED / 'tmux-message.py')
+        shared = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = shared
+        spec.loader.exec_module(shared)
+        frame = shared.Tmux(self.pane, socket=state['socket']).frame()
+        inp = shared.composer(frame)
+        self.assertEqual(inp.harness, 'claude')
+        lines = shared.styles.strip_ansi(frame.raw).splitlines()
+        self.assertIn('● RETIRE-DONE-' + state['id'], lines[inp.start:inp.end])
+        self.assertIn('new task? /clear to save', lines[inp.start - 2])
 
     # The quoted and user-marker twins are refused before the hint predicate
     # (no assistant marker row), so no mutation of that predicate can fail
