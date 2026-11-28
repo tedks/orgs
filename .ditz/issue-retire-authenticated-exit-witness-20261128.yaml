@@ -1,0 +1,16 @@
+id: retire-authenticated-exit-witness-20261128
+title: 'retire-agent: an exit witness that does not depend on pane text'
+desc: ""
+type: feature
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-28T18:16:44-00:00
+references: []
+log_events:
+- time: 2026-11-28T18:16:44-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
