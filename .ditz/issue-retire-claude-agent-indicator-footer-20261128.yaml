@@ -1,0 +1,17 @@
+id: retire-claude-agent-indicator-footer-20261128
+title: 'retire-agent: Claude RETIRE-DONE not observed when the footer shows a background-agent
+  indicator (Claude Code 2.1.332)'
+desc: ""
+type: bugfix
+component: retire-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-28T09:58:03-00:00
+references: []
+log_events:
+- time: 2026-11-28T09:58:03-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
