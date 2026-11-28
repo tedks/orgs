@@ -49,6 +49,14 @@ _CLAUDE_VERSION_ROW = r' +' + _CLAUDE_AUTO_UPDATE
 # stays pending until it is measured and added here.
 _CLAUDE_CLEAR_HINT_SGR = (r' +\x1b\[38;5;246mnew task\? \x1b\[38;5;153m/clear\x1b\[38;5;246m to save '
                           r'\x1b\[38;5;153m[1-9][0-9]*\.[0-9]k tokens\x1b\[39m')
+_SESSION_UUID = r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'
+# The launcher passes only --model to Claude. --trust is a separate setup
+# step. Measured selectors are bare aliases or hyphenated model names.
+_CLAUDE_MODEL_OPTION = r'--model (?!' + _SESSION_UUID + r' )[A-Za-z0-9][A-Za-z0-9-]* '
+# Claude 2.1.332 dims both lines. A transcript quote can copy the text.
+_CLAUDE_EXIT_HEADER = r'^\x1b\[2mResume this session with:[ \t]*\n'
+_CLAUDE_EXIT_TAIL = (r'(?:[ \t]*\n)*(?:\x1b\[0mPane is dead \(status 0, [^\n()]+\)[ \t]*\n'
+                     r'(?:[ \t]*\n)*)?\Z')
 
 
 class Stop(Exception):
@@ -761,10 +769,10 @@ class Retirement:
             raise Stop('replacement actor found; successor spawn withheld')
         return True
 
-    def exit_notice_count(self, session_id):
+    def exit_notice_count(self, session_id, after_exit=False):
         # Raw pane bytes stay in memory. Only an exact native resume command
         # naming the immutable shard's UUID can establish this lifecycle receipt.
-        if not re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', session_id):
+        if not re.fullmatch(_SESSION_UUID, session_id):
             raise Stop('handoff verified; exit pending verifiable native session UUID')
         agent = self.state['identity']['process']['agent']
         command = {'codex': 'codex resume ', 'claude': 'claude --resume '}.get(agent)
@@ -776,8 +784,18 @@ class Retirement:
         frame = checked(self.tmux + ['capture-pane', '-p', '-J', '-S', '-', '-t', self.args.pane], strip=False)
         prefix = (r'^Token usage: [^\n]+\nTo continue this session, run:[ \t]*\n' if agent == 'codex'
                   else r'^Resume this session with:[ \t]*\n')
-        return len(re.findall(prefix + r'[ \t]*' + re.escape(command) + r'(?i:' + re.escape(session_id) + r')[ \t]*$',
-                              frame, re.MULTILINE))
+        count = len(re.findall(prefix + r'[ \t]*' + re.escape(command) + r'(?i:' + re.escape(session_id) + r')[ \t]*$',
+                               frame, re.MULTILINE))
+        if agent == 'codex':
+            return count
+        styled = checked(self.tmux + ['capture-pane', '-e', '-p', '-J', '-S', '-', '-t', self.args.pane], strip=False)
+        models = list(re.finditer(_CLAUDE_EXIT_HEADER + r'claude ' + _CLAUDE_MODEL_OPTION + r'--resume '
+                                  + r'(?i:' + re.escape(session_id) + r')[ \t]*\n', styled, re.MULTILINE))
+        # Preserve the full pre-request count. After exit, an explicit-model
+        # notice can contribute only when the last match is the final footer.
+        if models and (not after_exit or re.fullmatch(_CLAUDE_EXIT_TAIL, styled[models[-1].end():])):
+            count += len(models)
+        return count
 
     def fresh_exit_notice(self, session_id):
         attempt = self.state.get('exit', {})
@@ -790,7 +808,7 @@ class Retirement:
                 or type(baseline.get('before')) is not int or baseline['before'] < 0):
             raise Stop('handoff verified; missing trustworthy pre-request exit notice baseline')
         try:
-            return self.exit_notice_count(session_id) > baseline['before']
+            return self.exit_notice_count(session_id, after_exit=True) > baseline['before']
         except PaneAbsent:
             return False  # Process end without a retained notice is not retirement.
 
