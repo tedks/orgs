@@ -60,28 +60,50 @@ assert doc["store_age_minutes"] == 2 and doc["stale_note"] is None, doc
 ' "$WORK/json"
 check "fresh json has no stderr warning" test ! -s "$WORK/err"
 
+check_quiet_age() {
+  local seconds="$1" minutes="$2"
+  SNAPSHOT_JSON="{\"schema\":\"quota-snapshot/1\",\"store\":{\"age_seconds\":$seconds},\"errors\":{}}" \
+    PATH="$WORK/bin:$BASEPATH" "$HERE/usage.sh" --json > "$WORK/json" 2> "$WORK/err"
+  check "$seconds seconds yields $minutes minutes and no stale note" python3 -c '
+import json, sys
+with open(sys.argv[1]) as stream:
+    doc = json.load(stream)
+age = doc["store_age_minutes"]
+assert type(age) is int and age == int(sys.argv[2]) and doc["stale_note"] is None, doc
+' "$WORK/json" "$minutes"
+  check "$seconds seconds has no stderr warning" test ! -s "$WORK/err"
+}
+check_quiet_age 0 0
+check_quiet_age 1200 20
+check_quiet_age 1259 20
+
 SNAPSHOT_JSON='{"schema":"quota-snapshot/1","store":{"age_seconds":1260},"errors":{}}' \
   PATH="$WORK/bin:$BASEPATH" "$HERE/usage.sh" > "$WORK/out"
 check "age over 20 minutes warns in the text view" grep -Fq '!! store last scanned 21 min ago' "$WORK/out"
 
+SNAPSHOT_JSON='{"schema":"quota-snapshot/1","store":{"age_seconds":999999999999},"errors":{}}' \
+  PATH="$WORK/bin:$BASEPATH" "$HERE/usage.sh" > "$WORK/out"
+check "largest valid age warns in the text view" grep -Fq '!! store last scanned 16666666666 min ago' "$WORK/out"
+
+UNKNOWN_NOTE='store age unknown (never scanned on this host, or unreadable): run with --fresh (and enable the cron row)'
+FAILED_NOTE='store age unknown (token-usage snapshot failed). Rerun and update token-usage if it persists.'
 SNAPSHOT_JSON='{"schema":"quota-snapshot/1","store":{"age_seconds":null},"errors":{}}' \
   PATH="$WORK/bin:$BASEPATH" "$HERE/usage.sh" > "$WORK/out"
-check "unknown age warns in the text view" grep -Fq '!! store age unknown' "$WORK/out"
+check "null age warns in the text view" grep -Fxq "!! $UNKNOWN_NOTE" "$WORK/out"
 
-UNKNOWN_NOTE='store age unknown (never scanned on this host, or unreadable)'
 check_unknown() {
-  local description="$1" snapshot="$2" note="${3:-$UNKNOWN_NOTE}"
+  local description="$1" snapshot="$2" note="${3:-$FAILED_NOTE}"
   SNAPSHOT_JSON="$snapshot" PATH="$WORK/bin:$BASEPATH" "$HERE/usage.sh" --json > "$WORK/json" 2> "$WORK/err"
   check "$description yields unknown age in json" python3 -c '
 import json, sys
 with open(sys.argv[1]) as stream:
     doc = json.load(stream)
 assert doc["store_age_minutes"] is None, doc
-assert sys.argv[2] in doc["stale_note"], doc
+assert sys.argv[2] == doc["stale_note"], doc
 ' "$WORK/json" "$note"
-  check "$description warns on stderr" grep -Fq "$note" "$WORK/err"
+  check "$description warns on stderr" grep -Fxq "usage.sh: $note" "$WORK/err"
 }
-check_unknown "null age" '{"schema":"quota-snapshot/1","store":{"age_seconds":null},"errors":{}}'
+check_unknown "null age" '{"schema":"quota-snapshot/1","store":{"age_seconds":null},"errors":{}}' "$UNKNOWN_NOTE"
 check_unknown "missing store" '{"schema":"quota-snapshot/1","errors":{}}'
 check_unknown "mistyped store" '{"schema":"quota-snapshot/1","store":[],"errors":{}}'
 check_unknown "missing age" '{"schema":"quota-snapshot/1","store":{},"errors":{}}'
@@ -89,6 +111,9 @@ check_unknown "string age" '{"schema":"quota-snapshot/1","store":{"age_seconds":
 check_unknown "fractional age" '{"schema":"quota-snapshot/1","store":{"age_seconds":125.5},"errors":{}}'
 check_unknown "boolean age" '{"schema":"quota-snapshot/1","store":{"age_seconds":true},"errors":{}}'
 check_unknown "negative age" '{"schema":"quota-snapshot/1","store":{"age_seconds":-1},"errors":{}}'
+check_unknown "age at exclusive bound" '{"schema":"quota-snapshot/1","store":{"age_seconds":1000000000000},"errors":{}}'
+check_unknown "age just over bound" '{"schema":"quota-snapshot/1","store":{"age_seconds":1000000000001},"errors":{}}'
+check_unknown "age beyond shell integer range" '{"schema":"quota-snapshot/1","store":{"age_seconds":600000000000000000000},"errors":{}}'
 check_unknown "unknown schema name" '{"schema":"other-snapshot/1","store":{"age_seconds":125},"errors":{}}'
 check_unknown "unknown schema major" '{"schema":"quota-snapshot/2","store":{"age_seconds":125},"errors":{}}'
 check_unknown "non-JSON output" 'snapshot failed'

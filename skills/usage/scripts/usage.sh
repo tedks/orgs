@@ -44,7 +44,7 @@ TW="$(find_cli token-tripwire || true)"
 # How old is the store? Without a scan (and without the cron row) it can be
 # hours stale, and an empty view would read as "no lanes running".
 age_minutes() {
-  LC_ALL=C python3 - "$TU" <<'PY' 2>/dev/null || echo unknown
+  LC_ALL=C python3 - "$TU" <<'PY' 2>/dev/null || echo failed
 import json
 import subprocess
 import sys
@@ -69,10 +69,15 @@ errors = snapshot.get("errors")
 if not isinstance(errors, dict) or any(key == "store" or key.startswith("store.") for key in errors):
     sys.exit(1)
 store = snapshot.get("store")
-age = store.get("age_seconds") if isinstance(store, dict) else None
-if type(age) is not int or age < 0:
+if not isinstance(store, dict) or "age_seconds" not in store:
     sys.exit(1)
-print(age // 60)
+age = store["age_seconds"]
+if age is None:
+    print("unknown")
+elif type(age) is not int or age < 0 or age >= 10**12:
+    sys.exit(1)
+else:
+    print(age // 60)
 PY
 }
 if $fresh; then "$TU" scan > /dev/null; fi
@@ -80,6 +85,9 @@ age="$(age_minutes)"
 if [ "$age" = unsupported ]; then
   age=unknown
   stale_note="store age unknown (token-usage lacks snapshot): update token-usage"
+elif [ "$age" = failed ]; then
+  age=unknown
+  stale_note="store age unknown (token-usage snapshot failed). Rerun and update token-usage if it persists."
 elif [ "$age" = unknown ]; then
   stale_note="store age unknown (never scanned on this host, or unreadable): run with --fresh (and enable the cron row)"
 elif [ "$age" -gt 20 ]; then
