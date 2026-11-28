@@ -202,16 +202,19 @@ For an ordinary retirement, confirm these facts read-only before resuming.
   all pinned original processes have ended.
 - The retained dead pane is on the recorded socket and still reports the
   pinned pane PID. Its final native model notice names the immutable shard's
-  UUID. The current same-session count exceeds the saved count.
+  UUID and is followed by tmux's own status-0 dead-pane row. The current
+  same-session model count exceeds the saved model count. An older state
+  with only a plain count uses zero as the model baseline.
 
 Run `scripts/retire.sh %PANE --resume STATE` once. It re-verifies the published
 handoff and current evidence before publishing the retired receipt. It sends
 no exit input. A genuine native notice is printed only at process exit, so
 one from this pinned pane postdates the request sent to the live process even
-if the older baseline counted only plain notices.
+if the older baseline counted only plain notices. The status-0 dead-pane
+row ties the model proof to the pinned pane root's exit.
 
 Claude can clear the screen at exit and leave just the final notice. If the
-saved count included a quoted block that vanished, the single genuine notice
+saved model count included a quoted block that vanished, the single genuine notice
 can leave the count unchanged. The receipt stays pending. There is no
 supported recovery when the pane has been collected or when tmux retains it
 without the original pane PID. In these cases preserve the published shard,

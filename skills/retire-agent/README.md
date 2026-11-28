@@ -47,3 +47,4 @@ server that keeps `#{pane_pid}` for retained dead panes. tmux 3.6a satisfies
 this requirement. On tmux 3.8, where the dead pane can lose its PID, the
 end-to-end tests fail the gate with a diagnostic. Put the compatible tmux
 binary first on `PATH` before launching the suites' isolated servers.
+The mutation runner treats that diagnostic as invalid instrumentation.
