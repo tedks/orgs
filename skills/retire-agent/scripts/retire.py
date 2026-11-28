@@ -380,7 +380,9 @@ class Retirement:
     def start_exit_pty_hold(self):
         anchor = self.pane_anchor()
         self.verify_live_pane()
-        fd = os.open(anchor['tty'], os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        # Resolve the device in the tmux server's mount namespace.
+        tty = f"/proc/{anchor['server']['pid']}/root" + anchor['tty']
+        fd = os.open(tty, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK | os.O_NOFOLLOW)
         try:
             self.verify_live_pane()  # The open descriptor belongs to the pinned live root.
             holder = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--hold-exit-pty',
