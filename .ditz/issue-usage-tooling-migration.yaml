@@ -36,3 +36,16 @@ log_events:
     messages and PR text checked against the private deny list with only ordinary-word
     hits). Waiting on M1 (the two dotfiles quota-service pull requests). Local preparation
     of the M2a guard and synthetic fixtures has started; nothing from it is pushed.'
+- time: 2026-11-28T17:16:13-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'M2a tooling: draft PR #66 (tools/publication_guard: the guard and a synthetic
+    fixture builder) is council CLEAN at e9af517 for the Anthropic and OpenAI seats
+    after seven rounds (Google seat EMPTY, usage limit). The guard''s stated threat
+    model is accidental publication, used together with the export inventory, the
+    human review of the exact commits and the owner''s sign-off; its README lists
+    what it does not defend against. Not merged. Follow-up nits: match the file URI
+    scheme and authority case-insensitively; lower-case /users/ after -I, ../ or a
+    mount prefix. A private dry run against the current source showed which program
+    files have findings to settle before import; details are in the private audit
+    record.'
