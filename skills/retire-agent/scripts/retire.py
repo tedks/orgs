@@ -37,6 +37,18 @@ _CLAUDE_AUTO_UPDATE = (r'globalVersion: [0-9]+(?:\.[0-9]+)+ · latestVersion: [0
                        r'(?: ✘ Auto-update failed: no write permission to npm prefix · Run claude doctor)?')
 _CLAUDE_TOKENS_ROW = r' +[0-9]+ tokens(?:·| · ' + _CLAUDE_AUTO_UPDATE + r')?'
 _CLAUDE_VERSION_ROW = r' +' + _CLAUDE_AUTO_UPDATE
+# Claude 2.1.332 (measured 2026-11-28 at 381 columns) renders a short reply with
+# no duration row and one right-aligned hint between the marker and the
+# composer rule: "new task? /clear to save 276.8k tokens", ending two columns
+# before the rule's right end. Text alone can be imitated by a padded assistant
+# row, so the hint must also be the renderer's: the row directly above the
+# composer rule (the renderer's own status slot on 2.1.332), with this measured
+# dark-theme SGR sequence. On the same pane, assistant prose rendered in the
+# default colour and inline code in 153; the hint's words are 246. A hint after
+# a duration row, at another offset, in another count format or another theme
+# stays pending until it is measured and added here.
+_CLAUDE_CLEAR_HINT_SGR = (r' +\x1b\[38;5;246mnew task\? \x1b\[38;5;153m/clear\x1b\[38;5;246m to save '
+                          r'\x1b\[38;5;153m[1-9][0-9]*\.[0-9]k tokens\x1b\[39m')
 
 
 class Stop(Exception):
@@ -557,9 +569,38 @@ class Retirement:
                          and re.fullmatch(r'✻ (?:Baked|Brewed|Churned|Cogitated|Cooked|Crunched|Sautéed|Worked) for (?:[0-5]?[0-9]s|[1-9][0-9]*m [0-5]?[0-9]s) · done (?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM)', tail[0].rstrip())
                          and (len(tail) == 1 or any(re.fullmatch(_CLAUDE_TOKENS_ROW, status) for status in claude_statuses)
                               or any(re.fullmatch(_CLAUDE_VERSION_ROW, status) for status in claude_statuses)))
-        if tail and not (codex_footer or claude_footer):
+        # The shared reader ends at the Claude composer prompt, and the
+        # measured Claude frame has its upper rule directly above it, so
+        # rows[-1] is that rule. Only ASCII padding is trimmed: any other
+        # trailing cell is content and keeps completion pending.
+        # The hint is read by index, not from the filtered tail: it must be the
+        # row immediately after the marker and immediately above the rule, as
+        # measured, so no row (not even a rule-only one) can sit between.
+        rule = rows[-1].rstrip(' ')
+        hint = rows[position + 1].rstrip(' ') if position + 1 < len(rows) else ''
+        claude_hint = (agent == 'claude'
+                       and position + 3 == len(rows)
+                       and len(hint) == len(rule) - 2
+                       and self.claude_hint_rendered(rows, position))
+        if tail and not (codex_footer or claude_footer or claude_hint):
             return None
         return marker[1]
+
+    def claude_hint_rendered(self, rows, position):
+        """Confirm the renderer's styling on the raw row after the marker.
+
+        The shared reader's rows are the visible screen's leading lines, so
+        rows[position] is visible line position. Marker, hint and rule must be
+        the same text in this second read, so a frame that changed between the
+        two reads stays pending, as does a failed or timed-out capture.
+        """
+        try:
+            raw = checked(self.tmux + ['capture-pane', '-e', '-p', '-t', self.args.pane], strip=False).split('\n')
+        except (Stop, OSError, subprocess.SubprocessError):
+            return False
+        plain = [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[position:len(rows)]]
+        return (plain == rows[position:]
+                and bool(re.fullmatch(_CLAUDE_CLEAR_HINT_SGR, raw[position + 1])))
 
     def validate_shard(self, path):
         if path.is_symlink() or not path.is_file() or path.resolve() != self.path.parent / (self.state['id'] + '.shard'):
