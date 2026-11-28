@@ -70,3 +70,15 @@ log_events:
     existing marker with no resend; proved in the isolated harness. Still unmeasured,
     so still pending: the hint after a duration row, other widths and count formats.
     This is the live evidence retire-bare-clear-hint-row asked for.'
+- time: 2026-11-28T12:58:43-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Draft PR #68 is council CLEAN at aebd14e for the Anthropic and OpenAI
+    seats after three rounds (Google seat EMPTY, usage limit). The accepted row now
+    needs renderer evidence: it is the row immediately after the marker and immediately
+    above the composer rule, ends two columns before the rule''s right end, and a
+    second styled capture shows the same marker, hint and rule with the renderer''s
+    colours. Not merged: waits for the owners'' go. Follow-up nit: add a test that
+    raises a capture timeout directly. Also worth a separate look: the older duration-row
+    acceptance rests on an observed, unproven invariant that assistant rows never
+    begin at column 0 with the duration glyph.'
