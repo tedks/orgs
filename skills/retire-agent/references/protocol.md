@@ -202,9 +202,27 @@ ordinary stale draft defers exit without sending exit keys; preserve it and
 resume only after deliberate composer reconciliation. Pasted Claude `/exit`
 is ordinary text and cannot retire a harness.
 
-Ruling RETIRE-FIX-R1 requires two independent exit receipts: all pinned original
-PID/start-time/boot-ID actors ended, and a fresh harness-native exit notice
-naming the exact UUID in the immutable verified shard. Codex's notice block is
+Ruling RETIRE-FIX-R1 requires two independent exit receipts. Linux `/proc`
+must show that the pinned agent, recorded native cores, and pane root have
+ended. A missing PID or the same process in a zombie state establishes end.
+A reused PID, changed boot ID, or unreadable start identity leaves exit pending.
+The same retained dead pane must show a fresh harness-native notice naming the
+exact UUID in the immutable verified shard.
+
+The controller records the live root's PID, start time and boot ID with the
+pane ID, socket and tmux server identity. Just before asking for exit, it opens
+the original Linux slave PTY while that live identity matches. A
+transaction-owned helper holds the descriptor across controller invocations
+without reading or writing terminal data. Linux keeps that tty number allocated
+while the helper holds it, so a respawn in the same pane gets a different tty.
+Before and after capture, verification requires the same server and pane, the
+original tty with its holder still alive, and `pane_dead=1`. This works when
+tmux omits `pane_pid` after death. A live wrapper shell leaves exit pending.
+The helper releases the descriptor after publication, a proven send deferral,
+or loss of the state, pane, tty or server. It also releases the descriptor if
+the controller exits before recording an exit attempt.
+
+Codex's notice block is
 `Token usage: ...`, `To continue this session, run:`, then `codex resume UUID`.
 Claude's block is `Resume this session with:` then `claude --resume UUID`
 or `claude --model MODEL --resume UUID`. The explicit-model form uses a
@@ -216,7 +234,10 @@ must end the capture before any tmux dead-pane footer.
 of matching native notice blocks, never terminal text. A submitted command
 receipt or an ambiguous attempt with actual input and a positive Enter count
 is required; typed characters and proven no-input deferrals cannot retire.
-Resume rereads the pinned pane and requires a greater count; cached confirmation is not authority.
+Resume rereads the pinned pane and requires a greater count. A pending
+transaction without the pre-exit pane and tty evidence stays pending, even
+when a dead pane with the expected notice is still available. Preserve the
+verified shard, pending receipt, and private state for controller follow-up.
 Pane text is an unauthenticated channel, and the controller verifies original process end and native session binding separately.
 A failed resume of a locally retired state does not republish or downgrade its
 historical remote receipt. Current failure audits remain unconfirmed until the
