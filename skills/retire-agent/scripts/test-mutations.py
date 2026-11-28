@@ -188,7 +188,9 @@ for label, before, after, test in mutations:
         (directory.parent / 'references').mkdir()
         shutil.copy2(HERE.parent / 'references' / 'offer.md', directory.parent / 'references' / 'offer.md')
         (directory / 'retire.py').write_text(mutated if label not in builder_mutations | helper_mutations else source)
-        (directory / 'build-index.py').write_text(mutated if label in builder_mutations else builder_source)
+        builder = directory / 'build-index.py'
+        builder.write_text(mutated if label in builder_mutations else builder_source)
+        builder.chmod(0o700)
         if label in helper_mutations:
             helper = directory.parents[1] / '_shared/offduty-push.sh'
             helper.write_text(mutated)
@@ -202,8 +204,8 @@ for label, before, after, test in mutations:
         for name in tests:
             result = subprocess.run([sys.executable, str(HERE / 'test-retire.py'), 'Tests.' + name], env=env,
                                     text=True, capture_output=True, timeout=30)
-            if ('INVALID-INSTRUMENTATION:' in result.stderr
-                    or 'retained dead pane has no pane_pid' in result.stderr):
+            if any(diagnostic in result.stderr for diagnostic in (
+                    'INVALID-INSTRUMENTATION:', 'retained dead pane has no pane_pid', 'index builder unavailable')):
                 raise SystemExit('Invalid mutation instrumentation: ' + label + '\n' + result.stderr)
             if result.returncode == 0:
                 passed.append(name)

@@ -1416,7 +1416,7 @@ class Tests(unittest.TestCase):
     def require_retained_dead_pane_identity(self, result):
         dead, pid = self.command(*self.tmux, 'display-message', '-p', '-t', self.pane,
                                  '#{pane_dead}|#{pane_pid}').split('|')
-        self.assertEqual(dead, '1')
+        self.assertEqual(dead, '1', result.stderr)
         if not pid:
             # tmux 3.8 can retain the screen while dropping the pinned PID.
             self.assertEqual(result.returncode, 2, result.stderr)
