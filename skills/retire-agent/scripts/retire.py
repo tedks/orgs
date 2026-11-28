@@ -230,7 +230,7 @@ def pty_descriptor(stat_result):
     return [stat_result.st_dev, stat_result.st_ino, stat_result.st_rdev]
 
 
-def hold_exit_pty(path, fd):
+def hold_exit_pty(path, fd, controller_pid):
     """Inherit one open slave PTY. No reads or writes through that descriptor."""
     deadline = time.monotonic() + 3
     while True:
@@ -247,6 +247,8 @@ def hold_exit_pty(path, fd):
     while True:
         current = state_record(path.read_text())
         if current.get('exit_pty') != hold or current.get('exit', {}).get('status') == 'deferred':
+            return
+        if 'exit' not in current and os.getppid() != controller_pid:
             return
         pane = pane_observation(['tmux', '-S', state['socket']], state['pane'])
         if (pane['pane_tty'] != anchor['tty'] or pane['pid'] != str(anchor['server']['pid'])
@@ -382,7 +384,8 @@ class Retirement:
         try:
             self.verify_live_pane()  # The open descriptor belongs to the pinned live root.
             holder = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--hold-exit-pty',
-                                       str(self.path), str(fd)], pass_fds=(fd,), start_new_session=True,
+                                       str(self.path), str(fd), str(os.getpid())],
+                                      pass_fds=(fd,), start_new_session=True,
                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.state['exit_pty'] = {'process': live_process_pin(holder.pid), 'fd': fd,
                                       'device': pty_descriptor(os.fstat(fd))}
@@ -972,8 +975,8 @@ class Retirement:
             raise Stop('handoff verified; missing trustworthy pre-request exit notice baseline')
         try:
             count, newest_valid = self.exit_notices(session_id, before=baseline['before'])
-            self.exit_pane()  # Recheck continuity across the capture commands.
-            return count > baseline['before'] and newest_valid
+            pane_after = self.exit_pane()  # Recheck continuity across the capture commands.
+            return count > baseline['before'] and newest_valid and pane_after['pane_dead'] == '1'
         except PaneAbsent:
             return False  # Process end without a retained notice is not retirement.
 
@@ -1299,9 +1302,9 @@ def main():
 
 
 if __name__ == '__main__':
-    if len(sys.argv) == 4 and sys.argv[1] == '--hold-exit-pty':
+    if len(sys.argv) == 5 and sys.argv[1] == '--hold-exit-pty':
         try:
-            hold_exit_pty(Path(sys.argv[2]), int(sys.argv[3]))
+            hold_exit_pty(Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]))
         except (Stop, OSError, ValueError, KeyError, subprocess.TimeoutExpired):
             sys.exit(2)
         sys.exit(0)
