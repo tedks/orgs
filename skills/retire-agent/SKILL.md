@@ -205,20 +205,34 @@ For an ordinary retirement, confirm these facts read-only before resuming.
   leaves the receipt pending.
 - The retained dead pane is on the recorded socket and still reports the
   pinned pane PID in its exit metadata. Its final native model notice names
-  the immutable shard's UUID and is followed by tmux's own status-0 dead-pane row. The current
-  same-session model count exceeds the saved model count. An older state
-  with only a plain count uses zero as the model baseline.
+  the immutable shard's UUID and is followed by tmux's own status-0
+  dead-pane row. For a state with a model baseline, the current same-session
+  model count exceeds that saved count.
 
-Run `scripts/retire.sh %PANE --resume STATE` once. It re-verifies the published
-handoff and current evidence before publishing the retired receipt. It sends
-no exit input. A genuine native notice is printed only at process exit, so
-one from this pinned pane postdates the request sent to the live process even
-if the older baseline counted only plain notices. The status-0 dead-pane
-row ties the model proof to the pinned pane root's exit.
+For a state with a model baseline, run `scripts/retire.sh %PANE --resume STATE`
+once. The flag below has no effect on such a state.
+
+A legacy state has no `model` baseline. Before attesting, confirm that the
+launcher created this pane for this lane, the harness was the pinned pane
+root, and the dead-pane metadata reports that pinned PID. Confirm that the
+pane was never reused for another invocation. Its start command must be
+the harness invocation and its scrollback must hold exactly one notice for
+the session. The controller is responsible for establishing that history.
+The code cannot verify that the pane hosted a single invocation.
+
+Once those facts are established, run
+`scripts/retire.sh %PANE --resume STATE --attest-single-harness-pane` once.
+The flag permits a zero legacy model baseline for this resume and records
+the attestation in private state. A future resume still requires the flag
+when relying on legacy model evidence. Without the attestation, the legacy
+model notice leaves the receipt pending.
+
+Both resume forms re-verify the published handoff and current evidence
+before publishing the retired receipt. They send no exit input.
 
 Claude can clear the screen at exit and leave just the final notice. If the
-saved model count included a quoted block that vanished, the single genuine notice
-can leave the count unchanged. The receipt stays pending. There is no
+saved model count included a quoted block that vanished, the single genuine
+notice can leave the count unchanged. The receipt stays pending. There is no
 supported recovery when the pane has been collected or when tmux retains it
 without the original pane PID. In these cases preserve the published shard,
 pending receipt, and private transaction state.

@@ -218,9 +218,12 @@ pane can clip the row at the pane width.
 A custom dead-pane format or a post-exit resize leaves the explicit-model lane
 pending if the captured row differs from tmux's default row at the current width.
 `Shutting down...` is optional. Before requesting exit, save the two counts
-without terminal text. A legacy `before` count is the plain baseline, and
-the legacy model baseline is zero. If the Claude styled capture fails before
-exit input, the baseline is incomplete and the controller withholds input.
+without terminal text. A legacy `before` count is the plain baseline. A
+legacy model notice can use a zero baseline only when the controller supplies
+`--attest-single-harness-pane` on that resume under the recovery procedure.
+The private attestation record is history. If the Claude styled capture
+fails before exit input, the baseline is incomplete and the controller
+withholds input.
 After the request, the plain path can still verify independently and the
 model path requires a successful styled capture. A submitted command
 receipt or an ambiguous attempt with actual input and a positive Enter count
