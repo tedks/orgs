@@ -276,21 +276,29 @@ _CLAUDE_METADATA = {
 # No measured bookkeeping row carries any of these; a row that does is not one.
 _CLAUDE_TURN_FIELDS = ('uuid', 'parentUuid', 'message', 'isSidechain')
 # Rows that clear idle without starting a turn. file-history-snapshot names
-# its prompt's user row by messageId. On 2.1.332 there were two forms. 302
-# were the first snapshot for their prompt (no snapshot.hasUntrackedChanges);
-# they mark an arriving prompt, and that prompt's row was written after the
-# snapshot for most of them and at most 4 rows before it for the rest. 168
+# its prompt's user row by messageId. Measured 2026-11-28 over 41 transcripts
+# with 2.1.332 rows, there were two forms. 313 were the first snapshot for
+# their prompt (no snapshot.hasUntrackedChanges); they mark an arriving prompt:
+# 211 were written before that prompt's row, 83 at most 4 rows after it, and
+# 19 never got one (17 were the last row of a session that then ended). 173
 # were re-saves (snapshot.hasUntrackedChanges, a bool), all written after
 # their prompt had landed, sometimes thousands of rows later. A first snapshot
 # whose prompt row has not been read is pending input: the session is not
-# idle, whatever follows, until that row arrives. 18 first snapshots never got
-# their row (16 were the last row of a session that then ended). They keep the
-# session not idle; the accepted cost is a refused or deferred compaction,
-# never a send over input. A re-save never pends, but still clears idle.
+# idle, whatever follows, until that row arrives. One that never gets its row
+# keeps the session not idle; the accepted cost is a refused or deferred
+# compaction, never a send over input. A re-save never pends, but still
+# clears idle. Only a root prompt row resolves a pending snapshot: a first
+# snapshot whose only matching row is a meta, sidechain or tool-result row
+# stays pending on purpose. No measured snapshot names a session; one that
+# names another session is malformed.
 _CLAUDE_BUSY = ('file-history-snapshot', 'queue-operation', 'progress')
 # Root prompt ids remembered for snapshot matching (max seen per file: 157).
 # A snapshot naming an older prompt stays pending, which fails closed.
 MAX_PROMPT_IDS = 1024
+# Unresolved first snapshots held at once. The measured maximum is 1; past
+# this limit the check reads not idle for the rest of the operation and never
+# evicts an unresolved entry.
+MAX_PENDING_PROMPTS = 16
 # 2.1.332 rows measured only inside turns: validated, then busy. No measured
 # file-history-delta names a session; one that names another session raises.
 # continued-in (the conversation moved to another session) stays unknown, and
@@ -324,7 +332,7 @@ def _native_idle(record, focus_after=None):
                       'parent': None, 'focus_seen': focus_after is None, 'final_assistant': False,
                       'focus_input_seen': False, 'focus_turn_seen': False,
                       'turns_seen': 0, 'user_turns_seen': 0, 'queued_input_seen': False,
-                      'children': [], 'pending_prompts': [], 'prompt_ids': []}
+                      'children': [], 'pending_prompts': [], 'pending_overflow': False, 'prompt_ids': []}
         else:
             start = cursor['offset']
         if info.st_size < start:
@@ -347,8 +355,10 @@ def _native_idle(record, focus_after=None):
     turns_seen = cursor.get('turns_seen', 0)
     user_turns_seen = cursor.get('user_turns_seen', 0)
     queued_input_seen = cursor.get('queued_input_seen', False)
-    pending_prompts = list(cursor.get('pending_prompts', []))
+    pending_prompts = set(cursor.get('pending_prompts', []))
+    pending_overflow = cursor.get('pending_overflow', False)
     prompt_ids = list(cursor.get('prompt_ids', []))
+    prompt_set = set(prompt_ids)
     for line in lines:
         offset = start
         start += len(line)
@@ -478,13 +488,18 @@ def _native_idle(record, focus_after=None):
                         message_id = row.get('messageId')
                         if not isinstance(message_id, str) or not message_id:
                             raise ControlError('idle_metadata_malformed')
+                        if row.get('sessionId', record['session_id']) != record['session_id']:
+                            raise ControlError('idle_metadata_malformed')
                         inner = row.get('snapshot')
                         if (not isinstance(inner, dict) or ('hasUntrackedChanges' in inner and
                                                             not isinstance(inner['hasUntrackedChanges'], bool))):
                             raise ControlError('idle_metadata_malformed')
-                        if ('hasUntrackedChanges' not in inner and message_id not in prompt_ids and
+                        if ('hasUntrackedChanges' not in inner and message_id not in prompt_set and
                                 message_id not in pending_prompts):
-                            pending_prompts.append(message_id)
+                            if len(pending_prompts) >= MAX_PENDING_PROMPTS:
+                                pending_overflow = True
+                            else:
+                                pending_prompts.add(message_id)
                     idle = False
                     continue
                 if row.get('isSidechain') is True:
@@ -513,9 +528,12 @@ def _native_idle(record, focus_after=None):
                     if (kind == 'user' and user_input and row.get('isMeta') is not True and
                             row.get('isCompactSummary') is not True):
                         # This prompt has landed; its snapshot no longer pends.
-                        if identifier in pending_prompts:
-                            pending_prompts.remove(identifier)
-                        prompt_ids = (prompt_ids + [identifier])[-MAX_PROMPT_IDS:]
+                        pending_prompts.discard(identifier)
+                        prompt_ids.append(identifier)
+                        prompt_set.add(identifier)
+                        if len(prompt_ids) > MAX_PROMPT_IDS:
+                            prompt_ids = prompt_ids[-MAX_PROMPT_IDS:]
+                            prompt_set = set(prompt_ids)
                     if (kind == 'user' and user_input and row.get('isMeta') is not True and
                             row.get('isCompactSummary') is not True and offset >= baseline['offset']):
                         exact = content == record.get('focus') or (isinstance(content, list) and len(content) == 1 and isinstance(content[0], dict) and content[0].get('text') == record.get('focus'))
@@ -559,11 +577,12 @@ def _native_idle(record, focus_after=None):
                   focus_input_seen=focus_input_seen, focus_turn_seen=focus_turn_seen,
                   turns_seen=turns_seen, user_turns_seen=user_turns_seen,
                   queued_input_seen=queued_input_seen, children=children,
-                  pending_prompts=pending_prompts, prompt_ids=prompt_ids)
+                  pending_prompts=sorted(pending_prompts), pending_overflow=pending_overflow,
+                  prompt_ids=prompt_ids)
     record['_idle_cursor'] = cursor
     if incomplete:
         return {'state': 'unknown', 'reason': 'idle_transcript_incomplete'}
-    return {'state': 'idle' if idle and not pending_prompts else 'busy_or_unknown', 'source': 'native_root_turn',
+    return {'state': 'idle' if idle and not pending_prompts and not pending_overflow else 'busy_or_unknown', 'source': 'native_root_turn',
             'observed_at': time.time(), 'turn_id': turn, 'offset': start,
             'focus_observed': focus_seen if focus_after is not None else None,
             'turns_seen': turns_seen}

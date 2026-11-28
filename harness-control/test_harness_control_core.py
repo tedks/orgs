@@ -471,6 +471,37 @@ class ControlTests(unittest.TestCase):
         self.assertEqual('idle', result['state'])
         self.assertEqual(1, result['turns_seen'])
 
+    def test_claude_332_pending_prompts_are_bounded_and_fail_closed(self):
+        rest = self.claude_332_rest()
+        snapshot = self.claude_332_busy('arriving_prompt_snapshot')
+        prompt = self.CLAUDE_332['turn'][0]
+        answer, duration = rest[-2], rest[-1]
+        # Written independently of the production constant: the measured
+        # maximum is 1 pending at once; the limit is 16.
+        for count, expected in ((16, 'idle'), (17, 'busy_or_unknown')):
+            with self.subTest(count=count):
+                record = self.claude_332_record()
+                ids = ['fixture-prompt-%d' % index for index in range(count)]
+                self.rows(*copy.deepcopy(rest), *[{**copy.deepcopy(snapshot), 'messageId': uid} for uid in ids])
+                self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+                # Every prompt lands and the last one's turn completes. Past the
+                # limit nothing was evicted to make room, so it stays not idle.
+                self.rows(*[{**copy.deepcopy(prompt), 'uuid': uid, 'parentUuid': None} for uid in ids],
+                          {**copy.deepcopy(answer), 'uuid': 'fixture-last-a', 'parentUuid': ids[-1]},
+                          {**copy.deepcopy(duration), 'uuid': 'fixture-last-d', 'parentUuid': 'fixture-last-a'})
+                result = self.native_idle_result(record)
+                self.assertEqual(expected, result['state'])
+                self.assertEqual([], record['_idle_cursor']['pending_prompts'])
+                self.assertIs(count > 16, record['_idle_cursor']['pending_overflow'])
+
+    def test_claude_332_snapshot_naming_another_session_is_malformed(self):
+        snapshot = self.claude_332_busy('arriving_prompt_snapshot')
+        self.assertNotIn('sessionId', snapshot)
+        self.assert_claude_refused({**snapshot, 'sessionId': 'other'}, 'idle_metadata_malformed')
+        record = self.claude_332_record()
+        self.rows(*self.claude_332_rest(), {**snapshot, 'sessionId': SID})
+        self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+
     def test_claude_332_resave_for_prompt_outside_tail_does_not_pend(self):
         # A re-save (snapshot.hasUntrackedChanges) names a prompt that already
         # landed, here one whose row is outside the read tail. Inside a turn it
@@ -2277,13 +2308,18 @@ def mutations():
         ('claude_in_turn_any_shape', "any(not isinstance(row.get(name), types) or isinstance(row.get(name), bool)\n                            for name, types in _CLAUDE_IN_TURN[kind]) or", 'False or'),
         ('claude_in_turn_codes', "('codes' in row and not isinstance(row['codes'], list)) or", 'False or'),
         ('claude_in_turn_turn_fields', "('codes' in row and not isinstance(row['codes'], list)) or\n                            any(name in row for name in _CLAUDE_TURN_FIELDS)):", "('codes' in row and not isinstance(row['codes'], list))):"),
-        ('claude_snapshot_neutral', "                            pending_prompts.append(message_id)\n                    idle = False", "                            pending_prompts.append(message_id)\n                    if kind != 'file-history-snapshot':\n                        idle = False"),
-        ('claude_pending_prompt_ignored', "'idle' if idle and not pending_prompts else", "'idle' if idle else"),
-        ('claude_pending_prompt_never_matched', "                            pending_prompts.remove(identifier)", "                            pass"),
-        ('claude_prompt_ids_forgotten', "prompt_ids = (prompt_ids + [identifier])[-MAX_PROMPT_IDS:]", 'pass'),
+        ('claude_snapshot_neutral', "                                pending_prompts.add(message_id)\n                    idle = False", "                                pending_prompts.add(message_id)\n                    if kind != 'file-history-snapshot':\n                        idle = False"),
+        ('claude_pending_prompt_ignored', "'idle' if idle and not pending_prompts and not pending_overflow else", "'idle' if idle and not pending_overflow else"),
+        ('claude_pending_overflow_ignored', "'idle' if idle and not pending_prompts and not pending_overflow else", "'idle' if idle and not pending_prompts else"),
+        ('claude_pending_prompt_never_matched', "                        pending_prompts.discard(identifier)", "                        pass"),
+        ('claude_prompt_ids_forgotten', "                        prompt_ids.append(identifier)\n                        prompt_set.add(identifier)", "                        pass"),
+        ('claude_pending_unbounded', "                            if len(pending_prompts) >= MAX_PENDING_PROMPTS:\n                                pending_overflow = True\n                            else:\n                                pending_prompts.add(message_id)", "                            pending_prompts.add(message_id)"),
+        ('claude_pending_evicts', "                                pending_overflow = True\n", "                                pending_prompts.pop()\n                                pending_prompts.add(message_id)\n"),
+        ('claude_pending_limit_off_by_one', 'if len(pending_prompts) >= MAX_PENDING_PROMPTS:', 'if len(pending_prompts) >= MAX_PENDING_PROMPTS - 1:'),
+        ('claude_snapshot_any_session', "                        if row.get('sessionId', record['session_id']) != record['session_id']:\n                            raise ControlError('idle_metadata_malformed')\n                        inner", "                        inner"),
         ('claude_snapshot_message_id_unchecked', "if not isinstance(message_id, str) or not message_id:\n                            raise ControlError('idle_metadata_malformed')", "if False:\n                            raise ControlError('idle_metadata_malformed')"),
-        ('claude_resave_pends', "if ('hasUntrackedChanges' not in inner and message_id not in prompt_ids and", "if (message_id not in prompt_ids and"),
-        ('claude_first_snapshot_never_pends', "if ('hasUntrackedChanges' not in inner and message_id not in prompt_ids and", "if ('hasUntrackedChanges' in inner and message_id not in prompt_ids and"),
+        ('claude_resave_pends', "if ('hasUntrackedChanges' not in inner and message_id not in prompt_set and", "if (message_id not in prompt_set and"),
+        ('claude_first_snapshot_never_pends', "if ('hasUntrackedChanges' not in inner and message_id not in prompt_set and", "if ('hasUntrackedChanges' in inner and message_id not in prompt_set and"),
         ('claude_snapshot_inner_unchecked', "if (not isinstance(inner, dict) or ('hasUntrackedChanges' in inner and\n                                                            not isinstance(inner['hasUntrackedChanges'], bool))):", "if False:"),
         ('claude_table_type_widened', "'cost-state': ('startTime', int),", "'cost-state': ('startTime', (int, float)),"),
         ('claude_unknown_accepted', 'if kind not in _CLAUDE_BUSY:', 'if False:'),
