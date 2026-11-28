@@ -206,7 +206,11 @@ Ruling RETIRE-FIX-R1 requires two independent exit receipts: all pinned original
 PID/start-time/boot-ID actors ended, and a fresh harness-native exit notice
 naming the exact UUID in the immutable verified shard. Codex's notice block is
 `Token usage: ...`, `To continue this session, run:`, then `codex resume UUID`.
-Claude's block is `Resume this session with:` then `claude --resume UUID`.
+Claude's block is `Resume this session with:` then `claude --resume UUID`
+or `claude --model MODEL --resume UUID`. The explicit-model form uses a
+single bare model selector of ASCII letters, digits and hyphens, beginning
+with a letter or digit and distinct from a UUID. It counts after exit only
+when the dim native block ends the capture before any tmux dead-pane footer.
 `Shutting down...` is optional. Before requesting exit, persist only the count
 of matching native notice blocks, never terminal text. A submitted command
 receipt or an ambiguous attempt with actual input and a positive Enter count

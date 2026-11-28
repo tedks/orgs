@@ -190,6 +190,22 @@ still ends `DONE not observed`, the suffix is another unmeasured form. Capture
 the rows from the marker down, sanitize them into a fixture, and fix the
 recognizer. Do not rerun the resume until something has changed.
 
+### An exited Claude pane with an explicit model notice
+
+For an ordinary retirement with a `pending-exit` receipt, verify read-only
+that the installed skill recognizes `claude --model MODEL --resume UUID`, the
+state records an exit submission with a positive Enter count and the
+same-session pre-request count, and all pinned original processes have ended.
+On the recorded socket, check that the retained dead pane still reports the
+pinned pane PID and shows the native notice for the immutable shard's UUID.
+Then run once `scripts/retire.sh %PANE --resume STATE`. It re-verifies the
+published handoff and requires a fresh notice against the saved count before
+publishing the retired receipt. It sends no exit input.
+
+If the dead pane has already been collected, there is no supported recovery
+of the exit receipt. Leave it pending and preserve the published shard and
+receipt.
+
 ## Repair verification
 
 Keep handles for running exec calls until they complete or are deliberately
