@@ -24,9 +24,9 @@ CLIs that dotfiles installs (`scripts/usage`); this skill only calls them.
   token-tripwire cron row is enabled, otherwise whenever something last ran
   `token-usage`. The output reports the store age from
   `token-usage snapshot --no-scan` and warns when the age is unknown or past
-  20 minutes. A stale store means the numbers are old. Rerun with `--fresh`
-  before drawing conclusions. If the installed CLI lacks the snapshot
-  subcommand, update `token-usage` to obtain the age.
+  20 minutes. A stale store means the numbers are old, and lanes may still
+  be running. Rerun with `--fresh` before drawing conclusions. If the installed
+  CLI lacks the snapshot subcommand, update `token-usage` to obtain the age.
 - `--json` emits one JSON object (`sessions`, `totals_project`,
   `totals_model`, `meters`, `incidents`, plus `store_age_minutes` and
   `stale_note`) for further processing.
