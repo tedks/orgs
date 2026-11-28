@@ -30,6 +30,8 @@ seat's account, which the CEO can confirm or correct:
 - The relaying seat also says the CEO expected the role to show some
   initiative within priorities the CEO names. Whether to authorise that,
   and how much, is a separate decision and is open question 8.
+- Not every directive that night claimed to relay the CEO: some were sent
+  on that seat's own judgment. This is set out under the evidence below.
 
 The author is one project's CTO, and spent one night receiving directives
 from another project's CTO acting as central command. That is one seat's
@@ -81,12 +83,15 @@ dispatches, verifies receipts, and goes quiet." It is marked occasional.
 Master control as described differs from that hat in three ways:
 
 1. It is a standing seat, not an occasional one.
-2. It monitors. By the relaying seat's account the CEO asked it to read
-   from the lanes and bring sitreps on what the CEO could steer, and every
-   sitrep that night came from reading panes. An earlier version of this
-   draft excluded reading other seats' panes; that was the author's
-   position and a departure from what the CEO asked for, so it is now open
-   question 9. What this draft still holds: monitoring is for sitreps and
+2. It monitors. By the relaying seat's account the CEO asked it for
+   sitreps drawn from the lanes, on what the CEO could steer, and it
+   produced every sitrep that night by reading panes. That account
+   supports the reporting request and says how the seat met it. It does
+   not establish a standing permission to read panes, or permission to
+   route by what is read. An earlier version of this draft excluded
+   reading other seats' panes outright; that was the author's position and
+   may be stricter than what the relaying seat reports the CEO asked for,
+   so the whole matter is now open question 9. What this draft still holds: monitoring is for sitreps and
    routing, it is not watching lanes turn by turn to direct them, which
    the CTO hat rules out even for CTOs, and the doctrine's rule that
    routine healthy acknowledgements stay silent still applies.
@@ -184,6 +189,10 @@ request that would need new authority (work the receiving CTO could not
 start on its own standing authority), and a reading of a broad policy that
 does not name the action, both go to the CEO as questions. Whether master
 control may also direct on its own initiative is open question 8.
+
+If the CEO adopts option (b) of open question 8, a fourth kind is added;
+its source, verification and disposition rules are given there and would
+join the rules in the next two sections.
 
 A directive names the intent, why it comes now, the envelope as the CEO
 set it, and a checkpoint. It does not name the how. Allocation, staffing,
@@ -322,7 +331,8 @@ and what it blocks. The recommendations are the author's.
      master control selects the CTO. This is a new delegation, since
      seating a CTO changes a roster and spends Frontier quota.
    - (d) Master control may run a bounded lane itself. This gives it lane
-     authority, which the CEO's description excludes.
+     authority, which the relayed description does not give it and which
+     the CTO hat reserves to CTOs.
    In (b) and (c) the CEO's instruction must name who owns the project's
    budget until the CTO is seated. Who performs the seating act follows
    question 5: under the split it is the Interface, on master control's
@@ -494,8 +504,13 @@ and what it blocks. The recommendations are the author's.
    and to sitreps alike: nothing learned from a pane is quoted, summarised
    or inferred into them beyond operational state (working, idle, blocked
    on a prompt) and results already in a committed record, cited by event
-   id or commit and not by their text. Reading never leads to input into
-   another CTO's lane.
-   Recommendation: (a) with that rule, since it is what the CEO is
-   reported to have asked for. The author's first draft said (b). Blocks:
-   how sitreps are produced.
+   id or commit and not by their text, and only where the reader of the
+   record or sitrep is allowed to know that work exists. The rule also
+   covers the seat's own compaction notes and retirement shard: nothing
+   read from a pane survives into them beyond operational state. Reading
+   never leads to input into another CTO's lane. Whether what is read may
+   inform routing, and not only sitreps, is part of the CEO's choice.
+   Recommendation: (a) with that rule, for sitreps and for routing. This
+   is the author's recommendation, not something the CEO is reported to
+   have granted: the relaying seat's account covers sitreps on one night.
+   The author's first draft said (b). Blocks: how sitreps are produced.
