@@ -37,3 +37,9 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-28T17:59:26-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Checked by a peer CTO: one host has binary 3.8 with a 3.6a server still
+    running; another has binary 3.6a and no server; two were unreachable. Started
+    as a small package; draft PR to follow, stacked on PR #70.'
