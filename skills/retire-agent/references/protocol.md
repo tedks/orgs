@@ -50,9 +50,17 @@ suffix row is one right-aligned hint, `new task? /clear to save 276.8k tokens`
 (measured at 381 columns), whose last character sits two columns before the
 right end of the composer rule. A pinned Claude target may render exactly that
 row in place of the duration row: a count with one decimal and `k`, padding on
-the left, nothing after it. A hint with prose, a second hint, a hint after a
-duration row, one at another offset or indented like prose, or another count
-format stays pending until measured. The rows below the composer, such as a
+the left, nothing after it. Text alone is not evidence, because an assistant
+could pad a row to the same shape. The hint must sit at the row directly above
+the composer rule, which on 2.1.332 is the renderer's own status slot. A second
+read-only `capture-pane -e` must also show, at that same row index and with the
+same text through the rule, the renderer's measured dark-theme styling: SGR 246
+for the words and 153 for `/clear` and the count (assistant prose renders in the
+default colour). Only ASCII spaces are trimmed. A hint with prose or any other
+trailing cell (such as a no-break space), a second hint, a hint after a duration
+row, one not directly above the rule, at another offset or indented like prose,
+unstyled or in another theme, another count format, or a frame that changed
+between the two reads stays pending until measured. The rows below the composer, such as a
 custom status line and the permission-mode row with or without a
 background-agent indicator (`← 1 agent`), are outside the response rows and
 never affect disposition; the same rows above the composer keep it pending.
