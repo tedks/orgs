@@ -91,10 +91,12 @@ Master control as described differs from that hat in three ways:
    route by what is read. An earlier version of this draft excluded
    reading other seats' panes outright; that was the author's position and
    may be stricter than what the relaying seat reports the CEO asked for,
-   so the whole matter is now open question 9. What this draft still holds: monitoring is for sitreps and
-   routing, it is not watching lanes turn by turn to direct them, which
-   the CTO hat rules out even for CTOs, and the doctrine's rule that
-   routine healthy acknowledgements stay silent still applies.
+   so the whole matter is now open question 9. What this draft still
+   holds: monitoring is for sitreps and routing (whether pane reads may
+   inform routing is part of question 9); it is not watching lanes turn by
+   turn to direct them, which the CTO hat rules out even for CTOs; and the
+   doctrine's rule that routine healthy acknowledgements stay silent still
+   applies.
 3. It issues directives, where the Interface only carries the CEO's.
 
 Whether master control replaces the Interface or sits beside a narrower
@@ -300,7 +302,8 @@ instructions. Open question 7 decides whether such a record exists.
 
 ## Open questions for the CEO
 
-Questions 1 to 4 are the ones the CEO asked for. Questions 8 and 9 come
+Questions 1 to 4 are the ones the CEO asked for, as relayed to the
+author. Questions 8 and 9 come
 from the relaying seat's corrections. Each lists options, a recommendation
 and what it blocks. The recommendations are the author's.
 
@@ -487,8 +490,7 @@ and what it blocks. The recommendations are the author's.
    the CEO asked for sitreps drawn from the lanes, and that every sitrep
    on the night was made that way. That shows panes are a timely source;
    it does not show they are the only current one.
-   - (a) Yes, routinely and read-only, for sitreps and routing. Most
-     current. Cost: a pane holds unfinished human input and private
+   - (a) Yes, routinely and read-only. Most current. Cost: a pane holds unfinished human input and private
      session content, which the doctrine keeps out of records, and a seat
      that reads panes is one step from steering by them.
    - (b) No. Sitreps come from committed records, quota posture and what
@@ -508,9 +510,13 @@ and what it blocks. The recommendations are the author's.
    record or sitrep is allowed to know that work exists. The rule also
    covers the seat's own compaction notes and retirement shard: nothing
    read from a pane survives into them beyond operational state. Reading
-   never leads to input into another CTO's lane. Whether what is read may
-   inform routing, and not only sitreps, is part of the CEO's choice.
-   Recommendation: (a) with that rule, for sitreps and for routing. This
-   is the author's recommendation, not something the CEO is reported to
-   have granted: the relaying seat's account covers sitreps on one night.
+   never leads to input into another CTO's lane.
+   A second decision is separate from how often panes are read: what the
+   reads may be used for. (i) Sitreps only. (ii) Sitreps and routing, so
+   that what master control sees in a lane may inform which CTO it sends
+   intent or directives to. The CEO can choose routine reads under (a)
+   with use (i).
+   Recommendation: (a) with that rule, and use (ii). This is the author's
+   recommendation, not something the CEO is reported to have granted: the
+   relaying seat's account covers sitreps on one night.
    The author's first draft said (b). Blocks: how sitreps are produced.
