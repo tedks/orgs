@@ -82,3 +82,18 @@ log_events:
   who: Ted Smith
   what: stopped
   comment: ""
+- time: 2026-11-28T07:56:31-00:00
+  who: Ted Smith
+  what: commented
+  comment: '2026-11-28 recurrence, observed by the Orgs CTO: an ordinary tmux-message
+    send to a busy Claude Code lane returned ambiguous / mixed-input-after-paste with
+    enters=1, while a read of the pane showed the exact message in the recipient''s
+    explicit queue (the ''Queued'' row above the composer, with the ''Press up to
+    edit queued messages'' hint and one background-agent indicator in the footer).
+    So the queued-message layout under a working Claude turn is another false mixed-input
+    shape, alongside background-task rows. Same day, a peer CTO reported that bare
+    /compact and many agent-spawn brief deliveries return ambiguous receipt-timeout
+    although they land, each verified by reading the pane; harness and version were
+    not stated (compare spawn-agent-codex-0167-receipt-timeout). Cost: every such
+    send needs a manual pane read before the sender''s result can be trusted. Candidate
+    work, not assigned.'
