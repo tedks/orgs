@@ -6,7 +6,7 @@ type: task
 component: usage
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: unstarted
+status: in_progress
 disposition:
 creation_time: 2026-11-28T08:58:07-00:00
 references: []
@@ -26,3 +26,7 @@ log_events:
     with no scan, drop the import, and treat any failure (old CLI without the subcommand,
     nonzero exit, invalid JSON, unknown schema, null, store named in errors) as age
     unknown, never as fresh. Merge only after the producer lands. Owner: Orgs CTO.'
+- time: 2026-11-28T08:58:09-00:00
+  who: Ted Smith
+  what: started
+  comment: ""
