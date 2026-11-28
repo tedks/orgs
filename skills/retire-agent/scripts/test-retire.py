@@ -3031,9 +3031,9 @@ class Tests(unittest.TestCase):
         observer.tmux = ['sh', '-c', 'cat "$0"', str(screen)]  # Appended capture arguments are ignored.
         observer.args = SimpleNamespace(pane='%1')
         plain = [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[:3]]
-        self.assertTrue(observer.claude_hint_rendered(plain))
+        self.assertTrue(observer.claude_hint_rendered(plain, 1))
         moved = plain[:1] + [plain[1].replace('276.8k', '101.5k')] + plain[2:]
-        self.assertFalse(observer.claude_hint_rendered(moved))
+        self.assertFalse(observer.claude_hint_rendered(moved, 1))
 
     def test_claude_unstyled_clear_hint_is_pending(self):
         self.assert_completion_block_pending('claude-hint-unstyled')
