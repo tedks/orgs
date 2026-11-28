@@ -35,3 +35,9 @@ log_events:
 
     Triage records accountability and next action; it does not itself start an implementation
     lane or change an existing pause.'
+- time: 2026-11-28T12:19:23-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Answered by evidence on 2026-11-28: yes. Claude Code 2.1.332 renders the
+    bare hint row after a short final reply with no auto-update fields; see retire-claude-agent-indicator-footer-20261128
+    and draft PR #68.'
