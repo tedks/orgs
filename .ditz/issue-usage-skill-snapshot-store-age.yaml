@@ -15,3 +15,14 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-28T08:58:08-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'usage.sh finds the store''s age by importing dotfiles'' token_usage Python
+    module and stat-ing its state file: an unpublished surface. The quota-snapshot/1
+    contract (m5 docs/specs/quota-service.md, m5 PR #29; producer dotfiles PR #281,
+    both draft on 2026-11-28) publishes store.age_seconds = seconds since the last
+    completed scan, null when never scanned. Change: read it from the snapshot subcommand
+    with no scan, drop the import, and treat any failure (old CLI without the subcommand,
+    nonzero exit, invalid JSON, unknown schema, null, store named in errors) as age
+    unknown, never as fresh. Merge only after the producer lands. Owner: Orgs CTO.'
