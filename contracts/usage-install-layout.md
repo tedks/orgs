@@ -21,7 +21,7 @@
   - The selector's path depends on the home directory only. No environment
     variable, including `AGENT_SKILLS_ROOT`, changes which copy a proxy
     runs.
-  - Until M5a, a proxy on a host with no selector
+  - A proxy on a host with no selector
     runs the dotfiles copy beside it, with the same arguments, environment,
     output and exit status as running that entry point directly. Pulling
     the dotfiles checkout and running any installer other than the
@@ -34,27 +34,23 @@
     environment, exits 0 with schema `token-usage-paths/1` and the same
     `config`, `config_exists` and `state_dir` as the installed command. If
     any check fails it changes nothing and says which.
-  - Activation holds an exclusive lock, reloads the unit manager and
-    confirms the loaded unit does not restart on status 127, records
-    whether the serve unit was active, stops it if so, replaces the
+  - Activation holds an exclusive lock. Where the serve unit is installed
+    it installs a per-host policy that the unit does not restart on status
+    127 and confirms the unit manager has loaded it; where the unit is not
+    installed it skips this. It never edits the unit file linked from the
+    checkout. It records whether the serve unit was active, stops it if so, replaces the
     selector by one atomic rename, restores the unit's recorded state and
     verifies it. On a failed start or check it stops the unit, confirms the
     new process has ended, renames the previous selector back, restores and
     verifies the unit on the previous copy and exits nonzero. Rerunning after an interruption
     completes or reverses the switch from its record.
-  - Activation toward the dotfiles copy performs no check of the Orgs copy
-    and cannot be blocked by it, until M5a removes that target.
-  - From M5a, a host with no selector, or one naming the dotfiles copy, is
-    an installer error, and installing a host includes activation toward
-    Orgs validated against the Orgs copy alone: entry points executable,
-    program-file digests equal to the pins, `paths` answering with an
-    absolute state directory.
+  - Activation toward the dotfiles copy performs no check of the Orgs copy,
+    cannot be blocked by it, and removes the per-host service policy.
   - Installers obtain the tool's paths from `token-usage paths --json` and
     do not import the modules.
 - **Failure semantics:** a proxy whose selector names a directory or entry
   point that is missing or not executable prints one line to stderr naming
-  the path and the remedy and exits 127. It never runs the other copy. From
-  M5a, a proxy with no selector does the same. The
+  the path and the remedy and exits 127. It never runs the other copy. The
   serve unit does not restart on that status.
 - **Intentionally unspecified:** every other file in the Orgs copy; module
   structure; the selector's exact path and the activation step's command
@@ -76,8 +72,9 @@
   writes before and after; a failed unit start reverses the switch; an
   interruption before and after the rename is resolved by a rerun; two
   concurrent activations serialize; a process started before a switch
-  loads its later modules from the copy it started in; activation refused
-  when the loaded unit lacks the no-restart policy; from M5a, a host with
-  no selector fails the installer and is repaired by activation.
+  loads its later modules from the copy it started in; activation on a
+  host with the unit installs and verifies the no-restart policy and a
+  switch back removes it; activation on a host without the unit succeeds;
+  pulling the cutover change leaves the linked unit file unchanged.
 - **Interpretation register:** the Interpretations Log of
   `docs/specs/usage-tooling-migration.md`.

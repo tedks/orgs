@@ -54,7 +54,8 @@ Goals:
    hostnames, user names, home paths, project or worktree names, pane ids,
    or figures measured on a real host, in any pushed commit.
 4. A host can be switched back to the dotfiles copy by one command, with
-   no store migration in either direction, until M5a closes that way back.
+   no store migration in either direction, for as long as the dotfiles copy
+   exists.
 5. The in-review quota-service work lands where it is being reviewed and is
    imported at its merged head. It is not restarted or rebased onto this
    move.
@@ -106,8 +107,8 @@ Boundaries:
   entries become proxies. Each resolves one per-host symlink, the selector,
   at a fixed path under the home directory that no environment variable
   changes, and runs the entry point in the directory it names. The selector
-  names either the dotfiles copy or the Orgs copy. Until M5a, while a host
-  has no selector, the proxies run the dotfiles copy beside them, so merging and
+  names either the dotfiles copy or the Orgs copy. While a host has no
+  selector, the proxies run the dotfiles copy beside them, so merging and
   pulling the cutover change, and every later installer run, leave the host
   on the code it ran before. Nothing but the activation step creates or
   changes the selector, and no step edits `~/.bin`. A proxy resolves the
@@ -119,9 +120,10 @@ Boundaries:
   entry points are executable; the five program files are byte-identical to
   the dotfiles copy; `paths` run there by path answers with the expected
   schema and the same values as the installed command under the cron row's
-  environment). It reloads the unit manager and confirms the loaded unit
-  carries the no-restart-on-127 policy. It records whether the serve unit
-  was active, stops it if so, renames a new selector into place, starts the
+  environment). Where the serve unit is installed, it installs the
+  no-restart-on-127 policy for that host and confirms the unit manager has
+  loaded it; a host without the unit skips this. It records whether the
+  serve unit was active, stops it if so, renames a new selector into place, starts the
   unit again if it was active, and checks the result. If the start or a
   check fails it stops the unit, confirms the new process has ended, renames
   the previous selector back, restores the unit on the previous copy,
@@ -139,10 +141,9 @@ Boundaries:
 - **Fail closed.** A selector that names a missing directory or entry point
   makes the proxy print one line naming the path and the remedy and exit
   127; it never falls back to the other copy. The serve unit must not
-  restart-loop on that status. That unit edit reaches hosts on pull and
-  takes effect at the next daemon reload. Before a selector exists it
-  changes one thing: a missing interpreter, which also exits 127, stops the
-  unit instead of restart-looping.
+  restart-loop on that status. That policy is installed per host by the
+  activation step and removed by a switch back; the unit file linked from
+  the checkout is not edited, so a pull changes nothing about the service.
 - **`token-usage paths`.** `install-token-tripwire` and
   `install-quota-service` import `token_usage` to learn the state directory.
   A read-only subcommand replaces those imports. It lands in dotfiles before
@@ -150,9 +151,10 @@ Boundaries:
   against the dotfiles copy, and the two copies stay byte-identical. Hosts
   receive it on pull: it adds a subcommand (so help text and the
   invalid-subcommand message list one more name) and changes how two
-  installers look up a directory, keeping the rule they apply today that
-  the state directory must be absolute. Because it changes installed
-  behaviour for this migration, it needs the go.
+  installers look up a directory, each keeping the checks it applies today.
+  Because it changes installed behaviour for this migration, it needs the
+  go. It is also the vehicle for any edit to a program file that the
+  publication audit requires.
 - **Program files are byte-identical; everything else is audited.** The five
   program files are copied unchanged if the publication audit finds nothing
   private in them. If it finds something, the fix lands in dotfiles first and
@@ -161,12 +163,15 @@ Boundaries:
   tests and all other fixtures are rewritten or rebuilt for publication.
 - **Publication audit, a named gate (M2a).** Described under Milestones.
 - **Both copies are frozen, with no exceptions inside the window.** From
-  the import commit until the dotfiles copy is removed, the five program
+  the import commit for as long as the dotfiles copy exists, the five program
   files (`token_usage.py`, `tripwire.py`, `calibrate.py`,
   `quota_service.py`, `quota_contract.py`) do not change in either
-  repository. Each repository carries a test pinning their digests.
-  Activation toward Orgs also compares the two copies on the host and
-  refuses if they differ. If a fix cannot wait, the window is closed first:
+  repository. Orgs carries a test pinning their digests from M2 and
+  dotfiles from M3; between the two, the dotfiles side is held by its
+  owner's review and by the activation comparison. Activation toward Orgs
+  compares the two copies on the host and refuses if they differ. The
+  vendored contract validator is one of the five, so a frontend contract
+  change cannot be re-vendored inside the window either. If a fix cannot wait, the window is closed first:
   every activated host is switched back, the fix lands in dotfiles, and the
   import is repeated from the new commit through the publication audit with
   new pins before any host is activated again. Hosts therefore never run
@@ -226,8 +231,9 @@ None yet.
 ## Milestones
 
 Owners are named. "Go" means the dotfiles owner's and the CEO's explicit
-approval. M1b, M3 activation and M5 need the go. M1 is the dotfiles owner's
-existing review of two pull requests and stays on its own path.
+approval. M1b and each host's M3 activation need the go. M1 is the dotfiles
+owner's existing review of two pull requests and stays on its own path.
+Removal of the dotfiles copy is not authorised by this spec.
 
 - **M0. Spec.** This document and its contracts, CLEAN at a formal council
   round. Owner: Orgs.
@@ -238,8 +244,8 @@ existing review of two pull requests and stays on its own path.
 - **M1b. `paths` lands in dotfiles.** `token-usage paths` as the CLI
   contract defines it, with tests; `install-token-tripwire` and
   `install-quota-service` call it instead of importing. Owner: dotfiles,
-  drafted by Orgs on request; merges with the go. Acceptance: the installers
-  accept and reject exactly the configurations they did before, including
+  drafted by Orgs on request; merges with the go. Acceptance: each installer
+  accepts and rejects exactly the configurations it did before, including
   relative config paths, shown by tests; installer tests pass; `paths`
   reports the `state_dir` the import returned, on the same environment, for
   each config-precedence case; apart from help text and the
@@ -293,10 +299,12 @@ existing review of two pull requests and stays on its own path.
   unrelated working directory. No host changes. Revert is safe only while no
   host is activated.
 - **M3. Cutover.** Owner: dotfiles; Orgs drafts on request. One dotfiles
-  pull request: the three `.bin` entries as proxies, the activation step,
-  the unit edit named under Decisions, the dotfiles digest-pin test, and the
-  layout contract's boundary tests. Merging and pulling it changes no host's
-  copy. Then, per host and only with the go:
+  pull request: the three `.bin` entries as proxies, the activation step
+  with its per-host service policy, the dotfiles digest-pin test, and the
+  layout contract's boundary tests. It edits no file a host has linked other
+  than the three `.bin` entries, whose behaviour with no selector equals the
+  direct run. Merging and pulling it changes no host's copy and nothing
+  about the service. Then, per host and only with the go:
   1. Update the host's Orgs checkout to a revision containing M2.
   2. Run the activation step toward Orgs. It refuses, changing nothing,
      unless its validation passes.
@@ -305,11 +313,13 @@ existing review of two pull requests and stays on its own path.
      `token-usage paths`, `snapshot --no-scan` and `token-tripwire status`
      exit 0; one `token-tripwire tick --dry-run` run by the activation step
      through the installed name under the cron row's environment exits 0,
-     so activation itself adds no production writes; the next scheduled
-     tick is confirmed from the tripwire's own record of a completed tick,
-     in the store `paths` reports, later than the switch, with no new error
-     line in the cron log, and a tick skipped because another was running
-     does not count; where the unit was active, it is active again, its
+     so activation itself adds no production writes; a scheduled tick that
+     started after the switch is confirmed by a `calibration.jsonl` row, in
+     the state directory `paths` reports, whose `ts` is later than the
+     second scheduled time after the switch, with `tripwire.json` replaced
+     after that `ts` and no new error line in the cron log (a skipped tick
+     writes neither file and does not count, and a skip logged after the
+     switch restarts the wait); where the unit was active, it is active again, its
      restart count is unchanged afterwards, its main process runs from the
      selected directory, and it answers a snapshot request with a valid
      object; `get_usage` returns a posture.
@@ -319,46 +329,32 @@ existing review of two pull requests and stays on its own path.
   rerunning the step: before the rename nothing has changed except a stopped
   unit, which the rerun restarts from its record; after the rename the rerun
   finds the selector in place, restores the unit's recorded state and runs
-  the checks.
+  the checks. Reading those two store files is an exception to the rule
+  that consumers never read the store. It is limited to this evidence, is
+  safe because the program files are frozen, and ends with the window.
 - **M4. Documents.** No behaviour. Orgs owner: `skills/usage/SKILL.md`, the
   role checklist's wording, the planning note that says the scripts stay in
   dotfiles. Frontend owner: the "where the code lives" section of its spec.
   dotfiles owner: its agent instructions' pointer to the usage README.
   Acceptance: each names the shipped layout.
-- **M5. Remove the dotfiles copy.** Owner: dotfiles, with the go, in two
-  changes.
-  - **M5a. Close the way back.** Requires: the host inventory lists every
-    host, including ones that were offline; each has M3 evidence and at
-    least one weekly quota window since with no switch back (a minimum the
-    dotfiles owner may extend); the dotfiles commit before M5a is recorded
-    as the recovery revision. The change makes the activation step refuse
-    the dotfiles copy as a target; makes a proxy, and every installer run,
-    fail loudly on a host with no selector or a selector naming the dotfiles
-    copy, without touching the copy; and makes installing a host include
-    activation toward Orgs, validated against the Orgs copy alone (entry
-    points executable, digests equal to the pins, `paths` answering with an
-    absolute state directory). The copy is still present, so a host that
-    fails here is repaired by activating it. Acceptance: every host has
-    pulled M5a and its installer run passed; a host with no selector has
-    been installed through activation with the M3 evidence.
-  - **M5b. Delete.** Requires M5a's acceptance on every host, re-read at
-    that time, and a rehearsal on one host that, starting from the M5b
-    change applied, restores the copy and the previous activation step from
-    the recovery revision and switches that host back with the switch-back
-    evidence. The change removes the program files, their tests, the Bazel
-    exports of them and the dotfiles digest pin, drops the activation
-    step's two-copy comparison, and points the installer tests at a stub
-    `paths` or a pinned Orgs checkout. It does not remove the proxies, the
-    selector, installers, the unit file or anything an enabled host links.
-    From here the freeze ends and the Orgs copy changes under its contracts.
+- **M5. Removing the dotfiles copy is out of scope.** This spec ends with
+  every host able to run either copy and switch between them. The dotfiles
+  copy, the switch back and the no-selector default all stay until an
+  amendment to this spec, councilled on its own with M3's evidence in hand,
+  defines removal. That amendment must settle at least: a fleet check that
+  stays valid through the deletion, including for a host switched back
+  late; how a host with no selector is installed afterwards; a recovery
+  path that restores the proxies', installers' and activation step's old
+  behaviour together and is rehearsed from the removed layout; what the
+  dotfiles installer tests run against; and when the freeze ends.
 
-**The two-copy window (M2 to M5b).** No program file changes; the pins in
-both repositories and the activation step's comparison enforce it. Changes
-to the installers, the unit or the vendored contract's tests in that window
-are checked against both copies before they merge. Closing the window for a
-fix follows the rule under Decisions and is the dotfiles owner's call with
-the go. Commit pairs are recorded privately; the Orgs tracker names only
-Orgs commits.
+**The two-copy window (from M2 until removal).** No program file changes;
+the pins and the activation step's comparison enforce it. Changes to the
+installers, the unit or the vendored contract's tests in that window are
+checked against both copies before they merge. Closing the window for a fix
+follows the rule under Decisions and is the dotfiles owner's call with the
+go. Commit pairs are recorded privately; the Orgs tracker names only Orgs
+commits.
 
 Stop conditions: a consumer-visible difference at any milestone; a guard hit
 or reviewer finding that cannot be fixed in dotfiles; private data found in a
@@ -370,5 +366,6 @@ and the data is treated as disclosed); the go withheld.
 
 1. **Which hosts activate, in what order, and when.** Decides: dotfiles
    owner with the CEO. Blocks: M3 activation only.
-2. **Soak length before M5a.** This spec says one weekly quota window.
-   Decides: dotfiles owner. Blocks: M5a only.
+2. **When to propose removal.** Suggested: after every host has run the
+   Orgs copy for at least one weekly quota window with no switch back.
+   Decides: dotfiles owner with the CEO. Blocks: nothing in this spec.

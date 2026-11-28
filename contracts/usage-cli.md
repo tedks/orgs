@@ -39,7 +39,8 @@ only implementation and this is its description.
     score and percentage are null exactly when its weekly meter is listed
     as expired.
   - `token-usage meters --check --json`: an object keyed by meter id. Each
-    value is an object with `observed` (ISO-8601 string with offset),
+    value is an object with `observed` (ISO-8601 string in UTC, written
+    with `Z`; a consumer accepts `Z` or an offset),
     `used_percent` (number), `window_minutes`, `resets_at` (ISO-8601 string
     or epoch seconds) and `source` as the provider reported them, and
     `account_scope` and `account_epoch` (non-empty string, or null when the
@@ -63,12 +64,13 @@ only implementation and this is its description.
     `${XDG_STATE_HOME:-~/.local/state}/token-usage` unless the config sets
     it. Both are reported exactly as the other subcommands resolve them:
     `config` as given, `state_dir` with `${XDG_STATE_HOME}` substituted and
-    user expansion. The installers require an absolute `state_dir`, as they
-    do today, and place no new requirement on `config`. `paths` reads only
+    user expansion. `install-token-tripwire` requires an absolute
+    `state_dir`, as it does today; `install-quota-service` keeps its
+    comparison note; neither places a new requirement on `config`. `paths` reads only
     the config file and creates nothing.
-- **Behavioral invariants:** from M2 to M5b the two copies' program files
-  are byte-identical and frozen, so every command behaves identically on
-  either and on every host. Reads with
+- **Behavioral invariants:** while both copies exist their program files
+  are byte-identical and frozen, so a command given the same arguments,
+  environment, config and store behaves identically on either. Reads with
   `--no-scan` do not scan. Output carries counts, identifiers, times and, for
   `paths`, filesystem paths; never message content. Python 3.11 or later,
   standard library only.
@@ -78,8 +80,7 @@ only implementation and this is its description.
   parsed exits 1 with the reason on stderr and prints nothing on stdout.
   Exit 127 from an installed name means the selected copy cannot be run:
   the selector names a missing directory or a missing or non-executable
-  entry point, or, from M5a, the host has no
-  selector. A missing `python3` gives the same status.
+  entry point. A missing `python3` gives the same status.
 - **Intentionally unspecified:** the store's layout and formats; module
   names, functions and import paths; log wording; and, for versions after
   the migration completes, text-mode column widths and JSON key order.
