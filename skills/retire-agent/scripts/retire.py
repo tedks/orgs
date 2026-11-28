@@ -171,6 +171,89 @@ def caller_resume_command(harness, session_id, worktree):
     return 'unavailable (unsupported harness)'
 
 
+def boot_id():
+    return Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+
+
+def process_stat(pid):
+    """Only an absent proc entry establishes absence. Other failures propagate."""
+    try:
+        _, separator, tail = Path(f'/proc/{pid}/stat').read_text().rpartition(')')
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    fields = tail.split()
+    if not separator or len(fields) < 20 or not fields[19].isdigit():
+        raise Stop('unreadable process start identity')
+    return fields[19], fields[0]
+
+
+def live_process_pin(pid):
+    identity = process_stat(pid)
+    if identity is None or identity[1] in ('Z', 'X'):
+        raise Stop('live process identity unavailable')
+    return {'pid': pid, 'start': identity[0], 'boot': boot_id()}
+
+
+def process_ended(pin):
+    if pin['boot'] != boot_id():
+        raise Stop('pinned process boot changed')
+    current = process_stat(pin['pid'])
+    if current is None:
+        return True
+    if current[0] != pin['start']:
+        raise Stop('pinned process PID was reused')
+    return current[1] in ('Z', 'X')
+
+
+def require_process_pin(pin):
+    if (not isinstance(pin, dict) or type(pin.get('pid')) is not int or pin['pid'] <= 0
+            or any(not isinstance(pin.get(key), str) or not pin[key] for key in ('start', 'boot'))):
+        raise Stop('missing trustworthy pre-exit process identity')
+    return pin
+
+
+def pane_observation(tmux, pane):
+    keys = ('pane_id', 'pane_pid', 'pane_dead', 'pane_tty', 'pid', 'start_time', 'socket_path')
+    fmt = '\t'.join('#{' + key + '}' for key in keys)
+    rows = checked(tmux + ['list-panes', '-a', '-F', fmt], strip=False)
+    for row in rows.splitlines():
+        values = row.split('\t')
+        if values[0] == pane and len(values) == len(keys):
+            return dict(zip(keys, values))
+    raise PaneAbsent('pane disappeared from pinned server')
+
+
+def pty_descriptor(stat_result):
+    if not stat.S_ISCHR(stat_result.st_mode):
+        raise Stop('pane tty is not a character device')
+    return [stat_result.st_dev, stat_result.st_ino, stat_result.st_rdev]
+
+
+def hold_exit_pty(path, fd):
+    """Inherit one open slave PTY. No reads or writes through that descriptor."""
+    deadline = time.monotonic() + 3
+    while True:
+        state = state_record(path.read_text())
+        hold = state.get('exit_pty', {})
+        if hold.get('process', {}).get('pid') == os.getpid():
+            break
+        if time.monotonic() >= deadline:
+            return
+        time.sleep(.05)
+    anchor = state['pane_anchor']
+    if pty_descriptor(os.fstat(fd)) != hold['device']:
+        return
+    while True:
+        current = state_record(path.read_text())
+        if current.get('exit_pty') != hold or current.get('exit', {}).get('status') == 'deferred':
+            return
+        pane = pane_observation(['tmux', '-S', state['socket']], state['pane'])
+        if (pane['pane_tty'] != anchor['tty'] or pane['pid'] != str(anchor['server']['pid'])
+                or pane['start_time'] != anchor['server_started']):
+            return
+        time.sleep(.5)
+
+
 def proc(pid):
     try:
         text = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
@@ -197,7 +280,7 @@ def proc(pid):
             if entry.endswith('/@openai/codex/bin/codex.js') or entry.endswith('/@anthropic-ai/claude-code/cli.js'):
                 agent = 'codex' if '@openai/codex/' in entry else 'claude'
         return {'pid': int(pid), 'parent': int(text[1]), 'start': text[19],
-                'agent': agent, 'boot': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                'agent': agent, 'boot': boot_id(),
                 'wrapper': Path(executable).name == 'node' and agent in ('codex', 'claude'),
                 'native': '/@openai/codex/' in executable and '/vendor/' in executable}
     except (OSError, ValueError, UnicodeError):
@@ -264,6 +347,68 @@ class Retirement:
             if fields[0] == self.args.pane:
                 return fields
         raise PaneAbsent('pane disappeared from pinned server')
+
+    def pin_live_pane(self):
+        pane = pane_observation(self.tmux, self.args.pane)
+        if (pane['pane_dead'] != '0' or not re.fullmatch(r'/dev/pts/[0-9]+', pane['pane_tty'])
+                or not Path(pane['socket_path']).is_absolute()
+                or any(not re.fullmatch(r'[1-9][0-9]*', pane[key])
+                       for key in ('pane_pid', 'pid', 'start_time'))):
+            raise Stop('live pane root, server or tty identity unavailable')
+        anchor = {'root': live_process_pin(int(pane['pane_pid'])), 'server': live_process_pin(int(pane['pid'])),
+                  'server_started': pane['start_time'], 'tty': pane['pane_tty']}
+        return pane['socket_path'], anchor
+
+    def pane_anchor(self):
+        anchor = self.state.get('pane_anchor')
+        if (not isinstance(anchor, dict) or not re.fullmatch(r'/dev/pts/[0-9]+', str(anchor.get('tty')))
+                or not re.fullmatch(r'[1-9][0-9]*', str(anchor.get('server_started')))):
+            raise Stop('handoff pending trustworthy pre-exit pane identity')
+        require_process_pin(anchor.get('root'))
+        require_process_pin(anchor.get('server'))
+        return anchor
+
+    def verify_live_pane(self):
+        if self.pin_live_pane() != (self.state['socket'], self.pane_anchor()):
+            raise Stop('live pane root or server identity changed')
+
+    def start_exit_pty_hold(self):
+        anchor = self.pane_anchor()
+        self.verify_live_pane()
+        fd = os.open(anchor['tty'], os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        try:
+            self.verify_live_pane()  # The open descriptor belongs to the pinned live root.
+            holder = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--hold-exit-pty',
+                                       str(self.path), str(fd)], pass_fds=(fd,), start_new_session=True,
+                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.state['exit_pty'] = {'process': live_process_pin(holder.pid), 'fd': fd,
+                                      'device': pty_descriptor(os.fstat(fd))}
+            self.persist()
+        finally:
+            os.close(fd)
+
+    def verify_exit_pty_hold(self):
+        hold = self.state.get('exit_pty')
+        if not isinstance(hold, dict) or type(hold.get('fd')) is not int or hold['fd'] < 3:
+            raise Stop('handoff pending trustworthy pre-exit tty hold')
+        holder = require_process_pin(hold.get('process'))
+        if process_ended(holder):
+            raise Stop('pre-exit tty hold ended')
+        descriptor = f"/proc/{holder['pid']}/fd/{hold['fd']}"
+        if pty_descriptor(os.stat(descriptor)) != hold.get('device') or process_ended(holder):
+            raise Stop('pre-exit tty hold changed')
+
+    def exit_pane(self):
+        self.verify_exit_pty_hold()
+        anchor = self.pane_anchor()
+        pane = pane_observation(self.tmux, self.args.pane)
+        if (pane['socket_path'] != self.state['socket'] or pane['pid'] != str(anchor['server']['pid'])
+                or pane['start_time'] != anchor['server_started'] or process_ended(anchor['server'])):
+            raise Stop('pinned tmux server identity changed')
+        if pane['pane_tty'] != anchor['tty']:
+            raise Stop('pane root was replaced')
+        self.verify_exit_pty_hold()
+        return pane
 
     def transport_env(self):
         environment = dict(os.environ, SPAWN_TMUX_SOCKET=self.state['socket'])
@@ -382,6 +527,8 @@ class Retirement:
             self.verify_native_session(preserved.get('session_id', 'unknown'))
             if self.state.get('native_session_id') and preserved.get('session_id') != self.state['native_session_id']:
                 raise Stop('handoff verified; shard differs from offered native session ID')
+            self.verify_live_pane()
+            self.verify_exit_pty_hold()
         payload_path = self.path.parent / (self.state['id'] + '-' + phase + '.txt')
         payload_path.write_text(payload)
         payload_path.chmod(0o600)
@@ -752,22 +899,19 @@ class Retirement:
 
     def ended(self):
         original = self.state['identity']['process']
-        current = proc(original['pid'])
-        if current and current['start'] == original['start'] and current['boot'] == original['boot']:
+        if not process_ended(original):
             return False
         for core in original.get('cores', []):
-            remaining = proc(core['pid'])
-            if remaining and remaining['start'] == core['start'] and remaining['boot'] == core['boot']:
+            if not process_ended(core):
                 return False
+        if 'exit' not in self.state:
+            return True  # Prevent input after an independent exit.
+        if not process_ended(self.pane_anchor()['root']):
+            return False
         try:
-            fields = self.pane()
+            return self.exit_pane()['pane_dead'] == '1'
         except PaneAbsent:
-            return True  # original process was independently verified ended
-        if fields[1] != self.state['identity']['pane_pid']:
-            raise Stop('pane root identity changed; successor spawn withheld')
-        if self.actors(fields[1]):
-            raise Stop('replacement actor found; successor spawn withheld')
-        return True
+            return False  # An absent pane cannot supply the exit notice.
 
     def exit_notice_count(self, session_id, after_exit=False):
         # Raw pane bytes stay in memory. Only an exact native resume command
@@ -778,9 +922,6 @@ class Retirement:
         command = {'codex': 'codex resume ', 'claude': 'claude --resume '}.get(agent)
         if command is None:
             raise Stop('handoff verified; native exit notice unsupported')
-        fields = self.pane()
-        if fields[1] != self.state['identity']['pane_pid']:
-            raise Stop('pane root identity changed; exit notice withheld')
         frame = checked(self.tmux + ['capture-pane', '-p', '-J', '-S', '-', '-t', self.args.pane], strip=False)
         prefix = (r'^Token usage: [^\n]+\nTo continue this session, run:[ \t]*\n' if agent == 'codex'
                   else r'^Resume this session with:[ \t]*\n')
@@ -808,7 +949,9 @@ class Retirement:
                 or type(baseline.get('before')) is not int or baseline['before'] < 0):
             raise Stop('handoff verified; missing trustworthy pre-request exit notice baseline')
         try:
-            return self.exit_notice_count(session_id, after_exit=True) > baseline['before']
+            count = self.exit_notice_count(session_id, after_exit=True)
+            self.exit_pane()  # Recheck continuity across both capture commands.
+            return count > baseline['before']
         except PaneAbsent:
             return False  # Process end without a retained notice is not retirement.
 
@@ -849,8 +992,12 @@ class Retirement:
             if self.args.caller_shard:
                 raise Stop('caller shard requires deliberate --resume')
             with locked(self.common / 'retirement.lock'):
+                socket, anchor = self.pin_live_pane()
+                self.tmux = ['tmux', '-S', socket]
                 identity = self.identity()
-                socket = checked(self.tmux + ['display-message', '-p', '#{socket_path}'])
+                if (identity['pane_pid'] != str(anchor['root']['pid'])
+                        or self.pin_live_pane() != (socket, anchor)):
+                    raise Stop('live pane root or server identity changed')
                 # The private directory also holds foreign publication receipts.
                 # Only generated event filenames belong to this state protocol.
                 history = [(path, state_record(path.read_text())) for path in directory.glob('*.json')
@@ -863,8 +1010,8 @@ class Retirement:
                         raise Stop('existing attempt requires --resume ' + str(existing))
                 event = uuid.uuid4().hex
                 self.path = directory / (event + '.json')
-                self.state = {'id': event, 'pane': self.args.pane, 'identity': identity, 'socket': socket, 'mode': self.args.mode, 'status': 'requesting'}
-                self.tmux = ['tmux', '-S', socket]
+                self.state = {'id': event, 'pane': self.args.pane, 'identity': identity, 'socket': socket,
+                              'pane_anchor': anchor, 'mode': self.args.mode, 'status': 'requesting'}
                 self.persist()
         self.event_lock = (directory / (self.state['id'] + '.lock')).open('a')
         try:
@@ -1004,8 +1151,10 @@ class Retirement:
                     raise Stop('handoff verified; native final marker no longer current')
             if self.state.get('native_session_id') and session_id != self.state['native_session_id']:
                 raise Stop('handoff verified; shard differs from offered native session ID')
+            self.start_exit_pty_hold()
             self.state['exit_notice'] = {'session_id': session_id, 'before': self.exit_notice_count(session_id)}
-            self.persist()  # Save only the count before any exit input, for safe resume.
+            self.verify_live_pane()
+            self.persist()  # Save the count before any exit input, for safe resume.
             try:
                 self.send('exit', '/exit' if self.state['identity']['process']['agent'] != 'agy' else '/quit')
             except Stop:
@@ -1029,6 +1178,8 @@ class Retirement:
         record['verified_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         save(receipt, record)
         self.publish([self.state['handoff_receipt']], index=True)
+        self.state.pop('exit_pty', None)  # The helper releases its PTY after publication.
+        self.persist()
         self.audit('original-exit-confirmed', exit_confirmed=True, shard_path=self.state['shard'])
         if self.args.handoff:
             if self.state.get('spawn'):
@@ -1125,4 +1276,10 @@ def main():
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 4 and sys.argv[1] == '--hold-exit-pty':
+        try:
+            hold_exit_pty(Path(sys.argv[2]), int(sys.argv[3]))
+        except (Stop, OSError, ValueError, KeyError, subprocess.TimeoutExpired):
+            sys.exit(2)
+        sys.exit(0)
     sys.exit(main())
