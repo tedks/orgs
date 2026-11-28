@@ -167,6 +167,29 @@ them into public issues or PRs. Screens are heuristic: this cannot atomically
 exclude human typing, audit the truth of recovery prose, or independently
 prove a resource owner's release claim.
 
+## Recover a transaction stuck on an unrecognized footer
+
+A transaction whose agent wrote its shard and answered with the exact marker,
+but whose suffix the recognizer did not then know (for example the Claude
+2.1.332 `/clear` hint), stays in `requesting` with a null disposition. Once
+the installed retire-agent recognizes that suffix, the plain resume recovers
+it: it rechecks the preserved offer bytes, observes the marker, validates the
+agent shard, publishes shard and receipt, verifies them on a fresh fetch, and
+sends exit once. It never resends the offer.
+
+Verify first, read-only: the installed skill contains the recognizer fix; the
+pane is the one recorded in the state; a capture from the marker down shows the
+exact `RETIRE-DONE-<event>` as the final assistant block, followed only by a
+recognized suffix row; and the state has no `handoff_receipt` while
+`<event>.shard` sits beside it. Then run once:
+`scripts/retire.sh %PANE --resume STATE`.
+
+Forbidden: `--retry-deferred offer`, `--caller-shard` (an agent shard
+exists), hand-editing state or the shard, and pasting into the pane. If it
+still ends `DONE not observed`, the suffix is another unmeasured form. Capture
+the rows from the marker down, sanitize them into a fixture, and fix the
+recognizer. Do not rerun the resume until something has changed.
+
 ## Repair verification
 
 Keep handles for running exec calls until they complete or are deliberately

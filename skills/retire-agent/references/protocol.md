@@ -44,7 +44,19 @@ local renderer verifies the glyph and verb pool Baked, Brewed, Churned,
 Cogitated, Cooked, Crunched, Sautéed, Worked, and seconds/minutes-plus-seconds
 format. Only the measured default 12-hour AM/PM done time and the measured
 status formats are accepted; unknown verbs, other time layouts, partial status, extra
-prose or later assistant blocks remain pending. This consumer disposition
+prose or later assistant blocks remain pending.
+Claude 2.1.332 renders a short final reply with no duration row. Its only
+suffix row is one right-aligned hint, `new task? /clear to save 276.8k tokens`
+(measured at 381 columns), whose last character sits two columns before the
+right end of the composer rule. A pinned Claude target may render exactly that
+row in place of the duration row: a count with one decimal and `k`, padding on
+the left, nothing after it. A hint with prose, a second hint, a hint after a
+duration row, one at another offset or indented like prose, or another count
+format stays pending until measured. The rows below the composer, such as a
+custom status line and the permission-mode row with or without a
+background-agent indicator (`← 1 agent`), are outside the response rows and
+never affect disposition; the same rows above the composer keep it pending.
+This consumer disposition
 rule uses the public shared response-row API; it does not fork its normalizer.
 The observed terminal
 must render an assistant `●` or `•` row marker. Bare wrapped user text and
