@@ -1,0 +1,17 @@
+id: usage-skill-snapshot-store-age
+title: 'usage skill: read store age from token-usage snapshot instead of importing
+  the token_usage module'
+desc: ""
+type: task
+component: usage
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-28T08:58:07-00:00
+references: []
+log_events:
+- time: 2026-11-28T08:58:07-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
