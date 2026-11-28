@@ -1,0 +1,14 @@
+package(default_visibility = ["//visibility:public"])
+
+py_test(
+    name = "publication_guard_test",
+    srcs = ["build_fixtures.py", "guard.py", "test_publication_guard.py"],
+    main = "test_publication_guard.py",
+)
+
+py_test(
+    name = "publication_guard_mutation_test",
+    srcs = ["build_fixtures.py", "guard.py", "test_publication_guard.py"],
+    args = ["--mutation-check"],
+    main = "test_publication_guard.py",
+)
