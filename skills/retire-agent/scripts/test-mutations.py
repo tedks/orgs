@@ -57,7 +57,13 @@ mutations = [
     ('Codex footer single row', 'and len(tail) == 1', 'and True', 'test_codex_ui_footer_never_hides_additional_prose'),
     ('Codex footer full row', 'and codex_footer_row.fullmatch(tail[0].rstrip())', 'and codex_footer_row.search(tail[0].rstrip())', 'test_codex_ui_footer_same_row_prose_is_pending'),
     ('exit requires attempted input', "or (attempt.get('status') == 'ambiguous' and attempt.get('input_attempted') is True)", "or (attempt.get('status') == 'deferred')", 'test_deferred_positive_enter_is_not_exit_request'),
-    ('fresh exit notice baseline', "> baseline['before']", ">= baseline['before']", 'test_exit_notice_requires_native_banner_and_fresh_requested_input'),
+    ('fresh exit notice count must increase',
+     "fresh = counts['plain'] > plain_before or (model_footer and counts['model'] > model_before)",
+     "fresh = counts['plain'] >= plain_before or (model_footer and counts['model'] >= model_before)",
+     ('test_exit_notice_requires_native_banner_and_fresh_requested_input',
+      'test_claude_model_exit_notice_stale_count_is_pending',
+      'test_claude_model_exit_cleared_quote_can_mask_real_notice')),
+    ('separate exit notice baselines must both be valid', 'if any(type(count) is not int or count < 0 for count in (plain_before, model_before)):', 'if False:', 'test_exit_resume_malformed_baseline_is_preserved'),
     ('native exit notice banner', r"prefix + r'[ \t]*'", r"r'[ \t]*'", 'test_exit_notice_requires_native_banner_and_fresh_requested_input'),
     ('retained dead pane accepted', "return self.exit_pane()['pane_dead'] == '1'", "return self.exit_pane()['pane_dead'] == '0'", 'test_codex_retires_dead_pane_and_path_only_commit'),
     ('missing dead pane PID accepted', "        return pane\n\n    def transport_env", "        if pane['pane_pid'] != self.state['identity']['pane_pid']:\n            raise Stop('pane root identity changed')\n        return pane\n\n    def transport_env", 'test_claude_model_exit_notice_retires_dead_pane'),
@@ -73,13 +79,13 @@ mutations = [
     ('missing process start identity', "def process_ended(pin):\n    require_process_pin(pin)", "def process_ended(pin):", 'test_empty_process_start_cannot_prove_exit'),
     ('Claude explicit model notice accepted', "r'--model (?!'", "r'--unused-option (?!'", 'test_claude_model_exit_notice_stale_count_is_pending'),
     ('Claude versioned model notice accepted', r"+ _CLAUDE_MODEL_OPTION + r'--resume '", r"+ r'--model opus --resume '", 'test_claude_versioned_model_exit_notice_verifies'),
-    ('Claude model notice harness attribution', "if agent == 'codex':\n            return count, True", "if False:\n            return count, True", 'test_codex_cannot_use_claude_model_exit_notice'),
+    ('Claude model notice harness attribution', "if agent == 'codex':\n            return counts, False", "if False:\n            return counts, False", 'test_codex_cannot_use_claude_model_exit_notice'),
     ('Claude model notice same session', r"r'(?i:' + re.escape(session_id) + r')[ \t]*\n'", r"_SESSION_UUID + r'[ \t]*\n'", 'test_claude_model_exit_notice_wrong_session_is_pending'),
     ('Claude model notice header styling', r"r'^\x1b\[2mResume this session with:", r"r'^(?:\x1b\[2m)?Resume this session with:", 'test_claude_model_exit_notice_quoted_text_is_pending'),
-    ('Claude model notice at terminal tail', 'return count, bool(newest_is_plain or re.fullmatch(_CLAUDE_EXIT_TAIL, tail))', 'return count, True', 'test_claude_model_exit_notice_before_more_output_is_pending'),
-    ('Claude model notice stale count', "> baseline['before']", ">= baseline['before']", 'test_claude_model_exit_notice_stale_count_is_pending'),
+    ('Claude model notice at terminal tail', "return counts, bool(re.fullmatch(tail, styled[models[-1].end():]))", "return counts, True", 'test_claude_model_exit_notice_before_more_output_is_pending'),
     ('Claude model notice complete UUID', r"r'(?i:' + re.escape(session_id) + r')[ \t]*\n'", r"r'(?i:' + re.escape(session_id) + r'?)[ \t]*\n'", 'test_claude_model_exit_notice_partial_session_is_pending'),
-    ('Claude model notice line end', r"r'(?i:' + re.escape(session_id) + r')[ \t]*\n'", r"r'(?i:' + re.escape(session_id) + r')[^\n]*\n'", 'test_claude_model_exit_notice_trailing_text_is_pending'),
+    ('Claude model notice line end', r"r'(?i:' + re.escape(session_id) + r')[ \t]*\n'", r"r'(?i:' + re.escape(session_id) + r')[^\n]*\n'",
+     ('test_claude_model_exit_notice_trailing_text_is_pending', 'test_wrapped_claude_model_exit_notice_trailing_text_stays_pending')),
     ('Claude model notice header adjacency', r"_CLAUDE_EXIT_HEADER = r'^\x1b\[2mResume this session with:[ \t]*\n'", r"_CLAUDE_EXIT_HEADER = r'^\x1b\[2mResume this session with:[ \t]*\n(?:[ \t]*\n)*'", 'test_claude_model_exit_notice_requires_adjacent_header'),
     ('Claude model notice option name', "r'--model (?!'", "r'--[a-z]+ (?!'", 'test_claude_model_exit_notice_unknown_option_is_pending'),
     ('Claude model notice single option', "r'claude ' + _CLAUDE_MODEL_OPTION", "r'claude (?:' + _CLAUDE_MODEL_OPTION + r')+'", 'test_claude_model_exit_notice_repeated_option_is_pending'),
@@ -87,17 +93,24 @@ mutations = [
     ('Claude model notice unquoted token', "[A-Za-z0-9][A-Za-z0-9-]* ", """[A-Za-z0-9'"-]+ """.replace("'", r"\'"), 'test_claude_model_exit_notice_quoted_selector_is_pending'),
     ('Claude model notice no resume in selector', "[A-Za-z0-9][A-Za-z0-9-]* ", "(?:--resume|[A-Za-z0-9][A-Za-z0-9-]*(?: --resume [A-Fa-f0-9-]+)?) ", 'test_claude_model_exit_notice_resume_in_selector_is_pending'),
     ('Claude model notice no UUID selector', "r'--model (?!' + _SESSION_UUID + r' )", "r'--model ", 'test_claude_model_exit_notice_uuid_in_selector_is_pending'),
-    ('legacy model notice can complete retirement', "return count > baseline['before'] and newest_valid", "return count > baseline['before'] > 0 and newest_valid", 'test_stuck_claude_model_exit_recovers_with_plain_resume'),
+    ('legacy model notice can complete retirement', "plain_before, model_before = baseline.get('before'), 0", "plain_before, model_before = baseline.get('before'), 1", 'test_stuck_claude_model_exit_recovers_with_plain_resume'),
     ('legacy model notice requires pinned pane root',
      "if str(root['pid']) != self.state['identity']['pane_pid']:", 'if False:',
      'test_legacy_claude_model_exit_refuses_different_pane_root'),
-    ('Claude model baseline counts nonfinal notices', "count = len(plain_pattern.findall(unstyled)) + len(models)", "count = len(plain_pattern.findall(unstyled)) + (len(models) if before is not None else 0)", 'test_claude_model_exit_cleared_quote_can_mask_real_notice'),
-    ('Claude model notice cleared history cannot reuse baseline', "> baseline['before']", ">= baseline['before']", 'test_claude_model_exit_cleared_quote_can_mask_real_notice'),
-    ('Claude notice ordering after older model', "bool(newest_is_plain or re.fullmatch(_CLAUDE_EXIT_TAIL, tail))", "bool(re.fullmatch(_CLAUDE_EXIT_TAIL, tail))", 'test_claude_exit_notice_plain_after_older_model_is_fresh'),
-    ('Claude plain count checks later model candidate', "and not re.compile(prefix + model_command, re.MULTILINE).search(frame, plain[-1].end())", "and True", 'test_claude_exit_notice_newest_model_requires_footer_even_after_plain'),
-    ('Claude fresh plain bypasses styled capture', "if (before is not None and count > before", "if (False and count > before", 'test_claude_exit_notice_fresh_plain_needs_no_styled_capture'),
-    ('Claude styled capture failure remains pending', "return count, True  # No explicit-model matches without styling evidence.", "raise", 'test_claude_exit_notice_styled_capture_failure_leaves_model_pending'),
-    ('Claude joined wrapped model notice', "['capture-pane', '-e', '-p', '-J', '-S', '-'", "['capture-pane', '-e', '-p', '-S', '-'", 'test_claude_model_exit_notice_stale_count_is_pending'),
+    ('Claude model baseline counts nonfinal notices', "counts['model'] = len(models)", "counts['model'] = len(models) if before is not None else 0", 'test_claude_model_exit_cleared_quote_can_mask_real_notice'),
+    ('Claude fresh plain independent of older model', "fresh = counts['plain'] > plain_before or (model_footer and counts['model'] > model_before)", "fresh = model_footer and counts['model'] > model_before", 'test_claude_exit_notice_plain_after_older_model_is_fresh'),
+    ('Claude fresh model independent of older plain', "or (model_footer and counts['model'] > model_before)", "or (model_footer and counts['model'] > model_before and counts['plain'] > plain_before)", 'test_claude_exit_notice_model_after_older_plain_is_fresh'),
+    ('Claude separates model and plain count increases', "fresh = counts['plain'] > plain_before or (model_footer and counts['model'] > model_before)", "fresh = counts['plain'] + counts['model'] > plain_before + model_before and (model_footer or counts['plain'] > 0)", 'test_claude_exit_notice_dim_quote_before_stale_plain_stays_pending'),
+    ('Claude plain count only reads unstyled capture', "counts['model'] = len(models)", "counts['model'] = len(models)\n        counts['plain'] = len(plain_pattern.findall(re.sub(r'\\x1b\\[[0-9;]*m', '', styled)))", 'test_claude_exit_notice_styled_capture_cannot_add_plain_matches'),
+    ('Claude fresh plain bypasses styled capture', "if before is not None and counts['plain'] > before:", "if False:", 'test_claude_exit_notice_fresh_plain_needs_no_styled_capture'),
+    ('Claude styled capture failure remains pending', "from error\n            return counts, False", "from error\n            return {'plain': counts['plain'], 'model': 1}, True", 'test_claude_exit_notice_styled_capture_failure_leaves_model_pending'),
+    ('Claude requires styled baseline before sending exit', "if before is None:\n                raise Stop('handoff verified; unable to capture Claude model exit notice baseline')", "if False:\n                raise Stop('handoff verified; unable to capture Claude model exit notice baseline')", 'test_claude_styled_baseline_capture_failure_withholds_exit'),
+    ('Claude model notice requires matching dead row', "return counts, bool(re.fullmatch(tail, styled[models[-1].end():]))", "return counts, not styled[models[-1].end():].strip() or bool(re.fullmatch(tail, styled[models[-1].end():]))", 'test_legacy_claude_model_exit_notice_requires_dead_row'),
+    ('Claude model notice requires zero dead status', "dead[:2] != ['1', '0']", "dead[0] != '1'", 'test_claude_model_exit_notice_requires_zero_dead_status'),
+    ('Claude model notice requires actual pane death', "dead[:2] != ['1', '0']", "dead[1] != '0'", 'test_legacy_claude_model_exit_notice_requires_dead_pane'),
+    ('Claude model notice requires complete tmux metadata', "len(dead) != 4 or dead[:2] != ['1', '0'] or not dead[2].isdigit() or not dead[3]", "dead[:2] != ['1', '0']", 'test_claude_model_exit_requires_complete_tmux_metadata'),
+    ('Claude model notice requires visible dead status', "if width < len(_TMUX_DEAD_PANE_PREFIX):", "if False:", 'test_claude_model_exit_requires_visible_dead_status'),
+    ('Claude joined wrapped model notice', "['capture-pane', '-e', '-p', '-J', '-S', '-'", "['capture-pane', '-e', '-p', '-S', '-'", 'test_wrapped_claude_model_exit_notice_retires_dead_pane'),
     ('exit request positive Enter', "if not requested or type(attempt.get('enters')) is not int or attempt['enters'] < 1:", "if not requested or type(attempt.get('enters')) is not int:", 'test_exit_notice_requires_native_banner_and_fresh_requested_input'),
     ('exit original process pair', 'self.ended() and self.fresh_exit_notice(session_id)', 'self.fresh_exit_notice(session_id)', 'test_wrapper_exit_waits_for_lingering_core'),
     ('Codex footer UI padding', 'codex_footer_row.fullmatch(tail[0].rstrip())', 'codex_footer_row.fullmatch(tail[0])', 'test_codex_ui_footer_trailing_padding_is_allowed'),
@@ -186,7 +199,9 @@ for label, before, after, test in mutations:
         (directory.parent / 'references').mkdir()
         shutil.copy2(HERE.parent / 'references' / 'offer.md', directory.parent / 'references' / 'offer.md')
         (directory / 'retire.py').write_text(mutated if label not in builder_mutations | helper_mutations else source)
-        (directory / 'build-index.py').write_text(mutated if label in builder_mutations else builder_source)
+        builder = directory / 'build-index.py'
+        builder.write_text(mutated if label in builder_mutations else builder_source)
+        builder.chmod(0o700)
         if label in helper_mutations:
             helper = directory.parents[1] / '_shared/offduty-push.sh'
             helper.write_text(mutated)
@@ -195,16 +210,23 @@ for label, before, after, test in mutations:
         entry.write_bytes((HERE / 'retire.sh').read_bytes())
         entry.chmod(0o700)
         env = dict(os.environ, RETIRE_TEST_SCRIPT=str(entry))
-        result = subprocess.run([sys.executable, str(HERE / 'test-retire.py'), 'Tests.' + test], env=env,
-                                text=True, capture_output=True, timeout=30)
-        if result.returncode == 0:
+        tests = (test,) if isinstance(test, str) else test
+        passed = []
+        for name in tests:
+            result = subprocess.run([sys.executable, str(HERE / 'test-retire.py'), 'Tests.' + name], env=env,
+                                    text=True, capture_output=True, timeout=30)
+            if any(diagnostic in result.stderr for diagnostic in (
+                    'INVALID-INSTRUMENTATION:', 'retained dead pane has no pane_pid', 'index builder unavailable')):
+                raise SystemExit('Invalid mutation instrumentation: ' + label + '\n' + result.stderr)
+            if result.returncode == 0:
+                passed.append(name)
+            elif 'FAILED' not in result.stderr:
+                raise SystemExit('Invalid mutation test failure: ' + label + '\n' + result.stderr)
+        if passed:
             survivors.append(label)
-            print('SURVIVED: ' + label, flush=True)
-            continue
-        if 'INVALID-INSTRUMENTATION:' in result.stderr:
-            raise SystemExit('Invalid mutation instrumentation: ' + label + '\n' + result.stderr)
-        if 'FAILED' not in result.stderr:
-            raise SystemExit('Invalid mutation test failure: ' + label + '\n' + result.stderr)
-        print('KILLED: ' + label, flush=True)
+            print('SURVIVED: ' + label + ' (' + ', '.join(passed) + ')', flush=True)
+        else:
+            coverage = f' ({len(tests)} tests)' if len(tests) > 1 else ''
+            print('KILLED: ' + label + coverage, flush=True)
 if survivors:
     raise SystemExit('Surviving mutations: ' + ', '.join(survivors))

@@ -279,7 +279,12 @@ def main():
             assert type(state['exit'].get('enters')) is int and state['exit']['enters'] >= 1, 'no actual submitted exit request'
             assert state['exit']['status'] == 'delivered' or state['exit'].get('input_attempted') is True
             notices = re.findall(pattern, screen, re.MULTILINE)
-            assert len(notices) > baseline['before'], f'fresh same-session {harness} native notice missing'
+            plain = [notice for notice in notices if not notice.startswith('claude --model ')]
+            models = [notice for notice in notices if notice.startswith('claude --model ')]
+            fresh = models if len(models) > baseline['model'] else []
+            if len(plain) > baseline['plain']:
+                fresh = plain
+            assert fresh, f'fresh same-session {harness} native notice missing'
             pane_dead = require(run([*tmux, 'display-message', '-p', '-t', pane, '#{pane_dead}']))
             assert pane_dead == '1', 'owned launcher pane has not ended'
             actors = [state['identity']['process'], *state['identity']['process'].get('cores', [])]
@@ -293,7 +298,7 @@ def main():
             preserved = json.loads(git('show', 'origin/master:' + shard))
             assert preserved['session_id'] == context['session_id'], 'retirement lost verified native session identity'
             report['results'].append({'harness': harness, 'pane': pane, 'event': state['id'],
-                                      'handoff': 'remote-blob-verified', 'exit_receipt': notices[-1], 'processes_ended': True,
+                                      'handoff': 'remote-blob-verified', 'exit_receipt': fresh[-1], 'processes_ended': True,
                                       'pane_dead': True, 'native_session': context['session_id'], 'identity_source': context['evidence_source']})
             print(harness + ': real handoff, exit receipt, and process end verified', flush=True)
     except BaseException as error:

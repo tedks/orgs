@@ -56,8 +56,8 @@ _CLAUDE_MODEL_OPTION = r'--model (?!' + _SESSION_UUID + r' )[A-Za-z0-9][A-Za-z0-
 # In Claude 2.1.332 the header's dim attribute carries onto the joined
 # command line. tmux emits the attribute change on the header only.
 _CLAUDE_EXIT_HEADER = r'^\x1b\[2mResume this session with:[ \t]*\n'
-_CLAUDE_EXIT_TAIL = (r'(?:[ \t]*\n)*(?:\x1b\[0mPane is dead \(status 0, [^\n()]+\)[ \t]*\n'
-                     r'(?:[ \t]*\n)*)?\Z')
+_TMUX_DEAD_PANE_FORMAT = '#{pane_dead}|#{pane_dead_status}|#{pane_width}|#{t:pane_dead_time}'
+_TMUX_DEAD_PANE_PREFIX = 'Pane is dead (status 0, '
 
 
 class Stop(Exception):
@@ -218,6 +218,8 @@ def process_ended(pin):
 def pane_observation(tmux, pane):
     keys = ('pane_id', 'pane_pid', 'pane_dead', 'pane_tty', 'pid', 'start_time', 'socket_path')
     fmt = '\t'.join('#{' + key + '}' for key in keys)
+    fmt += '\t' + _TMUX_DEAD_PANE_FORMAT
+    keys += ('dead_metadata',)
     rows = checked(tmux + ['list-panes', '-a', '-F', fmt], strip=False)
     for row in rows.splitlines():
         values = row.split('\t')
@@ -924,9 +926,10 @@ class Retirement:
             return False  # An absent pane cannot supply the exit notice.
 
     def exit_notices(self, session_id, *, before=None):
-        """Return the same-session count and newest-notice validity.
+        """Return counts by notice form and whether the model footer verifies.
 
-        When given a baseline, a sufficient plain count can short-circuit.
+        A supplied plain baseline marks an after-exit read. A plain increase
+        can short-circuit without obtaining any model evidence.
         """
         # Raw pane bytes stay in memory. Only an exact native resume command
         # naming the immutable shard's UUID can establish this lifecycle receipt.
@@ -941,31 +944,35 @@ class Retirement:
                   else r'^Resume this session with:[ \t]*\n')
         plain_pattern = re.compile(prefix + r'[ \t]*' + re.escape(command) + r'(?i:' + re.escape(session_id) + r')[ \t]*$',
                                    re.MULTILINE)
-        plain = list(plain_pattern.finditer(frame))
-        count = len(plain)
+        counts = {'plain': len(plain_pattern.findall(frame)), 'model': 0}
         if agent == 'codex':
-            return count, True
+            return counts, False
+        if before is not None and counts['plain'] > before:
+            return counts, False
         model_command = (r'claude ' + _CLAUDE_MODEL_OPTION + r'--resume '
                          + r'(?i:' + re.escape(session_id) + r')[ \t]*\n')
-        # A plain count already over the baseline needs no styled capture
-        # unless a later model-shaped line could be the newest notice.
-        if (before is not None and count > before
-                and not re.compile(prefix + model_command, re.MULTILINE).search(frame, plain[-1].end())):
-            return count, True
         try:
             styled = checked(self.tmux + ['capture-pane', '-e', '-p', '-J', '-S', '-', '-t', self.args.pane], strip=False)
-        except (Stop, OSError, subprocess.SubprocessError):
-            return count, True  # No explicit-model matches without styling evidence.
+        except (Stop, OSError, subprocess.SubprocessError) as error:
+            if before is None:
+                raise Stop('handoff verified; unable to capture Claude model exit notice baseline') from error
+            return counts, False
         models = list(re.finditer(_CLAUDE_EXIT_HEADER + model_command, styled, re.MULTILINE))
-        if not models:
-            return count, True
-        # Count and order both forms in the same frame whenever a model
-        # notice contributes. The footer check does not filter the count.
-        unstyled = re.sub(r'\x1b\[[0-9;]*m', '', styled)
-        count = len(plain_pattern.findall(unstyled)) + len(models)
-        tail = styled[models[-1].end():]
-        newest_is_plain = plain_pattern.search(re.sub(r'\x1b\[[0-9;]*m', '', tail))
-        return count, bool(newest_is_plain or re.fullmatch(_CLAUDE_EXIT_TAIL, tail))
+        counts['model'] = len(models)
+        if before is None or not models:
+            return counts, False
+
+        # tmux clips its default dead-pane row to the pane width, even with
+        # -J. Reconstruct that exact row from tmux's own exit metadata.
+        dead = self.exit_pane()['dead_metadata'].split('|')
+        if len(dead) != 4 or dead[:2] != ['1', '0'] or not dead[2].isdigit() or not dead[3]:
+            return counts, False
+        width = int(dead[2])
+        if width < len(_TMUX_DEAD_PANE_PREFIX):
+            return counts, False
+        marker = (_TMUX_DEAD_PANE_PREFIX + dead[3] + ')')[:width]
+        tail = r'(?:[ \t]*\n)*\x1b\[0m' + re.escape(marker) + r'[ \t]*\n(?:[ \t]*\n)*'
+        return counts, bool(re.fullmatch(tail, styled[models[-1].end():]))
 
     def fresh_exit_notice(self, session_id):
         attempt = self.state.get('exit', {})
@@ -974,13 +981,19 @@ class Retirement:
         if not requested or type(attempt.get('enters')) is not int or attempt['enters'] < 1:
             return False  # Typed characters or a pre-input deferral are not an exit request.
         baseline = self.state.get('exit_notice')
-        if (not isinstance(baseline, dict) or baseline.get('session_id') != session_id
-                or type(baseline.get('before')) is not int or baseline['before'] < 0):
+        if not isinstance(baseline, dict) or baseline.get('session_id') != session_id:
+            raise Stop('handoff verified; missing trustworthy pre-request exit notice baseline')
+        if 'plain' in baseline or 'model' in baseline:
+            plain_before, model_before = baseline.get('plain'), baseline.get('model')
+        else:
+            plain_before, model_before = baseline.get('before'), 0
+        if any(type(count) is not int or count < 0 for count in (plain_before, model_before)):
             raise Stop('handoff verified; missing trustworthy pre-request exit notice baseline')
         try:
-            count, newest_valid = self.exit_notices(session_id, before=baseline['before'])
+            counts, model_footer = self.exit_notices(session_id, before=plain_before)
             pane_after = self.exit_pane()  # Recheck continuity across the capture commands.
-            return count > baseline['before'] and newest_valid and pane_after['pane_dead'] == '1'
+            fresh = counts['plain'] > plain_before or (model_footer and counts['model'] > model_before)
+            return fresh and pane_after['pane_dead'] == '1'
         except PaneAbsent:
             return False  # Process end without a retained notice is not retirement.
 
@@ -1181,10 +1194,10 @@ class Retirement:
             if self.state.get('native_session_id') and session_id != self.state['native_session_id']:
                 raise Stop('handoff verified; shard differs from offered native session ID')
             self.start_exit_pty_hold()
-            count, _ = self.exit_notices(session_id)
-            self.state['exit_notice'] = {'session_id': session_id, 'before': count}
+            counts, _ = self.exit_notices(session_id)
+            self.state['exit_notice'] = {'session_id': session_id, **counts}
             self.verify_live_pane()
-            self.persist()  # Save the count before any exit input, for safe resume.
+            self.persist()  # Save the counts before any exit input, for safe resume.
             try:
                 self.send('exit', '/exit' if self.state['identity']['process']['agent'] != 'agy' else '/quit')
             except Stop:

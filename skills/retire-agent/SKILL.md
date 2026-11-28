@@ -200,20 +200,21 @@ For an ordinary retirement, confirm these facts read-only before resuming.
 - The installed skill recognizes the native exit notice in the retained pane,
   and the private receipt is `pending-exit` for the published shard.
 - The existing state records a submitted exit request or an ambiguous request
-  with actual input, a positive Enter count, and a pre-request count for the
+  with actual input, a positive Enter count, and pre-request counts for the
   shard's session UUID. The request targeted the live pinned process, and
   all pinned original processes and the pane root have ended.
 - The state contains the pre-exit pane identity and tty holder record. On
   the recorded server, the same pane is dead and its tty matches the held
   descriptor. Its native notice names the immutable shard's UUID, and the
-  current same-session count exceeds the saved count.
+  count for that form exceeds its saved count. Claude's explicit-model
+  notice requires the matching status-0 row from tmux.
 
 Run `scripts/retire.sh %PANE --resume STATE` once. It re-verifies the published
 handoff and current exit evidence through observation before publishing the
 retired receipt.
 
 Claude can clear the screen at exit and leave just the final notice. If the
-saved count included a quoted block that vanished, the single genuine notice
+saved model count included a quoted model block that vanished, the single genuine notice
 can leave the count unchanged. The receipt stays pending.
 
 If an older version went pending on tmux 3.8 after sending exit and the state
