@@ -44,17 +44,51 @@ TW="$(find_cli token-tripwire || true)"
 # How old is the store? Without a scan (and without the cron row) it can be
 # hours stale, and an empty view would read as "no lanes running".
 age_minutes() {
-  python3 - "$TU" <<'PY' 2>/dev/null || echo unknown
-import os, sys, time
-sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[1])))
-import token_usage as tu
-path = tu.Store(tu.load_config()).state_path
-print(int((time.time() - os.stat(path).st_mtime) // 60))
+  LC_ALL=C python3 - "$TU" <<'PY' 2>/dev/null || echo failed
+import json
+import subprocess
+import sys
+
+result = subprocess.run([sys.argv[1], "snapshot", "--no-scan"], capture_output=True)
+if result.returncode:
+    # Older argparse CLIs reject the subcommand before opening the store.
+    missing = b"token-usage: error: argument cmd: invalid choice: 'snapshot' (choose from "
+    if any(line.startswith(missing) for line in result.stderr.splitlines()):
+        print("unsupported")
+        sys.exit(0)
+    sys.exit(1)
+
+def reject_constant(value):
+    raise ValueError(f"invalid JSON constant: {value}")
+
+
+snapshot = json.loads(result.stdout, parse_constant=reject_constant)
+if not isinstance(snapshot, dict) or snapshot.get("schema") != "quota-snapshot/1":
+    sys.exit(1)
+errors = snapshot.get("errors")
+if not isinstance(errors, dict) or any(key == "store" or key.startswith("store.") for key in errors):
+    sys.exit(1)
+store = snapshot.get("store")
+if not isinstance(store, dict) or "age_seconds" not in store:
+    sys.exit(1)
+age = store["age_seconds"]
+if age is None:
+    print("unknown")
+elif type(age) is not int or age < 0 or age >= 10**12:
+    sys.exit(1)
+else:
+    print(age // 60)
 PY
 }
 if $fresh; then "$TU" scan > /dev/null; fi
 age="$(age_minutes)"
-if [ "$age" = unknown ]; then
+if [ "$age" = unsupported ]; then
+  age=unknown
+  stale_note="store age unknown (token-usage lacks snapshot): update token-usage"
+elif [ "$age" = failed ]; then
+  age=unknown
+  stale_note="store age unknown (token-usage snapshot failed). Rerun and update token-usage if it persists."
+elif [ "$age" = unknown ]; then
   stale_note="store age unknown (never scanned on this host, or unreadable): run with --fresh (and enable the cron row)"
 elif [ "$age" -gt 20 ]; then
   stale_note="store last scanned ${age} min ago: numbers are that old; run with --fresh, and check the token-tripwire cron row (install-token-tripwire --enable)"

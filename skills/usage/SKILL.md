@@ -22,9 +22,11 @@ CLIs that dotfiles installs (`scripts/usage`); this skill only calls them.
 - `--fresh` scans rollouts and transcripts first. Without it the script reads
   the store as the last scan left it: every 10 minutes where the
   token-tripwire cron row is enabled, otherwise whenever something last ran
-  `token-usage`. The output always says how old the store is, and warns past
-  20 minutes. A stale store means the numbers are old, not that no lane is
-  running: rerun with `--fresh` before concluding anything.
+  `token-usage`. The output reports the store age from
+  `token-usage snapshot --no-scan` and warns when the age is unknown or past
+  20 minutes. A stale store means the numbers are old, and lanes may still
+  be running. Rerun with `--fresh` before drawing conclusions. If the installed
+  CLI lacks the snapshot subcommand, update `token-usage` to obtain the age.
 - `--json` emits one JSON object (`sessions`, `totals_project`,
   `totals_model`, `meters`, `incidents`, plus `store_age_minutes` and
   `stale_note`) for further processing.
