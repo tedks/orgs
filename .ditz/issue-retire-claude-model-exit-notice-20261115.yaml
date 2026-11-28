@@ -19,7 +19,7 @@ type: bugfix
 component: retire-agent
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: unstarted
+status: in_progress
 disposition:
 creation_time: 2026-11-15T23:46:38-00:00
 references: []
@@ -49,3 +49,7 @@ log_events:
     the dead pane as evidence. Same defect as retire-agent-claude-exit-model-flag.
     Every lane dispatched with an explicit model, which named-lane dispatch requires,
     hits this.'
+- time: 2026-11-28T17:30:37-00:00
+  who: Ted Smith
+  what: started
+  comment: ""
