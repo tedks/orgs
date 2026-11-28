@@ -38,7 +38,9 @@ FIXTURE_PANE = f'%{1}'
 CLAUDE_MODEL_NOTICE_HEADER = '\x1b[2mResume this session with:'
 CLAUDE_MODEL_NOTICE_COMMAND = 'claude --model opus --resume ' + FIXTURE_SESSION
 CLAUDE_PLAIN_NOTICE = 'Resume this session with:\nclaude --resume ' + FIXTURE_SESSION + '\n'
-TMUX_DEAD_ROW = '\x1b[0mPane is dead (status 0, Fri Jan  1 00:00:00 2021)\n'
+TMUX_DEAD_TIME = 'Fri Jan  1 00:00:00 2021'
+TMUX_DEAD_ROW = '\x1b[0mPane is dead (status 0, ' + TMUX_DEAD_TIME + ')\n'
+RETAINED_PANE_PID_REQUIRED = 'retained dead pane has no pane_pid; run this gate on a tmux that retains it, such as 3.6a'
 
 
 def claude_hint_rows(mode, event, disposition):
@@ -367,7 +369,9 @@ def terminal(directory, mode):
                                 if mode != 'no-exit-notice':
                                     session = OTHER_FIXTURE_SESSION if mode.endswith('wrong-exit-notice') else FIXTURE_SESSION
                                     if mode.startswith('claude-model-exit-notice'):
-                                        notice = CLAUDE_MODEL_NOTICE_HEADER + '\r\n' + CLAUDE_MODEL_NOTICE_COMMAND + '\x1b[0m\r\n'
+                                        trailing = ' trailing text' if mode.endswith('-trailing') else ''
+                                        notice = (CLAUDE_MODEL_NOTICE_HEADER + '\r\n'
+                                                  + CLAUDE_MODEL_NOTICE_COMMAND + trailing + '\x1b[0m\r\n')
                                     elif mode.startswith('claude'):
                                         notice = 'Resume this session with:\r\nclaude --resume ' + session.lower() + '\r\n'
                                     else:
@@ -376,7 +380,13 @@ def terminal(directory, mode):
                                         notice = 'Token usage: ' + usage + '\r\nTo continue this session, run:\r\n  codex resume ' + session.lower() + '\r\n'
                                     # The native exit can leave only its notice
                                     # after the application screen is cleared.
-                                    clear = '\x1b[2J\x1b[3J\x1b[H' if mode.endswith('with-quote') else '\r\n\x1b[J'
+                                    narrow = '-narrow' in mode
+                                    if narrow:
+                                        # The offer and exit composer use the normal width.
+                                        # Resize the isolated pane only to render the notice.
+                                        subprocess.run(['tmux', 'resize-window', '-t', os.environ['TMUX_PANE'],
+                                                        '-x', '40'], check=True)
+                                    clear = '\x1b[2J\x1b[3J\x1b[H' if narrow or mode.endswith('with-quote') else '\r\n\x1b[J'
                                     sys.stdout.write(clear + notice)
                                     sys.stdout.flush()
                                 return
@@ -1302,22 +1312,21 @@ class Tests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         state = self.state()[1]
         self.assertEqual(state['status'], 'retired')
-        self.assertEqual(state['exit_notice'], {'session_id': FIXTURE_SESSION, 'before': 0})
+        self.assertEqual(state['exit_notice'], {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 0})
         self.assertEqual(self.observed()['exit_enters'], 1)
 
     def legacy_claude_model_exit_pending(self):
         self.actor('claude-model-exit-notice-with-quote', retain_dead=True)
-        legacy = self.instrument("        if agent == 'codex':\n            return count, True\n",
-                                 "        if before is None:\n"
-                                 "            assert 'claude --model opus --resume ' in frame\n"
-                                 "        return count, True\n")
-        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(legacy)}):
-            stuck = self.invoke()
+        stuck = self.invoke()
         self.require_retained_dead_pane_identity(stuck)
         self.assertEqual(stuck.returncode, 2, stuck.stderr)
         self.assertIn('retirement pending original process end and fresh same-session exit notice', stuck.stderr)
         path, pending = self.state()
-        self.assertEqual(pending['exit_notice'], {'session_id': FIXTURE_SESSION, 'before': 0})
+        saved = pending['exit_notice']
+        self.assertEqual(saved, {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 1})
+        # Store the pre-change representation of the same captured baseline.
+        pending['exit_notice'] = {'session_id': FIXTURE_SESSION, 'before': saved['plain']}
+        path.write_text(json.dumps(pending))
         self.assertEqual(pending['exit']['enters'], 1)
         self.assertIsNone(process_token(pending['identity']['process']['pid']))
         receipt_path = 'origin/master:' + pending['handoff_receipt']
@@ -1359,12 +1368,50 @@ class Tests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('fresh same-session exit notice', result.stderr)
         state = self.state()[1]
-        self.assertEqual(state['exit_notice'], {'session_id': FIXTURE_SESSION, 'before': 1})
+        self.assertEqual(state['exit_notice'], {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 1})
         screen = self.command(*self.tmux, 'capture-pane', '-p', '-J', '-S', '-', '-t', self.pane)
         self.assertEqual(screen.count(CLAUDE_MODEL_NOTICE_COMMAND), 1)
         self.assertNotIn('Quoted exit notice', screen)
         receipt = json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))
         self.assertEqual(receipt['status'], 'pending-exit')
+
+    def run_wrapped_claude_model_exit(self, mode, suffix):
+        self.actor(mode, retain_dead=True)
+        result = self.invoke()
+        self.require_retained_dead_pane_identity(result)
+        capture = [*self.tmux, 'capture-pane', '-p', '-t', self.pane]
+        notice = CLAUDE_MODEL_NOTICE_COMMAND + suffix
+        self.assertEqual(self.command(*self.tmux, 'display-message', '-p', '-t', self.pane, '#{pane_width}'), '40')
+        self.assertNotIn(notice, self.command(*capture))
+        self.assertIn(notice, self.command(*capture, '-J'))
+        return result
+
+    def test_wrapped_claude_model_exit_notice_retires_dead_pane(self):
+        result = self.run_wrapped_claude_model_exit('claude-model-exit-notice-narrow', '')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.state()[1]['status'], 'retired')
+
+    def test_wrapped_claude_model_exit_notice_trailing_text_stays_pending(self):
+        result = self.run_wrapped_claude_model_exit('claude-model-exit-notice-narrow-trailing', ' trailing text')
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('fresh same-session exit notice', result.stderr)
+        state = self.state()[1]
+        receipt = json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))
+        self.assertEqual(receipt['status'], 'pending-exit')
+
+    def test_claude_styled_baseline_capture_failure_withholds_exit(self):
+        self.actor('claude')
+        before = "            styled = checked(self.tmux + ['capture-pane', '-e', '-p', '-J', '-S', '-'"
+        entry = self.instrument(before, "            raise Stop('fixture styled capture unavailable')\n" + before)
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            result = self.invoke()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('unable to capture Claude model exit notice baseline', result.stderr)
+        state = self.state()[1]
+        self.assertTrue(state.get('handoff_receipt'))
+        self.assertNotIn('exit_notice', state)
+        self.assertNotIn('exit', state)
+        self.assertFalse((self.directory / 'exit-order.json').exists())
 
     def require_retained_dead_pane_identity(self, result):
         dead, pid = self.command(*self.tmux, 'display-message', '-p', '-t', self.pane,
@@ -1374,7 +1421,7 @@ class Tests(unittest.TestCase):
             # tmux 3.8 can retain the screen while dropping the pinned PID.
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertIn('pane root identity changed', result.stderr)
-            self.fail('retained dead pane has no pane_pid; run this gate on a tmux that retains it, such as 3.6a')
+            self.fail(RETAINED_PANE_PID_REQUIRED)
         self.assertEqual(pid, self.state()[1]['identity']['pane_pid'])
 
     def model_notice_observer(self, pane=FIXTURE_PANE, agent='claude'):
@@ -1390,16 +1437,24 @@ class Tests(unittest.TestCase):
         return module, observer
 
     def claude_model_notice_fresh(self, command=CLAUDE_MODEL_NOTICE_COMMAND, header=CLAUDE_MODEL_NOTICE_HEADER,
-                                  before=0, tail='', opening='', agent='claude', styled_error=None):
+                                  before=0, model_before=None, tail='', opening='', agent='claude',
+                                  styled_error=None, dead_metadata='1|0|240|' + TMUX_DEAD_TIME,
+                                  dead_row=TMUX_DEAD_ROW, plain_capture=None):
         module, observer = self.model_notice_observer(agent=agent)
-        observer.state['exit_notice']['before'] = before
+        if model_before is None:
+            observer.state['exit_notice']['before'] = before
+        else:
+            observer.state['exit_notice'] = {'session_id': FIXTURE_SESSION, 'plain': before, 'model': model_before}
         observer.pane = lambda: [FIXTURE_PANE, '123', 'owned', '/owned']
-        styled = opening + header + '\n' + command + '\n' + tail + '\n' + TMUX_DEAD_ROW
-        plain = re.sub(r'\x1b\[[0-9;]*m', '', styled)
+        styled = opening + header + '\n' + command + '\n' + tail + '\n' + dead_row
+        if plain_capture is None:
+            plain_capture = re.sub(r'\x1b\[[0-9;]*m', '', styled)
 
         def capture(args, **_):
+            if 'display-message' in args:
+                return dead_metadata
             if '-e' not in args:
-                return plain
+                return plain_capture
             if styled_error is not None:
                 raise styled_error
             return styled
@@ -1424,35 +1479,68 @@ class Tests(unittest.TestCase):
     def test_claude_model_exit_notice_before_more_output_is_pending(self):
         self.assertFalse(self.claude_model_notice_fresh(tail='● Later assistant text\n'))
 
+    def test_legacy_claude_model_exit_notice_requires_dead_row(self):
+        self.assertTrue(self.claude_model_notice_fresh())
+        for row in ('', TMUX_DEAD_ROW.replace('status 0', 'status 1'), TMUX_DEAD_ROW.replace('2021', '2022')):
+            with self.subTest(row=row):
+                self.assertFalse(self.claude_model_notice_fresh(dead_row=row))
+
+    def test_legacy_claude_model_exit_notice_requires_dead_pane(self):
+        self.assertFalse(self.claude_model_notice_fresh(dead_metadata='0|0|240|' + TMUX_DEAD_TIME))
+
+    def test_claude_model_exit_notice_requires_zero_dead_status(self):
+        self.assertFalse(self.claude_model_notice_fresh(dead_metadata='1|1|240|' + TMUX_DEAD_TIME))
+
+    def test_claude_model_exit_requires_complete_tmux_metadata(self):
+        for metadata in ('1|0', '1|0|unknown|' + TMUX_DEAD_TIME, '1|0|240|'):
+            with self.subTest(metadata=metadata):
+                self.assertFalse(self.claude_model_notice_fresh(dead_metadata=metadata))
+
+    def test_claude_model_exit_requires_visible_dead_status(self):
+        # This width clips the exit status from the generated marker.
+        self.assertFalse(self.claude_model_notice_fresh(dead_metadata='1|0|20|' + TMUX_DEAD_TIME,
+                                                       dead_row=TMUX_DEAD_ROW[:24] + '\n'))
+
     def test_claude_model_exit_notice_stale_count_is_pending(self):
         output = CLAUDE_MODEL_NOTICE_HEADER + '\r\n' + CLAUDE_MODEL_NOTICE_COMMAND + '\x1b[0m\r\n'
-        # Keep the owned pane open with no new terminal output after the quote.
+        # Leave the quote untouched when the owned pane exits.
         command = shlex.join(['printf', '%s', output]) + '; read -r unused'
         pane = self.command(*self.tmux, 'new-session', '-d', '-P', '-F', '#{pane_id}', '-x', '40', command)
+        self.command(*self.tmux, 'set-option', '-w', '-t', pane, 'remain-on-exit', 'on')
         capture = [*self.tmux, 'capture-pane', '-p', '-t', pane]
         self.wait_for(lambda: CLAUDE_MODEL_NOTICE_COMMAND in self.command(*capture, '-J'))
         self.assertNotIn(CLAUDE_MODEL_NOTICE_COMMAND, self.command(*capture))
         _, observer = self.model_notice_observer(pane=pane)
         observer.tmux = self.tmux
         observer.state['identity']['pane_pid'] = observer.pane()[1]
-        count, _ = observer.exit_notices(FIXTURE_SESSION)
-        self.assertEqual(count, 1)
-        observer.state['exit_notice']['before'] = count
+        counts, _ = observer.exit_notices(FIXTURE_SESSION)
+        self.assertEqual(counts, {'plain': 0, 'model': 1})
+        observer.state['exit_notice'] = {'session_id': FIXTURE_SESSION, **counts}
+        self.command(*self.tmux, 'send-keys', '-t', pane, 'Enter')
+        self.wait_for(lambda: self.command(*self.tmux, 'display-message', '-p', '-t', pane, '#{pane_dead}') == '1')
+        self.assertTrue(observer.pane()[1], RETAINED_PANE_PID_REQUIRED)
+        self.assertEqual(observer.exit_notices(FIXTURE_SESSION, before=0), (counts, True))
         self.assertFalse(observer.fresh_exit_notice(FIXTURE_SESSION))
 
     def test_claude_exit_notice_plain_after_older_model_is_fresh(self):
-        self.assertTrue(self.claude_model_notice_fresh(before=1, tail='\x1b[0m' + CLAUDE_PLAIN_NOTICE))
+        self.assertTrue(self.claude_model_notice_fresh(model_before=1, tail='\x1b[0m' + CLAUDE_PLAIN_NOTICE))
 
-    def test_claude_exit_notice_newest_model_requires_footer_even_after_plain(self):
-        self.assertTrue(self.claude_model_notice_fresh(opening=CLAUDE_PLAIN_NOTICE))
-        self.assertFalse(self.claude_model_notice_fresh(opening=CLAUDE_PLAIN_NOTICE, tail='Later output\n'))
+    def test_claude_exit_notice_model_after_older_plain_is_fresh(self):
+        self.assertTrue(self.claude_model_notice_fresh(before=1, model_before=0, opening=CLAUDE_PLAIN_NOTICE))
+
+    def test_claude_exit_notice_dim_quote_before_stale_plain_stays_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(before=1, model_before=0, tail='\x1b[0m' + CLAUDE_PLAIN_NOTICE))
+
+    def test_claude_exit_notice_styled_capture_cannot_add_plain_matches(self):
+        self.assertFalse(self.claude_model_notice_fresh(before=1, model_before=1, opening=CLAUDE_PLAIN_NOTICE * 2,
+                                                       plain_capture=CLAUDE_PLAIN_NOTICE))
 
     def test_claude_exit_notice_fresh_plain_needs_no_styled_capture(self):
-        self.assertTrue(self.claude_model_notice_fresh(tail='\x1b[0m' + CLAUDE_PLAIN_NOTICE,
+        self.assertTrue(self.claude_model_notice_fresh(opening=CLAUDE_PLAIN_NOTICE,
                                                       styled_error=AssertionError('unexpected styled capture')))
 
     def test_claude_exit_notice_styled_capture_failure_leaves_model_pending(self):
-        self.assertFalse(self.claude_model_notice_fresh(before=1, tail='\x1b[0m' + CLAUDE_PLAIN_NOTICE,
+        self.assertFalse(self.claude_model_notice_fresh(before=1, opening=CLAUDE_PLAIN_NOTICE,
                                                        styled_error=OSError('fixture capture unavailable')))
 
     def test_claude_model_exit_notice_partial_session_is_pending(self):
@@ -1644,7 +1732,11 @@ class Tests(unittest.TestCase):
         (self.directory / 'human-independent-exit').touch()
         self.wait_for(lambda: not Path('/proc/' + str(state['identity']['process']['pid'])).exists())
         for baseline in (None, {'session_id': FIXTURE_SESSION, 'before': '0'},
-                         {'session_id': OTHER_FIXTURE_SESSION, 'before': 0}):
+                         {'session_id': OTHER_FIXTURE_SESSION, 'before': 0},
+                         {'session_id': FIXTURE_SESSION, 'plain': 0},
+                         {'session_id': FIXTURE_SESSION, 'before': 0, 'model': 0},
+                         {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': True},
+                         {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': -1}):
             state['exit_notice'] = baseline
             path.write_text(json.dumps(state))
             result = self.invoke('--resume', str(path))
