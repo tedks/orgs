@@ -849,10 +849,12 @@ class Retirement:
         if any(type(count) is not int or count < 0 for count in (plain_before, model_before)):
             raise Stop('handoff verified; missing trustworthy pre-request exit notice baseline')
         try:
-            # A genuine notice is emitted at exit. For the model form, the
-            # final status-0 row and dead flag tie it to the end of this pinned
-            # pane root, even when a legacy baseline counted only plain forms.
             counts, model_footer = self.exit_notices(session_id, before=plain_before)
+            # Model evidence from a legacy baseline needs the controller's
+            # attestation on this invocation. The audit record is history.
+            if model_footer and 'model' not in baseline and not self.args.attest_single_harness_pane:
+                raise Stop('Legacy model exit notice requires --attest-single-harness-pane on resume. '
+                           'See the SKILL.md recovery section "An exited Claude pane with an explicit model notice".')
             return counts['plain'] > plain_before or (model_footer and counts['model'] > model_before)
         except PaneAbsent:
             return False  # Process end without a retained notice is not retirement.
@@ -1059,6 +1061,12 @@ class Retirement:
                     raise
                 if self.state['exit']['status'] == 'deferred' and not self.ended():
                     raise Stop('exit deferred before submission; --resume STATE --retry-deferred exit')
+        baseline = self.state.get('exit_notice')
+        if (self.args.attest_single_harness_pane and self.state['identity']['process']['agent'] == 'claude'
+                and isinstance(baseline, dict) and 'before' in baseline and 'model' not in baseline):
+            self.state['attested_single_harness_pane'] = True
+            self.persist()
+            self.audit('single-harness-pane-attested')
         deadline = time.monotonic() + self.args.wait
         while not (self.ended() and self.fresh_exit_notice(session_id)):
             if time.monotonic() >= deadline:
@@ -1131,12 +1139,16 @@ def main():
     modes.add_argument('--waiting', action='store_true')
     modes.add_argument('--handoff', nargs=2, metavar=('AGENT', 'MODEL'))
     parser.add_argument('--resume')
+    parser.add_argument('--attest-single-harness-pane', action='store_true',
+                        help='attest one harness invocation in a legacy Claude pane on resume')
     parser.add_argument('--caller-shard', action='store_true')
     parser.add_argument('--retry-deferred', choices=('offer', 'exit'))
     parser.add_argument('--wait', type=float, default=300)
     parser.add_argument('--poll', type=float, default=60)
     parser.add_argument('--roles')
     args = parser.parse_args()
+    if args.attest_single_harness_pane and not args.resume:
+        parser.error('--attest-single-harness-pane requires --resume')
     try:
         config = load_config()
     except (OSError, ValueError) as error:
