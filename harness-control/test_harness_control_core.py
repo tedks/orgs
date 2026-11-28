@@ -410,7 +410,9 @@ class ControlTests(unittest.TestCase):
         self.assertIs(False, snapshot['isSnapshotUpdate'])
         delta = next(row for row in rest if row['type'] == 'file-history-delta')
         landed = {**copy.deepcopy(snapshot), 'messageId': self.CLAUDE_332['turn'][0]['uuid']}
+        resave = {**self.claude_332_busy('resave_snapshot'), 'messageId': 'fixture-older-prompt'}
         for name, row in (('arriving_prompt_snapshot', snapshot), ('snapshot_for_landed_prompt', landed),
+                          ('resave_after_turn', resave),
                           ('data_flow_incomplete', self.claude_332_busy('data_flow_incomplete')),
                           ('file_history_delta', copy.deepcopy(delta))):
             with self.subTest(row=name):
@@ -469,6 +471,23 @@ class ControlTests(unittest.TestCase):
         self.assertEqual('idle', result['state'])
         self.assertEqual(1, result['turns_seen'])
 
+    def test_claude_332_resave_for_prompt_outside_tail_does_not_pend(self):
+        # A re-save (snapshot.hasUntrackedChanges) names a prompt that already
+        # landed, here one whose row is outside the read tail. Inside a turn it
+        # does not keep the completed turn busy.
+        resave = {**self.claude_332_busy('resave_snapshot'), 'messageId': 'fixture-older-prompt'}
+        self.assertIs(True, resave['snapshot']['hasUntrackedChanges'])
+        rest = self.claude_332_rest()
+        record = self.claude_332_record()
+        self.rows(*rest[:-2], resave, *rest[-2:], *copy.deepcopy(self.CLAUDE_332['idle_tails'][1]))
+        self.assertEqual('idle', self.native_idle_result(record)['state'])
+        # The same row without the re-save marker is a first snapshot and pends.
+        first = copy.deepcopy(resave)
+        del first['snapshot']['hasUntrackedChanges']
+        record = self.claude_332_record()
+        self.rows(*rest[:-2], first, *rest[-2:], *copy.deepcopy(self.CLAUDE_332['idle_tails'][1]))
+        self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+
     def assert_claude_refused(self, row, reason):
         record = self.claude_332_record()
         self.rows(*self.claude_332_rest(), row)
@@ -513,7 +532,9 @@ class ControlTests(unittest.TestCase):
         bad += [{**base, name: value} for base in (delta, incomplete) for name, value in self.TURN_FIELDS.items()]
         snapshot = self.claude_332_busy('arriving_prompt_snapshot')
         bad += [{**snapshot, 'messageId': 1}, {**snapshot, 'messageId': ''},
-                {key: value for key, value in snapshot.items() if key != 'messageId'}]
+                {key: value for key, value in snapshot.items() if key != 'messageId'},
+                {**snapshot, 'snapshot': 'fixture'}, {key: value for key, value in snapshot.items() if key != 'snapshot'},
+                {**snapshot, 'snapshot': {**snapshot['snapshot'], 'hasUntrackedChanges': 'fixture'}}]
         for row in bad:
             with self.subTest(row=sorted(row.items(), key=str)):
                 self.assert_claude_refused(copy.deepcopy(row), 'idle_metadata_malformed')
@@ -2261,6 +2282,9 @@ def mutations():
         ('claude_pending_prompt_never_matched', "                            pending_prompts.remove(identifier)", "                            pass"),
         ('claude_prompt_ids_forgotten', "prompt_ids = (prompt_ids + [identifier])[-MAX_PROMPT_IDS:]", 'pass'),
         ('claude_snapshot_message_id_unchecked', "if not isinstance(message_id, str) or not message_id:\n                            raise ControlError('idle_metadata_malformed')", "if False:\n                            raise ControlError('idle_metadata_malformed')"),
+        ('claude_resave_pends', "if ('hasUntrackedChanges' not in inner and message_id not in prompt_ids and", "if (message_id not in prompt_ids and"),
+        ('claude_first_snapshot_never_pends', "if ('hasUntrackedChanges' not in inner and message_id not in prompt_ids and", "if ('hasUntrackedChanges' in inner and message_id not in prompt_ids and"),
+        ('claude_snapshot_inner_unchecked', "if (not isinstance(inner, dict) or ('hasUntrackedChanges' in inner and\n                                                            not isinstance(inner['hasUntrackedChanges'], bool))):", "if False:"),
         ('claude_table_type_widened', "'cost-state': ('startTime', int),", "'cost-state': ('startTime', (int, float)),"),
         ('claude_unknown_accepted', 'if kind not in _CLAUDE_BUSY:', 'if False:'),
         ('claude_type_not_classified', "if not isinstance(kind, str):\n                    raise ControlError('idle_record_shape_unknown')", "if False:\n                    raise ControlError('idle_record_shape_unknown')"),

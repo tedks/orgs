@@ -276,12 +276,17 @@ _CLAUDE_METADATA = {
 # No measured bookkeeping row carries any of these; a row that does is not one.
 _CLAUDE_TURN_FIELDS = ('uuid', 'parentUuid', 'message', 'isSidechain')
 # Rows that clear idle without starting a turn. file-history-snapshot names
-# its prompt's user row by messageId. On 2.1.332 that row was written before
-# the snapshot for 241 of 455 snapshots and after it for 196, so an unmatched
-# snapshot is pending input: the session is not idle, whatever follows, until
-# that prompt row arrives. 18 of 455 never got their row (16 were the last row
-# of a session that then ended). They keep the session not idle; the accepted
-# cost is a refused or deferred compaction, never a send over input.
+# its prompt's user row by messageId. On 2.1.332 there were two forms. 302
+# were the first snapshot for their prompt (no snapshot.hasUntrackedChanges);
+# they mark an arriving prompt, and that prompt's row was written after the
+# snapshot for most of them and at most 4 rows before it for the rest. 168
+# were re-saves (snapshot.hasUntrackedChanges, a bool), all written after
+# their prompt had landed, sometimes thousands of rows later. A first snapshot
+# whose prompt row has not been read is pending input: the session is not
+# idle, whatever follows, until that row arrives. 18 first snapshots never got
+# their row (16 were the last row of a session that then ended). They keep the
+# session not idle; the accepted cost is a refused or deferred compaction,
+# never a send over input. A re-save never pends, but still clears idle.
 _CLAUDE_BUSY = ('file-history-snapshot', 'queue-operation', 'progress')
 # Root prompt ids remembered for snapshot matching (max seen per file: 157).
 # A snapshot naming an older prompt stays pending, which fails closed.
@@ -473,7 +478,12 @@ def _native_idle(record, focus_after=None):
                         message_id = row.get('messageId')
                         if not isinstance(message_id, str) or not message_id:
                             raise ControlError('idle_metadata_malformed')
-                        if message_id not in prompt_ids and message_id not in pending_prompts:
+                        inner = row.get('snapshot')
+                        if (not isinstance(inner, dict) or ('hasUntrackedChanges' in inner and
+                                                            not isinstance(inner['hasUntrackedChanges'], bool))):
+                            raise ControlError('idle_metadata_malformed')
+                        if ('hasUntrackedChanges' not in inner and message_id not in prompt_ids and
+                                message_id not in pending_prompts):
                             pending_prompts.append(message_id)
                     idle = False
                     continue

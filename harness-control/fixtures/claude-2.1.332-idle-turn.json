@@ -1,5 +1,5 @@
 {
- "description": "Structure-only capture from Claude Code 2.1.332: one root turn (user input, tool round trips, final end_turn text, turn_duration), two observed post-turn metadata tails that read idle, and observed rows that must read busy (the non-update file-history-snapshot that followed the first tail is written for an arriving prompt; a queue enqueue; a data-flow-incomplete). All ids, paths, text, numbers and timestamps are replaced; keys, value types, record order and the uuid/parentUuid chain are kept.",
+ "description": "Structure-only capture from Claude Code 2.1.332: one root turn (user input, tool round trips, final end_turn text, turn_duration), two observed post-turn metadata tails that read idle, and observed rows that must read busy (the non-update file-history-snapshot that followed the first tail is written for an arriving prompt; a queue enqueue; a data-flow-incomplete; and a re-saved snapshot, marked by snapshot.hasUntrackedChanges, for a prompt that had already landed). All ids, paths, text, numbers and timestamps are replaced; keys, value types, record order and the uuid/parentUuid chain are kept.",
  "source_version": "2.1.332",
  "baseline_after_row": 7,
  "turn": [
@@ -1429,6 +1429,30 @@
    "codes": [
     1
    ]
+  },
+  "resave_snapshot": {
+   "type": "file-history-snapshot",
+   "messageId": "00000000-0000-4000-8000-000000000038",
+   "snapshot": {
+    "messageId": "00000000-0000-4000-8000-000000000038",
+    "trackedFileBackups": {
+     "key_0": {
+      "backupFileName": "fixture",
+      "version": 1,
+      "backupTime": "fixture",
+      "realParentDir": "fixture"
+     },
+     "key_1": {
+      "backupFileName": null,
+      "version": 1,
+      "backupTime": "fixture",
+      "realParentDir": "fixture"
+     }
+    },
+    "timestamp": "fixture",
+    "hasUntrackedChanges": true
+   },
+   "isSnapshotUpdate": false
   }
  }
 }
