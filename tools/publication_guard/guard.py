@@ -24,8 +24,8 @@ HEX_TOKEN = re.compile(r"(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])", re.I)
 DELIMITED_UUID = re.compile(UUID, re.I)
 ID_SUFFIX = r"[a-z0-9][a-z0-9_-]*(?![a-z0-9_-])"
 MACOS_HOME = "/" + "Users/"
-HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "root/")
-MACOS_PATH_START = r"(?<![\w./-])"
+HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "root/", MACOS_HOME, MACOS_HOME.upper())
+MACOS_PATH_START = r"(?:(?<![\w./-])|(?<=file://)|(?<=file://localhost))"
 HOME_START = re.compile(
     "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + ")"
     + "|" + MACOS_PATH_START + "(?i:" + re.escape(MACOS_HOME) + ")"

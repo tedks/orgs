@@ -59,7 +59,7 @@ Set `reviewed_sha` to the exact audited commit ID and `branch` to the
 publication branch name.
 
 ```sh
-git push --no-follow-tags origin "${reviewed_sha}:refs/heads/${branch}"
+git push --no-follow-tags origin "${reviewed_sha:?set the audited commit id}:refs/heads/${branch:?set the branch}"
 ```
 
 Review annotated tag objects separately before pushing tags. Git mode
@@ -83,10 +83,12 @@ hash. An MD5 digest can resemble a compact UUID, and a SHA-256 digest can
 resemble two adjacent compact UUIDs. Add exact known digests to the allow
 list after review.
 Home path detection covers common Linux home roots, the root account,
-named-user tilde paths, and the macOS Users root in any case at the start
-of a path. A bare macOS Users path string in code is a finding by design,
-including with a lower-case root. Embedded URL and REST path segments
-are outside this rule.
+named-user tilde paths, and the macOS Users root. The title-case
+`Users` root between slashes and its all-capitals spelling are findings
+anywhere by design, including inside web URLs. For other spellings,
+including lower case, the guard uses a path-start heuristic that also
+recognizes local file URI prefixes. A bare lowercase Users path in
+code is a finding by design.
 A standalone percent-prefixed number is treated as a pane target.
 Percentages and complete format directives are ignored. The optional
 allow list accepts exact synthetic IDs and home path tokens, one per

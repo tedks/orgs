@@ -116,6 +116,17 @@ ENCODED_TERM = "grove" + ".mistral"
 # 3. Wrapped data before an unrelated multiline quote: opaque
 #    (test_decoded_wrap_before_quoted_payload).
 # 4. Exact-commit push quotes the source and destination shell variables.
+# Round 6
+# 1. Capitalized macOS roots anywhere, other cases at path starts or following
+#    local file URI prefixes: hard. The embedded lowercase URL and REST
+#    segments and relative dot and hyphen contexts are clean
+#    (test_macos_home_prefix_contexts lists each case and its verdict).
+# 2. The exact-commit push example requires two non-empty variables.
+# 3. A longer line starts a new group after a finding. A consumed shorter tail
+#    does not start another group (test_wrapped_body_starts_after_flagged_group,
+#    test_wrapped_short_tail_is_used_once).
+# 4. Tilde-relative and bracketed-host lowercase roots fail closed
+#    (test_macos_home_prefix_contexts).
 
 
 class PublicationGuard(unittest.TestCase):
@@ -289,40 +300,65 @@ class PublicationGuard(unittest.TestCase):
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 1)
 
     def test_macos_home_prefix_case_and_exact_allowlist(self):
-        lower = "/" + "Users/morrow/work"
-        upper = "/" + "USERS/morrow/work"
-        self.allow.write_text(lower, encoding="utf-8")
+        title = guard.MACOS_HOME + "morrow/work"
+        upper = guard.MACOS_HOME.upper() + "morrow/work"
+        lower = title.lower()
+        self.allow.write_text(title, encoding="utf-8")
         self.write(upper)
         self.assertEqual([r["rule"] for r in self.scan("--allow-list", self.allow)[1][:-1]],
                          ["home-path"])
-        self.write(lower)
+        self.write(title)
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
         self.write(upper)
         self.allow.write_text(upper, encoding="utf-8")
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
+        self.write(lower)
+        self.assertEqual([r["rule"] for r in self.scan("--allow-list", self.allow)[1][:-1]],
+                         ["home-path"])
+        self.allow.write_text(lower, encoding="utf-8")
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
         self.write("https://example.invalid/" + "users/morrow/work")
         self.assertEqual(self.scan()[0], 0)
 
-    def test_macos_home_only_at_path_start(self):
-        lower = "/" + "users/morrow"
-        paths = (
-            lower + "/work",
-            "cd " + lower,
-            json.dumps({"cwd": lower + "/x"}, separators=(",", ":")),
-            guard.MACOS_HOME + "quux/x",
-            guard.MACOS_HOME.upper() + "quux/x",
+    def test_macos_home_prefix_contexts(self):
+        title = guard.MACOS_HOME
+        upper = title.upper()
+        lower = title.lower()
+        findings = (
+            "-I" + title + "morrow/include",
+            "file://" + title + "morrow/x",
+            json.dumps({"uri": "file://" + title + "morrow/a.py"}, separators=(",", ":")),
+            "file://localhost" + title + "morrow/x",
+            "/mnt/c" + title + "morrow/x",
+            ".." + title + "morrow/x",
+            "x_" + title + "morrow/x",
+            title + "quux/x",
+            upper + "quux/x",
+            "https://api.example.com" + title + "quux/repos",
+            "relative" + upper + "quux/x",
+            lower + "morrow/work",
+            "cd " + lower + "morrow",
+            f'"cwd":"{lower}morrow/x"',
+            "file://" + lower + "morrow/x",
+            "file://localhost" + lower + "morrow/x",
+            "PATH=/usr/bin:" + lower + "q/bin",
             "/" + "uSeRS/morrow/work",
+            "~" + lower + "x",
+            "https://[::1]" + lower + "x",
         )
-        for path in paths:
-            with self.subTest(path=path):
-                self.write(path)
-                self.assertEqual([row["rule"] for row in self.scan()[1][:-1]], ["home-path"])
-        self.write("\n".join((
-            "https://api.example.com/" + "users/quux/repos",
-            'fetch("/api' + "/" + 'users/42/profile")',
-            "relative" + lower, "." + lower, "/" + lower, "-" + lower,
-        )))
-        self.assertEqual(self.scan()[0], 0)
+        controls = (
+            "https://api.example.com" + lower + "quux/repos",
+            'fetch("/api' + lower + '42/profile")',
+            "." + lower + "x",
+            "a-" + lower + "x",
+            "relative" + lower + "x",
+            "/" + lower + "x",
+        )
+        for cases, expected in ((findings, ["home-path"]), (controls, [])):
+            for path in cases:
+                with self.subTest(path=path, expected=expected):
+                    self.write(path)
+                    self.assertEqual([row["rule"] for row in self.scan()[1][:-1]], expected)
 
     def test_home_path_punctuation_and_quoted_space(self):
         allowed = guard.HOME_PREFIX + "example/item"
@@ -635,6 +671,32 @@ class PublicationGuard(unittest.TestCase):
         self.assertEqual([(row["rule"], row["line"], row["match"]) for row in rows[:-1]],
                          [("opaque", 2, "".join(lines))])
         self.write("\n".join((checksum, *lines[:-1])))
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_wrapped_body_starts_after_flagged_group(self):
+        first = base64.encodebytes(bytes(range(171))).decode("ascii")
+        second = base64.b64encode(bytes(range(180))).decode("ascii")
+        lines = [second[index:index + 80] for index in range(0, len(second), 80)]
+        self.assertEqual([len(line) for line in lines], [80] * 3)
+        self.write(first + "\n".join(lines))
+        rc, rows, _ = self.scan("--unredacted")
+        self.assertEqual(rc, 1)
+        self.assertEqual([(row["rule"], row["line"], row["match"]) for row in rows[:-1]],
+                         [("opaque", 1, "".join(first.splitlines())), ("opaque", 4, second)])
+        self.write(first + "\n".join(lines[:-1]))
+        self.assertEqual([row["line"] for row in self.scan()[1][:-1]], [1])
+
+    def test_wrapped_short_tail_is_used_once(self):
+        first = base64.encodebytes(bytes(range(150))).decode("ascii")
+        remainder = base64.b64encode(bytes(range(144))).decode("ascii")
+        lines = [remainder[index:index + 48] for index in range(0, len(remainder), 48)]
+        self.assertEqual([len(line) for line in lines], [48] * 4)
+        self.write(first + "\n".join(lines))
+        rc, rows, _ = self.scan("--unredacted")
+        self.assertEqual(rc, 1)
+        self.assertEqual([(row["rule"], row["line"], row["match"]) for row in rows[:-1]],
+                         [("opaque", 1, "".join(first.splitlines()))])
+        self.write("\n".join(lines))
         self.assertEqual(self.scan()[0], 0)
 
     def test_decoded_wrap_before_quoted_payload(self):
@@ -1390,7 +1452,7 @@ def mutation_check():
          patch.object(guard, "BASE64_CLASSES", guard.BASE64_CLASSES[:-1])),
         ("opaque-hex-diversity", "test_long_hex_run_is_opaque",
          patch.object(guard, "MIN_HEX_DISTINCT", 1)),
-        ("macos-home-without-path-start", "test_macos_home_only_at_path_start",
+        ("macos-home-without-path-start", "test_macos_home_prefix_contexts",
          patch.object(guard, "HOME_START", re.compile(
              guard.HOME_START.pattern.replace(guard.MACOS_PATH_START, "")))),
         ("printf-complete-directive", "test_complete_printf_directives_with_modifiers",
@@ -1405,6 +1467,21 @@ def mutation_check():
         ("decoded-prefix-segment", "test_decoded_wrap_before_quoted_payload",
          source_mutant(guard.decoded_wrapped,
                        "yield from scan_payload(start, view[start:match.start()])", "pass")),
+        ("macos-capitalized-root-with-boundary", "test_macos_home_prefix_contexts",
+         patch.object(guard, "HOME_START", re.compile(
+             guard.HOME_START.pattern.replace("|" + re.escape(guard.MACOS_HOME), "")
+             .replace("|" + re.escape(guard.MACOS_HOME.upper()), "")))),
+        ("macos-without-local-file-uri", "test_macos_home_prefix_contexts",
+         patch.object(guard, "HOME_START", re.compile(
+             guard.HOME_START.pattern.replace(guard.MACOS_PATH_START, r"(?<![\w./-])")))),
+        ("unconditional-wrap-reset", "test_wrapped_body_starts_after_flagged_group",
+         source_mutant(guard.wrapped_bodies,
+                       "                    if short_tail:\n                        candidate = False",
+                       "                    candidate = False")),
+        ("removed-wrap-reset", "test_wrapped_short_tail_is_used_once",
+         source_mutant(guard.wrapped_bodies,
+                       "                    if short_tail:\n                        candidate = False",
+                       "                    pass")),
     ])
     for rule, prefix in guard.PREFIXES[3:]:
         method = "test_" + rule.replace("-", "_") + "_boundary"
