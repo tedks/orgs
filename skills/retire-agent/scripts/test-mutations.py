@@ -70,6 +70,7 @@ mutations = [
     ('dead flag required', ["return self.exit_pane()['pane_dead'] == '1'", "and pane_after['pane_dead'] == '1'"], ['return bool(self.exit_pane())', 'and True'], 'test_process_end_still_requires_dead_pane'),
     ('pane remains dead through capture', "and pane_after['pane_dead'] == '1'", 'and True', 'test_exit_capture_requires_pane_still_dead'),
     ('missing pre-exit tty hold', "raise Stop('handoff pending trustworthy pre-exit tty hold')", 'return', 'test_legacy_pending_exit_without_pre_exit_pin_is_refused'),
+    ('missing process start identity', "def process_ended(pin):\n    require_process_pin(pin)", "def process_ended(pin):", 'test_empty_process_start_cannot_prove_exit'),
     ('Claude explicit model notice accepted', "r'--model (?!'", "r'--unused-option (?!'", 'test_claude_model_exit_notice_stale_count_is_pending'),
     ('Claude versioned model notice accepted', r"+ _CLAUDE_MODEL_OPTION + r'--resume '", r"+ r'--model opus --resume '", 'test_claude_versioned_model_exit_notice_verifies'),
     ('Claude model notice harness attribution', "if agent == 'codex':\n            return count, True", "if False:\n            return count, True", 'test_codex_cannot_use_claude_model_exit_notice'),

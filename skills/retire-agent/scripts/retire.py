@@ -195,7 +195,16 @@ def live_process_pin(pid):
     return {'pid': pid, 'start': identity[0], 'boot': boot_id()}
 
 
+def require_process_pin(pin):
+    if (not isinstance(pin, dict) or type(pin.get('pid')) is not int or pin['pid'] <= 0
+            or not isinstance(pin.get('start'), str) or not pin['start'].isdigit()
+            or not isinstance(pin.get('boot'), str) or not pin['boot']):
+        raise Stop('missing trustworthy pre-exit process identity')
+    return pin
+
+
 def process_ended(pin):
+    require_process_pin(pin)
     if pin['boot'] != boot_id():
         raise Stop('pinned process boot changed')
     current = process_stat(pin['pid'])
@@ -204,13 +213,6 @@ def process_ended(pin):
     if current[0] != pin['start']:
         raise Stop('pinned process PID was reused')
     return current[1] in ('Z', 'X')
-
-
-def require_process_pin(pin):
-    if (not isinstance(pin, dict) or type(pin.get('pid')) is not int or pin['pid'] <= 0
-            or any(not isinstance(pin.get(key), str) or not pin[key] for key in ('start', 'boot'))):
-        raise Stop('missing trustworthy pre-exit process identity')
-    return pin
 
 
 def pane_observation(tmux, pane):
