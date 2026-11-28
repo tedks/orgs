@@ -197,7 +197,8 @@ instruction to a paused lane does not lift it by implication.
 
 A relay is verified as described above; a policy directive by reading the
 policy at its cited location; a request by its event id in the asking
-CTO's record. A CTO that cannot check a directive's source treats it as
+CTO's record or, where the receiving CTO cannot read that record, by
+confirmation from the asking CTO. A CTO that cannot check a directive's source treats it as
 unverified. It may still do whatever it could already do on its own
 authority, and it records that it did so on its own authority and not on
 the directive. That is what this CTO did on the night described.
@@ -221,9 +222,9 @@ failure standing authority exists to prevent. The design answer in this
 draft is that master control never holds a question: it goes to the CEO at
 once, or the CTO takes it there directly. Open question 4 puts the
 alternatives. A second cost is stated plainly: until the CEO keeps a
-ruling record a CTO can read, a relay binds only after the CEO confirms it
-directly, so relaying saves the CEO nothing on binding instructions until
-open question 7 is settled.
+ruling record the receiving CTO can read, a relay binds only after the CEO
+confirms it directly, so relaying saves the CEO nothing on binding
+instructions. Open question 7 decides whether such a record exists.
 
 ## Risks
 
@@ -236,11 +237,12 @@ open question 7 is settled.
 - **An approval queue by another name.** Described above. The seat should
   be judged on how little waits on it.
 - **Review independence.** A seat that directs work has an interest in its
-  outcome. This draft keeps it out of every review and approval role
-  outright. If the CEO wants an exception when reviewers are scarce, that
-  is a ruling for the CEO, not a default. Under a dual-hat or rotating
-  arrangement the same ban follows the holder; question 1 says what that
-  costs.
+  outcome. This draft keeps a dedicated seat out of every council,
+  review and approval role, and keeps any holder out of those roles on
+  work it directed. If the CEO wants an exception when reviewers are
+  scarce, that is a ruling for the CEO, not a default. Under a dual-hat or
+  rotating arrangement the ban follows the holder; question 1 says what it
+  gives up and what it keeps.
 - **A seat that never retires.** A standing seat still compacts, migrates
   and is replaced. Its own re-seat is exactly the cold-start defect cited
   above: unless the CEO's authority for the new holder is on a committed
@@ -265,9 +267,9 @@ recommendation and what it blocks. The recommendations are the author's.
    Under (b) and (c) the holder is also a CTO, and the ban in the role
    follows the holder across both hats. What it gives up: while it holds
    the hat it is not a council seat, reviewer or approver of record on any
-   work in another project; and it recuses from approving any work it
-   directed as master control, in any project including its own, with
-   another approver named. What it keeps: its ordinary CTO duties on work
+   work in another project; and it recuses from council service, review
+   and approval on any work it directed as master control, in any project
+   including its own, with another reviewer or approver named. What it keeps: its ordinary CTO duties on work
    in its own project that it did not direct as master control. Under (c)
    the recusal for work it directed outlasts its turn.
    Recommendation: (a). It has no lane competing for quota or review, and
@@ -281,8 +283,8 @@ recommendation and what it blocks. The recommendations are the author's.
      budget; master control relays that appointment and hands over the
      intent. The choice is the CEO's and master control only carries it.
    - (c) The CEO delegates the choice: within a named budget and scope,
-     master control selects and seats the CTO. This is a new delegation,
-     since seating a CTO changes a roster and spends Frontier quota.
+     master control selects the CTO. This is a new delegation, since
+     seating a CTO changes a roster and spends Frontier quota.
    - (d) Master control may run a bounded lane itself. This gives it lane
      authority, which the CEO's description excludes.
    In (b) and (c) the CEO's instruction must name who owns the project's
@@ -360,6 +362,10 @@ recommendation and what it blocks. The recommendations are the author's.
      or outward step and any merge, and continue reversible work until the
      CEO answers. The hold ends when the CEO confirms the pause, which then
      applies in full, or denies it.
+     Under (b) and (c) a real pause is not fully honored until it is
+     verified. Adopting either amends Mission continuation's "absolute"
+     for the unverified case, and that is a departure from current
+     doctrine for the CEO to accept or refuse.
      Recommendation: (c).
    - Resuming. Options: (a) a verified relay is enough, which under this
      draft already means the CTO checked a CEO-authored source or had the
@@ -387,8 +393,8 @@ recommendation and what it blocks. The recommendations are the author's.
    In every option, restricted material is referenced and never quoted,
    and quotations are kept to the words that carry the instruction.
    Recommendation: (b). If a record is unreachable, a directive is
-   unverified. Blocks: provenance checking, and whether any relay can
-   bind.
+   unverified unless the CEO confirms it directly. Blocks: provenance
+   checking, and whether a relay can bind without the CEO's confirmation.
 
 8. **Does the CEO want to grant master control any discretion?** The draft
    gives it none: a written policy that names the action and the
