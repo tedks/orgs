@@ -39,3 +39,11 @@ The 2026-10-18 repair followed this sequence: a redundant ahead shard commit
 was byte identical to remote content; newer receipt states were published to
 master; a differing shard copy was kept on a salvage branch; the shared
 checkout was reset only after those dispositions were verified.
+
+## Isolated retirement tests
+
+Run `scripts/test-retire.py` and `scripts/test-mutations.py` with a tmux
+server that keeps `#{pane_pid}` for retained dead panes. tmux 3.6a satisfies
+this requirement. On tmux 3.8, where the dead pane can lose its PID, the
+end-to-end tests fail the gate with a diagnostic. Put the compatible tmux
+binary first on `PATH` before launching the suites' isolated servers.
