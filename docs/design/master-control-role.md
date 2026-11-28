@@ -11,21 +11,25 @@ is a control message from master control to a project CTO.
 
 ## Why this is on the table
 
-The CEO described a possible role: a "master control" or global COO that
-issues directives to project CTOs, who keep command authority inside their
-lanes; that watches the whole org, dispatches and brings sitreps; that does
-not manage machine resources; and that never starts or dispatches work on
-the CEO's personal assessments, meaning work the CEO has to do personally.
+The author did not hear the CEO describe this role. It reached the author
+relayed, in these terms: a "master control / global COO" that issues
+directives to project CTOs, who keep command authority in their lanes;
+global monitoring, dispatch and sitreps; no machine-resource management;
+and "never starts work on personal assessments".
 
-The seat that acted as central command on the night described below read
-an earlier version of this draft and corrected three things in it. Those
-corrections are marked where they apply. The most important: the first
-version read the last clause above as "never starts work on its own
-assessment of what would be good", which is not what the CEO said. By that
-seat's account the CEO also expected the role to work out, within
-priorities the CEO names, where effort is best spent. So how much
-initiative the role has is a design question, not part of the CEO's
-description, and this draft now treats it as one (open question 8).
+The seat that relayed it, which acted as central command on the night
+described below, read an earlier version of this draft and corrected three
+things in it. The corrections are marked where they apply and are that
+seat's account, which the CEO can confirm or correct:
+
+- The first version read the last clause as "never starts work on its own
+  assessment of what would be good". The relaying seat says the CEO meant
+  the CEO's own personal assessments: master control never starts or
+  dispatches that work. What exactly falls under that is for the CEO to
+  say; this draft does not define it.
+- The relaying seat also says the CEO expected the role to show some
+  initiative within priorities the CEO names. Whether to authorise that,
+  and how much, is a separate decision and is open question 8.
 
 The author is one project's CTO, and spent one night receiving directives
 from another project's CTO acting as central command. That is one seat's
@@ -38,7 +42,7 @@ view of one night. What it can and cannot support:
   observed.
 - **Authority travelled by assertion, and came in two kinds.** Some of the
   directives this CTO received said they relayed the CEO. Others, as the
-  relaying seat has since made clear, were sent on that seat's own
+  relaying seat has since said, were sent on that seat's own
   judgment as central command, inside priorities the CEO had stated to it,
   and said so. This CTO did not register the difference at the time, and
   an earlier version of this draft wrongly said every directive claimed to
@@ -120,7 +124,8 @@ The seat's budget is part of open question 1.
   can show a breach, *prompt-only* where nothing but the seat's own
   discipline holds it):
   - start or dispatch work on the CEO's personal assessments. This is the
-    fence the CEO stated. *Prompt-only*, since it turns on what the work
+    CEO's condition as the relaying seat reports it; its exact scope is
+    the CEO's to confirm. *Prompt-only*, since it turns on what the work
     is.
   - act on its own initiative, in this draft's baseline. Every directive
     traces to one of the three sources below. *Auditable* against the
@@ -260,7 +265,9 @@ instructions. Open question 7 decides whether such a record exists.
   problem; it does not remove it.
 - **Drift into command.** A seat that sees everything will see things it
   could fix faster itself. Several of the fences above are prompt-only,
-  and each is marked.
+  and each is marked. Taking both recommended options in questions 8 and
+  9 widens this risk: the seat would read panes and direct on its own
+  judgment. The record of priorities is what bounds it.
 - **An approval queue by another name.** Described above. The seat should
   be judged on how little waits on it.
 - **Review independence.** A seat that directs work has an interest in its
@@ -297,7 +304,8 @@ and what it blocks. The recommendations are the author's.
    the hat it is not a council seat, reviewer or approver of record on any
    work in another project; and it recuses from council service, review
    and approval on any work it directed as master control, in any project
-   including its own, with another reviewer or approver named. What it keeps: its ordinary CTO duties on work
+   including its own, with another reviewer or approver named. What it
+   keeps: its ordinary CTO duties on work
    in its own project that it did not direct as master control. Under (c)
    the recusal for work it directed outlasts its turn.
    Recommendation: (a). It has no lane competing for quota or review, and
@@ -318,8 +326,9 @@ and what it blocks. The recommendations are the author's.
    In (b) and (c) the CEO's instruction must name who owns the project's
    budget until the CTO is seated. Who performs the seating act follows
    question 5: under the split it is the Interface, on master control's
-   routing; under replacement it is master control, carrying out the CEO's
-   appointment.
+   routing; under replacement it is master control. Either way it seats
+   the CTO the CEO named under (b), or the one selected under the CEO's
+   delegation in (c).
    Recommendation: (b). Blocks: work in dormant projects.
 
 3. **How is "I'll coordinate locally" recorded?** Peers settling things
@@ -420,51 +429,73 @@ and what it blocks. The recommendations are the author's.
      control.
    In every option, restricted material is referenced and never quoted,
    and quotations are kept to the words that carry the instruction.
-   Recommendation: (b). If a record is unreachable, a directive is
-   unverified unless the CEO confirms it directly. Blocks: provenance
+   Recommendation: (b). If a record is unreachable, a relay is unverified
+   unless the CEO confirms it directly; a request can still be checked
+   with the CTO that made it. Blocks: provenance
    checking, and whether a relay can bind without the CEO's confirmation.
 
 8. **How much initiative does master control have?** This draft's baseline
    gives it none: it routes the CEO's instructions, applies written
    policies and carries CTO requests. That is the author's position. The
-   seat that acted as central command understood the CEO to want more: a
-   seat that works out, within priorities the CEO names, where effort and
-   quota are best spent, and directs CTOs accordingly. On the night
-   described, two of the directives this CTO received were of that kind.
+   relaying seat says the CEO expected more: a seat that works out, within
+   priorities the CEO names, where effort is best spent, and directs CTOs
+   accordingly. On the night described, two of the directives this CTO
+   received were of that kind. This CTO found both useful and acted on
+   them; that is one recipient and two reversible requests, and it does
+   not compare initiative with ordinary routing between peers.
    - (a) No initiative. Everything traces to an instruction, a written
      policy or a request.
    - (b) Initiative inside CEO-named priorities. The CEO states the
-     priorities and any limits in a record CTOs can read; inside them
-     master control may issue directives on its own judgment. Such a
-     directive is a fourth kind. The CEO would need to say whether it
-     binds a CTO or is advisory, and it would still add no approval
-     points, issue no pause and never touch the CEO's personal
-     assessments.
+     priorities and any limits in a record CTOs can read, and grants
+     master control leave to direct inside them. That adds a fourth row to
+     the directive table:
+
+     | Kind | Source | Force on the receiving CTO |
+     |---|---|---|
+     | Initiative | The CEO's grant and the named priority the directive serves, both cited by their place in the record | Advisory, if the CEO chooses that form: the CTO verifies by reading the record, and accepts, declines or defers with a reason, as for a request, with no CEO ruling needed. |
+
+     The CEO would also decide whether such a directive should bind
+     instead. A binding form would put a judgment that is not the CEO's
+     above a CTO's own authority over mission allocation, which nothing in
+     current precedence does.
+     Under either form every other fence stays: no added approval points,
+     no pause, no review or approver role on directed work, nothing held
+     or batched for the CEO, nothing touching the CEO's personal
+     assessments, and the same escalations. The quota fence stays too: an
+     initiative directive may point out a lapsing window or an unstaffed
+     priority and recommend where effort goes; it never allocates a CTO's
+     budget or arbitrates a shared window between projects.
    - (c) Named grants, written one at a time as cases arise, each saying
      what decision it transfers and whether its directives bind.
-   Recommendation: (b), advisory, with the priorities on record. The
-   author's first draft recommended (a); the correction and the night's
-   own evidence argue against it, because the directives sent on that
-   seat's judgment were useful and this CTO acted on them. What (b) needs
-   that the night lacked is the record: a CTO should be able to read the
-   priorities a directive claims to serve. Blocks: how often the CEO is
-   asked, and the fourth row of the directive table.
+   Recommendation: (b), advisory. The author's first draft recommended
+   (a). What (b) needs that the night lacked is the record: a CTO should
+   be able to read the grant and the priority a directive claims to serve.
+   Blocks: how often the CEO is asked, and whether the table has a fourth
+   row.
 
-9. **May master control read other seats' panes?** By the relaying seat's
-   account the CEO asked for sitreps drawn from the lanes, and that is how
-   every sitrep on the night was made.
-   - (a) Yes, read-only, for sitreps and routing. It is the only source
-     that is current; committed records lag. Cost: a pane holds unfinished
-     human input and private session content, which the doctrine keeps out
-     of records, so a sitrep must not quote it; and a seat that reads
-     panes is one step from steering by them.
+9. **May master control read other seats' panes?** The relaying seat says
+   the CEO asked for sitreps drawn from the lanes, and that every sitrep
+   on the night was made that way. That shows panes are a timely source;
+   it does not show they are the only current one.
+   - (a) Yes, routinely and read-only, for sitreps and routing. Most
+     current. Cost: a pane holds unfinished human input and private
+     session content, which the doctrine keeps out of records, and a seat
+     that reads panes is one step from steering by them.
    - (b) No. Sitreps come from committed records, quota posture and what
      CTOs report. Cost: sitreps are only as current as the records, and
      CTOs are asked for status more often.
-   - (c) Read-only on request: a CTO's record lags or a lane looks stuck,
-     and master control reads that pane and says that it did.
-   Recommendation: (a), with two rules: nothing from a pane is quoted into
-   a record or a sitrep beyond state (working, idle, blocked on a prompt,
-   last reported result), and reading never leads to input into another
-   CTO's lane. The author's first draft said (b). Blocks: how sitreps are
-   produced.
+   - (c) Only when the lane's own CTO asks for or agrees to the read.
+     Least exposure of session content. Cost: sitreps lag, and a CTO that
+     is itself stuck cannot ask.
+   - (d) When master control judges a record is lagging or a lane looks
+     stuck, it reads that pane and records that it did. More exposure than
+     (c) and less than (a). Cost: "looks stuck" is itself a judgment.
+   Under any option that allows reading, the same rule applies to records
+   and to sitreps alike: nothing learned from a pane is quoted, summarised
+   or inferred into them beyond operational state (working, idle, blocked
+   on a prompt) and results already in a committed record, cited by event
+   id or commit and not by their text. Reading never leads to input into
+   another CTO's lane.
+   Recommendation: (a) with that rule, since it is what the CEO is
+   reported to have asked for. The author's first draft said (b). Blocks:
+   how sitreps are produced.
