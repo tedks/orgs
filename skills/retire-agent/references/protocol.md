@@ -209,13 +209,15 @@ naming the exact UUID in the immutable verified shard. Codex's notice block is
 Claude's block is `Resume this session with:` then `claude --resume UUID`
 or `claude --model MODEL --resume UUID`. The explicit-model form uses a
 single bare model selector of ASCII letters, digits and hyphens, beginning
-with a letter or digit and distinct from a UUID. It counts after exit only
-when the dim native block ends the capture before any tmux dead-pane footer.
+with a letter or digit and distinct from a UUID. Count both forms throughout
+the capture. If the newest same-session notice is the dim model form, it
+must end the capture before any tmux dead-pane footer.
 `Shutting down...` is optional. Before requesting exit, persist only the count
 of matching native notice blocks, never terminal text. A submitted command
 receipt or an ambiguous attempt with actual input and a positive Enter count
 is required; typed characters and proven no-input deferrals cannot retire.
 Resume rereads the pinned pane and requires a greater count; cached confirmation is not authority.
+Pane text is an unauthenticated channel, and the controller verifies original process end and native session binding separately.
 A failed resume of a locally retired state does not republish or downgrade its
 historical remote receipt. Current failure audits remain unconfirmed until the
 current process/notice pair verifies; loaded or forged retired status is never
