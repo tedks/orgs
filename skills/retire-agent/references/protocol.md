@@ -51,16 +51,19 @@ suffix row is one right-aligned hint, `new task? /clear to save 276.8k tokens`
 right end of the composer rule. A pinned Claude target may render exactly that
 row in place of the duration row: a count with one decimal and `k`, padding on
 the left, nothing after it. Text alone is not evidence, because an assistant
-could pad a row to the same shape. The hint must sit at the row directly above
-the composer rule, which on 2.1.332 is the renderer's own status slot. A second
-read-only `capture-pane -e` must also show, at that same row index and with the
-same text through the rule, the renderer's measured dark-theme styling: SGR 246
+could pad a row to the same shape. By row index, the hint must be the row
+immediately after the marker and immediately above the composer rule, which on
+2.1.332 is the renderer's own status slot; no row, not even a blank or rule-only
+one, may sit between (a blank row there is unmeasured). A second read-only
+`capture-pane -e` must show the same text from the marker's row through the
+rule, so all three come from one frame, and, on the hint row, the renderer's
+measured dark-theme styling: SGR 246
 for the words and 153 for `/clear` and the count (assistant prose renders in the
 default colour). Only ASCII spaces are trimmed. A hint with prose or any other
 trailing cell (such as a no-break space), a second hint, a hint after a duration
-row, one not directly above the rule, at another offset or indented like prose,
-unstyled or in another theme, another count format, or a frame that changed
-between the two reads stays pending until measured. The rows below the composer, such as a
+row, one not directly after the marker and above the rule, at another offset or indented like prose,
+unstyled or in another theme, another count format, a frame that changed
+between the two reads, or a failed capture stays pending until measured. The rows below the composer, such as a
 custom status line and the permission-mode row with or without a
 background-agent indicator (`← 1 agent`), are outside the response rows and
 never affect disposition; the same rows above the composer keep it pending.
