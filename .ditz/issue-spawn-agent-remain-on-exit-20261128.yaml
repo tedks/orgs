@@ -15,3 +15,12 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-28T19:53:20-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Found by the Anthropic council seat on PR #71: retire-agent''s SKILL.md
+    says to use a pane that remains available after exit, but agent-spawn.sh never
+    sets remain-on-exit, so a launcher-spawned lane loses its pane on exit and its
+    retirement stays pending unless the controller sets the option by hand first (which
+    the Orgs CTO has been doing). Either the launcher sets it per pane, or retire.py
+    sets it on the pinned pane before the exit request.'
