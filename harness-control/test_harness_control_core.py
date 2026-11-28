@@ -377,7 +377,9 @@ class ControlTests(unittest.TestCase):
         ended_on_tool = copy.deepcopy(rest)
         final = next(row for row in reversed(ended_on_tool) if row['type'] == 'assistant')
         final['message']['stop_reason'] = 'tool_use'
-        final['message']['content'] = [{'type': 'tool_use', 'id': 'fixture', 'name': 'fixture', 'input': {}}]
+        # Keep a text block so only stop_reason distinguishes it from a final answer.
+        final['message']['content'] = [{'type': 'text', 'text': 'fixture'},
+                                       {'type': 'tool_use', 'id': 'fixture', 'name': 'fixture', 'input': {}}]
         self.rows(*ended_on_tool, *tail)
         self.assertNotEqual('idle', self.native_idle_result(record)['state'])
         # Rows measured only inside turns clear idle until the next turn ends.
