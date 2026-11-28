@@ -55,3 +55,18 @@ log_events:
     row with an agent indicator and a marker with no duration row for the measured
     version; mutation-check. Candidate work, not assigned. Related: retire-claude-footer-empty-version-width,
     retire-bare-clear-hint-row, retire-codex-offer-always-ambiguous-20261117.'
+- time: 2026-11-28T12:19:22-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Cause found (draft PR #68, head fffa583, in council): the hypothesis above
+    was wrong. The shared reader returns only rows above the composer, so the status
+    line and the agent indicator are never examined. Claude Code 2.1.332 renders one
+    right-aligned hint row, ''new task? /clear to save N.Nk tokens'', between a short
+    final reply and the composer rule, and the recognizer accepted a Claude suffix
+    only when its first row was a duration row. The fix accepts exactly that measured
+    row (single row, full match, right edge two columns short of the rule) for a Claude
+    target, with a sanitized fixture, refused twins and mutation checks. Recovery
+    once the fix is installed: one plain --resume of the stuck state observes the
+    existing marker with no resend; proved in the isolated harness. Still unmeasured,
+    so still pending: the hint after a duration row, other widths and count formats.
+    This is the live evidence retire-bare-clear-hint-row asked for.'
