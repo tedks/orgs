@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Behavioral tests; isolated tmux server, local bare private Git, no models/network."""
+from contextlib import contextmanager
 import json
 import importlib.util
 import html
@@ -379,6 +380,9 @@ def terminal(directory, mode):
                                     clear = '\x1b[2J\x1b[3J\x1b[H' if mode.endswith('with-quote') else '\r\n\x1b[J'
                                     sys.stdout.write(clear + notice)
                                     sys.stdout.flush()
+                                    if mode in ('claude', 'claude-ghost'):
+                                        # Exercise the shared sender's live command receipt too.
+                                        time.sleep(.15)
                                 return
                         else:
                             (directory / 'delivered-offer.bin').write_bytes(payload.encode())
@@ -581,7 +585,8 @@ class Tests(unittest.TestCase):
         self.server_env = dict(os.environ, HOME=str(self.directory / 'actor-home'),
                                HISTFILE=str(self.directory / 'actor-home/history'))
         self.label = 'retire-test-' + uuid.uuid4().hex
-        self.tmux = ['tmux', '-L', self.label]
+        self.tmux = ['tmux', '-L', self.label, '-f', '/dev/null']
+        self.server_identity = None
         self.repo = self.directory / 'repo'
         self.command('git', 'init', '--bare', str(self.directory / 'remote.git'))
         self.command('git', 'init', '-b', 'master', str(self.repo))
@@ -651,7 +656,7 @@ class Tests(unittest.TestCase):
                     except (ProcessLookupError, FileNotFoundError):
                         pass
         refresh_owned()
-        subprocess.run(self.tmux + ['kill-server'], capture_output=True)
+        self.release_server()
         deadline = time.monotonic() + 4
         while True:
             refresh_owned()  # Include actors enrolled during server shutdown.
@@ -674,7 +679,23 @@ class Tests(unittest.TestCase):
     def git(self, *args):
         return self.command('git', '-C', str(self.repo), *args)
 
-    def actor(self, mode='done', node=False, relative=False, retain_dead=False):
+    def release_server(self):
+        server = subprocess.run(self.tmux + ['display-message', '-p', '#{pid} #{start_time}'],
+                                text=True, capture_output=True, env=self.server_env, timeout=5)
+        if server.returncode == 0:
+            self.assertEqual(server.stdout.strip(), self.server_identity)
+            self.command(*self.tmux, 'kill-server')
+        self.server_identity = None
+
+    def new_fixture_pane(self, *options):
+        pane, server = self.command(*self.tmux, 'new-session', '-d', '-P',
+                                    '-F', '#{pane_id} #{pid} #{start_time}', *options).split(' ', 1)
+        if self.server_identity is not None:
+            self.assertEqual(server, self.server_identity)
+        self.server_identity = server
+        return pane
+
+    def actor(self, mode='done', node=False, relative=False, retain_dead=True):
         (self.directory / 'terminal.json').unlink(missing_ok=True)
         fixture = Path(__file__).resolve()
         if node:
@@ -687,12 +708,12 @@ class Tests(unittest.TestCase):
             if relative:
                 fixture = Path('codex')
         command = shlex.join([sys.executable, str(fixture), '--terminal', str(self.directory), mode])
-        # argv[0] is the harness identity. Most fixtures return to a shell.
+        # argv[0] is the harness identity. The optional shell tests refusal.
         inner = 'exec -a ' + ('node' if node else ('claude' if mode.startswith('claude') else 'codex')) + ' ' + command
         outer = fixture_command(self.directory, inner, keep_shell=not retain_dead)
         options = ['-c', str(self.directory)] if relative else []
         width = str(CLAUDE_HINT_WIDTH) if 'claude-hint' in mode else '240'
-        pane = self.command(*self.tmux, 'new-session', '-d', '-P', '-F', '#{pane_id}', '-x', width, '-y', '40', *options, outer)
+        pane = self.new_fixture_pane('-x', width, '-y', '40', *options, outer)
         if retain_dead:
             self.command(*self.tmux, 'set-option', '-w', '-t', pane, 'remain-on-exit', 'on')
         self.pane = pane
@@ -988,14 +1009,14 @@ class Tests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.observed()['exit_enters'], 1)
 
-    def test_retire_exit_to_shell_and_path_only_commit(self):
+    def test_codex_retires_dead_pane_and_path_only_commit(self):
         self.actor()
         (self.repo / 'unrelated').write_text('preserve staged content')
         self.git('add', 'unrelated')
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(json.loads((self.directory / 'exit-order.json').read_text())['receipt_before_exit'])
-        self.assertIn('bash', self.command(*self.tmux, 'list-panes', '-a', '-F', '#{pane_current_command}'))
+        self.assert_retained_dead_pane()
         self.assertIn('A  unrelated', self.git('status', '--short'))
         self.assertNotIn('unrelated', self.git('ls-tree', '-r', '--name-only', 'origin/master'))
         path, state = self.state()
@@ -1298,7 +1319,7 @@ class Tests(unittest.TestCase):
     def test_claude_model_exit_notice_retires_dead_pane(self):
         self.actor('claude-model-exit-notice', retain_dead=True)
         result = self.invoke()
-        self.require_retained_dead_pane_identity(result)
+        self.assert_retained_dead_pane()
         self.assertEqual(result.returncode, 0, result.stderr)
         state = self.state()[1]
         self.assertEqual(state['status'], 'retired')
@@ -1313,7 +1334,7 @@ class Tests(unittest.TestCase):
                                  "        return count, True\n")
         with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(legacy)}):
             stuck = self.invoke()
-        self.require_retained_dead_pane_identity(stuck)
+        self.assert_retained_dead_pane()
         self.assertEqual(stuck.returncode, 2, stuck.stderr)
         self.assertIn('retirement pending original process end and fresh same-session exit notice', stuck.stderr)
         path, pending = self.state()
@@ -1338,6 +1359,152 @@ class Tests(unittest.TestCase):
         ledger = [json.loads(line) for line in path.with_suffix('.jsonl').read_text().splitlines()]
         self.assertEqual([row['phase'] for row in ledger if row['action'] == 'send-attempt'], ['offer', 'exit'])
         self.assertEqual(self.observed()['exit_enters'], 1)
+        holder = pending['exit_pty']['process']
+        self.wait_for(lambda: process_token(holder['pid']) != holder)
+
+    def pending_fresh_exit_notice(self):
+        self.actor('claude-model-exit-notice')
+        before = '        self.exit_verified = True  # Current process+notice pair, never loaded state authority.'
+        entry = self.instrument(before, '        raise Stop("fixture held publication")\n' + before)
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            result = self.invoke()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('fixture held publication', result.stderr)
+        self.assert_retained_dead_pane()
+        return self.state()
+
+    def assert_pending_exit_resume(self, path, state, reason):
+        result = self.invoke('--resume', str(path))
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(reason, result.stderr)
+        self.assertEqual(self.state()[1]['exit'], state['exit'])
+        receipt = json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))
+        self.assertEqual(receipt['status'], 'pending-exit')
+        self.assertEqual(self.observed()['exit_enters'], 1)
+
+    @contextmanager
+    def pause_pty_holder(self, state):
+        # A descheduled holder keeps its descriptor open during the control action.
+        holder = state['exit_pty']['process']
+        pidfd = os.pidfd_open(holder['pid'])
+        try:
+            self.assertEqual(process_token(holder['pid']), holder)
+            signal.pidfd_send_signal(pidfd, signal.SIGSTOP)
+            try:
+                yield
+            finally:
+                signal.pidfd_send_signal(pidfd, signal.SIGCONT)
+        finally:
+            os.close(pidfd)
+
+    def test_respawn_before_exit_request_is_refused(self):
+        self.actor('stable-draft')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        path, state = self.state()
+        self.assertNotIn('exit', state)
+        self.command(*self.tmux, 'respawn-pane', '-k', '-t', self.pane, 'exec sleep 30')
+        script = self.instrument(
+            '        self.private()  # No control send to an unverified destination.',
+            '        self.path = Path(self.args.resume)\n'
+            '        self.load_resume()\n'
+            '        self.start_exit_pty_hold()\n'
+            '        return',
+        )
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(script)}):
+            result = self.invoke('--resume', str(path))
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('live pane root or server identity changed', result.stderr)
+        self.assertNotIn('exit_pty', self.state()[1])
+
+    def test_dead_respawn_with_same_notice_is_refused(self):
+        path, state = self.pending_fresh_exit_notice()
+        notice = CLAUDE_MODEL_NOTICE_HEADER + '\n' + CLAUDE_MODEL_NOTICE_COMMAND + '\x1b[0m\n'
+        with self.pause_pty_holder(state):
+            self.command(*self.tmux, 'respawn-pane', '-k', '-t', self.pane,
+                         'printf %s ' + shlex.quote(notice))
+            self.wait_for(lambda: self.command(*self.tmux, 'display-message', '-p',
+                                              '-t', self.pane, '#{pane_dead}') == '1')
+            self.assertIn(CLAUDE_MODEL_NOTICE_COMMAND, self.command(*self.tmux, 'capture-pane', '-p', '-t', self.pane))
+            self.assert_pending_exit_resume(path, state, 'pane root was replaced')
+
+    def test_different_pane_on_same_server_is_refused(self):
+        path, state = self.pending_fresh_exit_notice()
+        replacement = self.new_fixture_pane('exec sleep 30')
+        with self.pause_pty_holder(state):
+            self.command(*self.tmux, 'kill-pane', '-t', self.pane)
+            self.assertNotEqual(replacement, self.pane)
+            self.assert_pending_exit_resume(path, state, 'pending original process end and fresh same-session exit notice')
+
+    def test_new_tmux_server_at_same_socket_is_refused(self):
+        path, state = self.pending_fresh_exit_notice()
+        original_pane = self.pane
+        with self.pause_pty_holder(state):
+            self.release_server()
+            self.actor('hold')
+            self.assertEqual(self.pane, original_pane)
+            self.assertEqual(self.command(*self.tmux, 'display-message', '-p', '#{socket_path}'), state['socket'])
+            result = self.invoke('--resume', str(path))
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn('pinned tmux server identity changed', result.stderr)
+            self.assertEqual(self.observed()['pastes'], 0)
+            receipt = json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))
+            self.assertEqual(receipt['status'], 'pending-exit')
+
+    def test_reused_pid_cannot_prove_exit(self):
+        path, state = self.pending_fresh_exit_notice()
+        original = state['identity']['process']
+        before = '    """Only an absent proc entry establishes absence. Other failures propagate."""'
+        entry = self.instrument(before, before + f'\n    if pid == {original["pid"]}:\n'
+                                f'        return {str(int(original["start"]) + 1)!r}, "Z"')
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            self.assert_pending_exit_resume(path, state, 'pinned process PID was reused')
+
+    def test_live_wrapper_is_pending_after_actor_exit(self):
+        self.actor(retain_dead=False)
+        result = self.invoke()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        path, state = self.state()
+        self.assertIsNone(process_token(state['identity']['process']['pid']))
+        root = state['pane_anchor']['root']
+        self.assertEqual(process_token(root['pid']), root)
+        self.assertEqual(self.command(*self.tmux, 'display-message', '-p', '-t', self.pane, '#{pane_dead}'), '0')
+        self.assert_pending_exit_resume(path, state, 'pending original process end and fresh same-session exit notice')
+
+    def test_process_end_still_requires_dead_pane(self):
+        path, state = self.pending_fresh_exit_notice()
+        before = '            return dict(zip(keys, values))'
+        entry = self.instrument(before, '            values[keys.index("pane_dead")] = "0"\n' + before)
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            self.assert_pending_exit_resume(path, state, 'pending original process end and fresh same-session exit notice')
+
+    def test_exit_capture_requires_pane_still_dead(self):
+        path, state = self.pending_fresh_exit_notice()
+        before = '            pane_after = self.exit_pane()  # Recheck continuity across the capture commands.'
+        entry = self.instrument(before, before + '\n            pane_after["pane_dead"] = "0"')
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            self.assert_pending_exit_resume(path, state, 'pending original process end and fresh same-session exit notice')
+
+    def test_legacy_pending_exit_without_pre_exit_pin_is_refused(self):
+        path, state = self.pending_fresh_exit_notice()
+        with self.pause_pty_holder(state):
+            missing_hold = dict(state)
+            del missing_hold['exit_pty']
+            path.write_text(json.dumps(missing_hold))
+            self.assert_pending_exit_resume(path, state, 'trustworthy pre-exit tty hold')
+            del missing_hold['pane_anchor']
+            path.write_text(json.dumps(missing_hold))
+            self.assert_pending_exit_resume(path, state, 'trustworthy pre-exit pane identity')
+
+    def test_empty_process_start_cannot_prove_exit(self):
+        path, state = self.pending_fresh_exit_notice()
+        state['identity']['process']['start'] = ''
+        path.write_text(json.dumps(state))
+        self.assert_pending_exit_resume(path, state, 'trustworthy pre-exit process identity')
+
+    def assert_retained_dead_pane(self):
+        observation = self.command(*self.tmux, 'list-panes', '-a', '-F', '#{pane_id} #{pane_dead}')
+        self.assertIn(self.pane + ' 1', observation.splitlines())
 
     def test_legacy_claude_model_exit_refuses_different_pane_root(self):
         path, pending, receipt_path = self.legacy_claude_model_exit_pending()
@@ -1355,7 +1522,7 @@ class Tests(unittest.TestCase):
     def test_claude_model_exit_cleared_quote_can_mask_real_notice(self):
         self.actor('claude-model-exit-notice-with-quote', retain_dead=True)
         result = self.invoke()
-        self.require_retained_dead_pane_identity(result)
+        self.assert_retained_dead_pane()
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('fresh same-session exit notice', result.stderr)
         state = self.state()[1]
@@ -1366,16 +1533,6 @@ class Tests(unittest.TestCase):
         receipt = json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))
         self.assertEqual(receipt['status'], 'pending-exit')
 
-    def require_retained_dead_pane_identity(self, result):
-        dead, pid = self.command(*self.tmux, 'display-message', '-p', '-t', self.pane,
-                                 '#{pane_dead}|#{pane_pid}').split('|')
-        self.assertEqual(dead, '1')
-        if not pid:
-            # tmux 3.8 can retain the screen while dropping the pinned PID.
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertIn('pane root identity changed', result.stderr)
-            self.fail('retained dead pane has no pane_pid; run this gate on a tmux that retains it, such as 3.6a')
-        self.assertEqual(pid, self.state()[1]['identity']['pane_pid'])
 
     def model_notice_observer(self, pane=FIXTURE_PANE, agent='claude'):
         script = Path(os.environ.get('RETIRE_TEST_SCRIPT', str(HERE / 'retire.sh'))).with_name('retire.py')
@@ -1387,13 +1544,13 @@ class Tests(unittest.TestCase):
         observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': agent}},
                           'exit': {'status': 'ambiguous', 'input_attempted': True, 'enters': 1},
                           'exit_notice': {'session_id': FIXTURE_SESSION, 'before': 0}}
+        observer.exit_pane = lambda: {'pane_dead': '1'}
         return module, observer
 
     def claude_model_notice_fresh(self, command=CLAUDE_MODEL_NOTICE_COMMAND, header=CLAUDE_MODEL_NOTICE_HEADER,
                                   before=0, tail='', opening='', agent='claude', styled_error=None):
         module, observer = self.model_notice_observer(agent=agent)
         observer.state['exit_notice']['before'] = before
-        observer.pane = lambda: [FIXTURE_PANE, '123', 'owned', '/owned']
         styled = opening + header + '\n' + command + '\n' + tail + '\n' + TMUX_DEAD_ROW
         plain = re.sub(r'\x1b\[[0-9;]*m', '', styled)
 
@@ -1428,7 +1585,7 @@ class Tests(unittest.TestCase):
         output = CLAUDE_MODEL_NOTICE_HEADER + '\r\n' + CLAUDE_MODEL_NOTICE_COMMAND + '\x1b[0m\r\n'
         # Keep the owned pane open with no new terminal output after the quote.
         command = shlex.join(['printf', '%s', output]) + '; read -r unused'
-        pane = self.command(*self.tmux, 'new-session', '-d', '-P', '-F', '#{pane_id}', '-x', '40', command)
+        pane = self.new_fixture_pane('-x', '40', command)
         capture = [*self.tmux, 'capture-pane', '-p', '-t', pane]
         self.wait_for(lambda: CLAUDE_MODEL_NOTICE_COMMAND in self.command(*capture, '-J'))
         self.assertNotIn(CLAUDE_MODEL_NOTICE_COMMAND, self.command(*capture))
@@ -1503,7 +1660,7 @@ class Tests(unittest.TestCase):
         observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': 'codex'}},
                           'exit': {'status': 'ambiguous', 'input_attempted': True, 'enters': 1},
                           'exit_notice': {'session_id': session, 'before': 0}}
-        observer.pane = lambda: [FIXTURE_PANE, '123', 'owned', '/owned']
+        observer.exit_pane = lambda: {'pane_dead': '1'}
         banner = 'Token usage: total=42\nTo continue this session, run:\n  codex resume ' + session + '\n'
         with patch.object(module, 'checked', return_value='  codex resume ' + session + '\n'):
             self.assertFalse(observer.fresh_exit_notice(session))
@@ -1535,7 +1692,7 @@ class Tests(unittest.TestCase):
         observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': 'codex'}},
                           'exit': {'status': 'deferred', 'input_attempted': False, 'enters': 1},
                           'exit_notice': {'session_id': session, 'before': 0}}
-        observer.pane = lambda: [FIXTURE_PANE, '123', 'owned', '/owned']
+        observer.exit_pane = lambda: {'pane_dead': '1'}
         banner = 'Token usage: total=42\nTo continue this session, run:\n  codex resume ' + session + '\n'
         with patch.object(module, 'checked', return_value=banner):
             self.assertFalse(observer.fresh_exit_notice(session))
@@ -2481,7 +2638,7 @@ class Tests(unittest.TestCase):
         with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
             result = self.invoke('--handoff', 'codex', 'test-model', '--roles', str(self.roles))
         self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertRegex(result.stderr, 'replacement actor found|pane root identity changed')
+        self.assertIn('ended before exit request', result.stderr)
         self.assertFalse((self.directory / 'spawn.json').exists())
         self.assertFalse((self.directory / 'exit-order.json').exists())
         self.assertEqual(self.observed()['pastes'], 0)  # replacement fixture is live and untouched

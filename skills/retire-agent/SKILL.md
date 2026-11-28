@@ -134,11 +134,14 @@ exit, match the immutable shard UUID to that offered ID and the pinned process:
 Codex uses its unique writable CLI rollout descriptor, which only a session
 running in its own process holds (not a client of the app-server daemon); Claude uses its
 per-process session pointer with start/boot identity. Missing or conflicting
-bindings leave the handoff pending without exit input. Verify all pinned
-original processes ended and a fresh native resume notice
-names the immutable shard's same session UUID; an exit transport result alone is
-insufficient. Never kill a session. Do not stop unrelated services or delete
-worktrees, branches, transcripts, or another actor's files.
+bindings leave the handoff pending without exit input. Verify that the pinned
+agent, native cores and pane root have ended, and that the same retained dead
+pane shows a fresh native notice for the immutable shard's UUID. The script
+pins the live server and pane and holds the original Linux PTY across exit
+and resume. Use a pane configured to remain available after exit. A live
+wrapper shell leaves verification pending. Never kill a session. Do not stop
+unrelated services or delete worktrees, branches, transcripts, or another
+actor's files.
 After verified process exit, collect verified owned resources and empty
 childless shells; distinguish a shell from the agent process and preserve any
 active work or unknown child. Record collection receipts in the existing
@@ -190,32 +193,35 @@ still ends `DONE not observed`, the suffix is another unmeasured form. Capture
 the rows from the marker down, sanitize them into a fixture, and fix the
 recognizer. Do not rerun the resume until something has changed.
 
-### An exited Claude pane with an explicit model notice
+### Recover a pending exit on a retained pane
 
 For an ordinary retirement, confirm these facts read-only before resuming.
 
-- The installed skill recognizes `claude --model MODEL --resume UUID`, and
-  the private receipt is `pending-exit` for the published shard.
+- The installed skill recognizes the native exit notice in the retained pane,
+  and the private receipt is `pending-exit` for the published shard.
 - The existing state records a submitted exit request or an ambiguous request
   with actual input, a positive Enter count, and a pre-request count for the
   shard's session UUID. The request targeted the live pinned process, and
-  all pinned original processes have ended.
-- The retained dead pane is on the recorded socket and still reports the
-  pinned pane PID. Its final native model notice names the immutable shard's
-  UUID. The current same-session count exceeds the saved count.
+  all pinned original processes and the pane root have ended.
+- The state contains the pre-exit pane identity and tty holder record. On
+  the recorded server, the same pane is dead and its tty matches the held
+  descriptor. Its native notice names the immutable shard's UUID, and the
+  current same-session count exceeds the saved count.
 
 Run `scripts/retire.sh %PANE --resume STATE` once. It re-verifies the published
-handoff and current evidence before publishing the retired receipt. It sends
-no exit input. A genuine native notice is printed only at process exit, so
-one from this pinned pane postdates the request sent to the live process even
-if the older baseline counted only plain notices.
+handoff and current exit evidence through observation before publishing the
+retired receipt.
 
 Claude can clear the screen at exit and leave just the final notice. If the
 saved count included a quoted block that vanished, the single genuine notice
-can leave the count unchanged. The receipt stays pending. There is no
-supported recovery when the pane has been collected or when tmux retains it
-without the original pane PID. In these cases preserve the published shard,
-pending receipt, and private transaction state.
+can leave the count unchanged. The receipt stays pending.
+
+If an older version went pending on tmux 3.8 after sending exit and the state
+lacks the pre-exit pane or tty proof, keep the transaction pending and record
+the missing evidence in the private controller record. Preserve the published
+shard, pending receipt, and private state. The shard's verified resume command
+remains available to recover work. The same procedure applies if the pane or
+its tty holder has already gone.
 
 ## Repair verification
 
