@@ -1,0 +1,17 @@
+id: spawn-agent-remain-on-exit-20261128
+title: spawn-agent launcher does not set remain-on-exit, which retire-agent's exit
+  verification needs
+desc: ""
+type: bugfix
+component: spawn-agent
+release:
+reporter: Ted Smith <tedks@riseup.net>
+status: unstarted
+disposition:
+creation_time: 2026-11-28T19:53:19-00:00
+references: []
+log_events:
+- time: 2026-11-28T19:53:19-00:00
+  who: Ted Smith
+  what: created
+  comment: ""
