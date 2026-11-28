@@ -38,11 +38,18 @@
     it installs a per-host policy that the unit does not restart on status
     127 and confirms the unit manager has loaded it; where the unit is not
     installed it skips this. It never edits the unit file linked from the
-    checkout. It records whether the serve unit was active, stops it if so, replaces the
+    checkout. Before changing anything it records the prior selector,
+    policy and unit state. It records whether the serve unit was active, stops it if so, replaces the
     selector by one atomic rename, restores the unit's recorded state and
     verifies it. On a failed start or check it stops the unit, confirms the
-    new process has ended, renames the previous selector back, restores and
-    verifies the unit on the previous copy and exits nonzero. Rerunning after an interruption
+    new process has ended, renames the previous selector back, restores
+    the policy and the unit to their recorded state, verifies selector,
+    policy and unit together and exits nonzero. A rerun after an
+    interruption at any point brings all three to one consistent state.
+  - The policy follows the selector: present exactly when the selector
+    names the Orgs copy and the unit is installed. The quota-service
+    installer installs and verifies it before first starting the unit on a
+    host whose selector names the Orgs copy. Rerunning after an interruption
     completes or reverses the switch from its record.
   - Activation toward the dotfiles copy performs no check of the Orgs copy,
     cannot be blocked by it, and removes the per-host service policy.
@@ -74,7 +81,12 @@
   concurrent activations serialize; a process started before a switch
   loads its later modules from the copy it started in; activation on a
   host with the unit installs and verifies the no-restart policy and a
-  switch back removes it; activation on a host without the unit succeeds;
+  switch back removes it; an interruption after the policy loads and
+  before the rename is resolved by a rerun with no policy left on a host
+  still on the dotfiles copy; a failure after the rename restores selector,
+  policy and unit together; enabling the unit on an already activated host
+  installs the policy before the first start; activation on a host without
+  the unit succeeds;
   pulling the cutover change leaves the linked unit file unchanged.
 - **Interpretation register:** the Interpretations Log of
   `docs/specs/usage-tooling-migration.md`.

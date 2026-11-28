@@ -46,10 +46,14 @@ Goals:
 
 1. One implementation of `token-usage`, `token-tripwire` and
    `token-calibrate`, including the quota service, owned and tested in Orgs.
-   On a host, every caller runs the same copy.
+   On a host, every caller runs the same copy. This spec reaches that with
+   two frozen, identical copies and one selected per host; a single copy
+   remains only after the removal amendment.
 2. No observable change for any consumer at cutover: same command names on
    `PATH` and in `~/.bin`, same subcommands, flags, output and exit codes,
-   same config and state paths, same cron row and unit behaviour.
+   same config and state paths, same cron row and unit behaviour, with one
+   stated exception: on a host running the Orgs copy the serve unit stops
+   instead of restart-looping on exit status 127.
 3. Nothing private is published: no real session, request or rollout ids,
    hostnames, user names, home paths, project or worktree names, pane ids,
    or figures measured on a real host, in any pushed commit.
@@ -126,8 +130,9 @@ Boundaries:
   serve unit was active, stops it if so, renames a new selector into place, starts the
   unit again if it was active, and checks the result. If the start or a
   check fails it stops the unit, confirms the new process has ended, renames
-  the previous selector back, restores the unit on the previous copy,
-  verifies that state and exits nonzero. A command that starts before the rename runs the old copy
+  the previous selector back, restores the policy and the unit to their
+  recorded state on the previous copy, verifies all three and exits
+  nonzero. A command that starts before the rename runs the old copy
   to completion and one that starts after runs the new one; no caller sees a
   mix. Switching back is the same step toward the dotfiles copy and is never
   blocked by the state of the Orgs checkout.
@@ -144,6 +149,10 @@ Boundaries:
   restart-loop on that status. That policy is installed per host by the
   activation step and removed by a switch back; the unit file linked from
   the checkout is not edited, so a pull changes nothing about the service.
+  The policy belongs to the selector's state: a host whose selector names
+  the Orgs copy has it, a host on the dotfiles copy does not, and the
+  quota-service installer applies the same rule when it enables the unit
+  on a host that is already activated.
 - **`token-usage paths`.** `install-token-tripwire` and
   `install-quota-service` import `token_usage` to learn the state directory.
   A read-only subcommand replaces those imports. It lands in dotfiles before
@@ -313,23 +322,28 @@ Removal of the dotfiles copy is not authorised by this spec.
      `token-usage paths`, `snapshot --no-scan` and `token-tripwire status`
      exit 0; one `token-tripwire tick --dry-run` run by the activation step
      through the installed name under the cron row's environment exits 0,
-     so activation itself adds no production writes; a scheduled tick that
-     started after the switch is confirmed by a `calibration.jsonl` row, in
-     the state directory `paths` reports, whose `ts` is later than the
-     second scheduled time after the switch, with `tripwire.json` replaced
-     after that `ts` and no new error line in the cron log (a skipped tick
-     writes neither file and does not count, and a skip logged after the
-     switch restarts the wait); where the unit was active, it is active again, its
+     so activation itself adds no production writes; where the cron row is
+     installed, a scheduled tick that started after the switch is confirmed
+     by the host's own cron record of the row being run at a scheduled time
+     after the switch, together with a `calibration.jsonl` row, in the
+     state directory `paths` reports, whose `ts` falls in that scheduled
+     minute, `tripwire.json` replaced after that `ts`, and no new error
+     line in the cron log (a skipped tick writes neither file and does not
+     count; a calibration error logged after the switch fails the evidence;
+     no manual tick is run until the evidence is recorded); where the unit was active, it is active again, its
      restart count is unchanged afterwards, its main process runs from the
      selected directory, and it answers a snapshot request with a valid
      object; `get_usage` returns a posture.
   Switching back is the same step toward the dotfiles copy. Its evidence is
-  the same list with the selector naming the dotfiles copy and the unit's
-  process running from it. An interrupted run is completed or reversed by
-  rerunning the step: before the rename nothing has changed except a stopped
-  unit, which the rerun restarts from its record; after the rename the rerun
-  finds the selector in place, restores the unit's recorded state and runs
-  the checks. Reading those two store files is an exception to the rule
+  the same list with the selector naming the dotfiles copy, the policy
+  absent and the unit's process running from the dotfiles copy. The step
+  records the prior selector, policy and unit state before it changes any
+  of them, and an interrupted run is completed or reversed by rerunning it:
+  before the rename the only possible changes are an installed policy and a
+  stopped unit, and the rerun either proceeds or restores both from the
+  record; after the rename the rerun finds the selector in place, brings
+  the policy and the unit to the state that selector requires and runs the
+  checks. Reading those two store files is an exception to the rule
   that consumers never read the store. It is limited to this evidence, is
   safe because the program files are frozen, and ends with the window.
 - **M4. Documents.** No behaviour. Orgs owner: `skills/usage/SKILL.md`, the
