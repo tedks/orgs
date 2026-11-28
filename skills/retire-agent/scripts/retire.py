@@ -44,6 +44,13 @@ _CLAUDE_VERSION_ROW = r' +' + _CLAUDE_AUTO_UPDATE
 # a hint after a duration row, at another offset or in another count format
 # stays pending until it is measured and added here.
 _CLAUDE_CLEAR_HINT_ROW = r' +new task\? /clear to save [1-9][0-9]*\.[0-9]k tokens'
+# Text alone can be imitated by a padded assistant row, so the hint must also
+# be the renderer's: the row directly above the composer rule (the renderer's
+# own status slot on 2.1.332), with the measured dark-theme SGR sequence. On
+# the same pane, assistant prose rendered in the default colour and inline
+# code in 153; the hint's words are 246. Another theme stays pending.
+_CLAUDE_CLEAR_HINT_SGR = (r' +\x1b\[38;5;246mnew task\? \x1b\[38;5;153m/clear\x1b\[38;5;246m to save '
+                          r'\x1b\[38;5;153m[1-9][0-9]*\.[0-9]k tokens\x1b\[39m')
 
 
 class Stop(Exception):
@@ -541,8 +548,9 @@ class Retirement:
                 self.state['native_marker_witness'] = True
         if not marker:
             return None
-        tail = [row for row in rows[position + 1:]
-                if row.strip() and not (len(row.strip()) >= 3 and set(row.strip()) == {'─'})]
+        tail_rows = [i for i in range(position + 1, len(rows))
+                     if rows[i].strip() and not (len(rows[i].strip()) >= 3 and set(rows[i].strip()) == {'─'})]
+        tail = [rows[i] for i in tail_rows]
         # Codex renders this measured UI duration/time line after a final reply
         # ("Worked for 2m 59s • 11:30 PM" or "• Worked for 19s • 19:35", with
         # hours for long turns, or the bare time for sub-minute turns).
@@ -564,16 +572,37 @@ class Retirement:
                          and re.fullmatch(r'✻ (?:Baked|Brewed|Churned|Cogitated|Cooked|Crunched|Sautéed|Worked) for (?:[0-5]?[0-9]s|[1-9][0-9]*m [0-5]?[0-9]s) · done (?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM)', tail[0].rstrip())
                          and (len(tail) == 1 or any(re.fullmatch(_CLAUDE_TOKENS_ROW, status) for status in claude_statuses)
                               or any(re.fullmatch(_CLAUDE_VERSION_ROW, status) for status in claude_statuses)))
-        # The shared reader ends at the Claude composer prompt, whose measured
-        # frame has its upper rule directly above: rows[-1] spans the pane.
-        rule = rows[-1].rstrip()
+        # The shared reader ends at the Claude composer prompt, and the
+        # measured Claude frame has its upper rule directly above it, so
+        # rows[-1] is that rule. Only ASCII padding is trimmed: any other
+        # trailing cell is content and keeps completion pending.
+        rule = rows[-1].rstrip(' ')
+        hint = tail[0].rstrip(' ') if tail else ''
         claude_hint = (agent == 'claude'
                        and len(tail) == 1
-                       and re.fullmatch(_CLAUDE_CLEAR_HINT_ROW, tail[0].rstrip())
-                       and len(tail[0].rstrip()) == len(rule) - 2)
+                       and tail_rows == [len(rows) - 2]
+                       and re.fullmatch(_CLAUDE_CLEAR_HINT_ROW, hint)
+                       and len(hint) == len(rule) - 2
+                       and self.claude_hint_rendered(rows))
         if tail and not (codex_footer or claude_footer or claude_hint):
             return None
         return marker[1]
+
+    def claude_hint_rendered(self, rows):
+        """Confirm the renderer's styling on the raw row holding the hint.
+
+        The shared reader's rows are the visible screen's leading lines, so the
+        hint at rows[-2] is visible line len(rows) - 2. A frame that changed
+        between the two reads (other text at that index or at the rule) stays
+        pending.
+        """
+        try:
+            raw = checked(self.tmux + ['capture-pane', '-e', '-p', '-t', self.args.pane], strip=False).split('\n')
+        except Stop:
+            return False
+        index = len(rows) - 2
+        plain = [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[index:index + 2]]
+        return plain == rows[index:] and bool(re.fullmatch(_CLAUDE_CLEAR_HINT_SGR, raw[index]))
 
     def validate_shard(self, path):
         if path.is_symlink() or not path.is_file() or path.resolve() != self.path.parent / (self.state['id'] + '.shard'):

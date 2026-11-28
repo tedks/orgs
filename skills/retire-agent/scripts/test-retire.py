@@ -60,6 +60,22 @@ def claude_hint_rows(mode, event, disposition):
         rows[1] = '  ' + hint.lstrip(' ')
     elif mode.endswith('count'):
         rows[1] = hint.replace('276.8k tokens', '276800 tokens')  # Same width.
+    elif mode.endswith('unstyled'):
+        # Same text, place and width as the renderer's hint, without its SGR.
+        rows[1] = re.sub(r'\x1b\[[0-9;]*m', '', hint)
+    elif mode.endswith('above-blank'):
+        rows.insert(2, '')  # The styled hint, one row away from the composer rule.
+    elif mode.endswith('spoof'):
+        # Council round 1 reproduction: an assistant continuation padded to the
+        # hint's alignment after its own marker, then the empty status slot.
+        rows[1] = re.sub(r'\x1b\[[0-9;]*m', '', hint)
+        rows.insert(2, '')
+    elif mode.endswith('nbsp'):
+        rows[1] = hint + '\u00a0'  # One extra cell after the hint.
+    elif mode.endswith('composer'):
+        # The exact marker typed into the composer while the hint is visible.
+        del rows[0]
+        rows.insert(3, marker)
     elif mode.endswith('quoted'):
         rows[0] = marker.replace('●', ' ', 1)  # The bullet is followed by an SGR reset.
     elif mode.endswith('user'):
@@ -3002,6 +3018,45 @@ class Tests(unittest.TestCase):
     def test_claude_unmeasured_clear_hint_count_is_pending(self):
         self.assert_completion_block_pending('claude-hint-count')
 
+    def test_claude_hint_frame_changed_between_reads_is_pending(self):
+        # The reader saw one hint; the raw capture holds the real styled row
+        # with another count at the same index. The frames differ: pending.
+        spec = importlib.util.spec_from_file_location('retire-hint-frame', Path(os.environ.get('RETIRE_TEST_SCRIPT', str(HERE / 'retire.sh'))).with_name('retire.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        raw = claude_hint_rows('claude-hint', '0' * 32, 'DONE')
+        screen = self.directory / 'hint-screen'
+        screen.write_text('\n'.join(raw) + '\n')
+        observer = module.Retirement.__new__(module.Retirement)
+        observer.tmux = ['sh', '-c', 'cat "$0"', str(screen)]  # Appended capture arguments are ignored.
+        observer.args = SimpleNamespace(pane='%1')
+        plain = [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[:3]]
+        self.assertTrue(observer.claude_hint_rendered(plain))
+        moved = plain[:1] + [plain[1].replace('276.8k', '101.5k')] + plain[2:]
+        self.assertFalse(observer.claude_hint_rendered(moved))
+
+    def test_claude_unstyled_clear_hint_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-unstyled')
+
+    def test_claude_clear_hint_not_above_rule_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-above-blank')
+
+    def test_claude_padded_assistant_hint_spoof_is_pending(self):
+        # Reproduction from council round 1. Two guards refuse it (position and
+        # styling), so no single mutation turns this test red; each guard has its
+        # own twin above.
+        self.assert_completion_block_pending('claude-hint-spoof')
+
+    def test_claude_clear_hint_trailing_nbsp_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-nbsp')
+
+    def test_claude_composer_marker_with_hint_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-composer')
+        self.assertNotIn('exit', self.state()[1])
+
+    # The quoted and user-marker twins are refused before the hint predicate
+    # (no assistant marker row), so no mutation of that predicate can fail
+    # them; they stay as regressions on the real rows.
     def test_claude_clear_hint_quoted_marker_is_pending(self):
         self.assert_completion_block_pending('claude-hint-quoted')
 
