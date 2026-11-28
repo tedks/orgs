@@ -1587,7 +1587,7 @@ class Tests(unittest.TestCase):
         spec.loader.exec_module(module)
         observer = module.Retirement(SimpleNamespace(pane=pane))
         observer.tmux = ['tmux', '-L', 'inert-owned-unit-test']
-        observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': agent}},
+        observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': agent, 'pid': 123}},
                           'exit': {'status': 'ambiguous', 'input_attempted': True, 'enters': 1},
                           'exit_notice': {'session_id': FIXTURE_SESSION, 'before': 0}}
         observer.exit_pane = lambda: {'pane_dead': '1'}
@@ -1596,16 +1596,24 @@ class Tests(unittest.TestCase):
     def claude_model_notice_fresh(self, command=CLAUDE_MODEL_NOTICE_COMMAND, header=CLAUDE_MODEL_NOTICE_HEADER,
                                   before=0, model_before=None, tail='', opening='', agent='claude',
                                   styled_error=None, dead_metadata='1|0|240|' + TMUX_DEAD_TIME,
-                                  dead_row=TMUX_DEAD_ROW, plain_capture=None):
+                                  dead_row=TMUX_DEAD_ROW, plain_capture=None, process_pid=123, metadata_error=None,
+                                  reported_pid='123'):
         module, observer = self.model_notice_observer(agent=agent)
+        observer.state['identity']['process']['pid'] = process_pid
         if model_before is None:
             observer.state['exit_notice']['before'] = before
         else:
             observer.state['exit_notice'] = {'session_id': FIXTURE_SESSION, 'plain': before, 'model': model_before}
-        observer.exit_pane = lambda: {'pane_dead': '1', 'dead_metadata': dead_metadata}
         styled = opening + header + '\n' + command + '\n' + tail + '\n' + dead_row
         if plain_capture is None:
             plain_capture = re.sub(r'\x1b\[[0-9;]*m', '', styled)
+
+        def observe_pane():
+            if metadata_error is not None:
+                raise metadata_error
+            return {'pane_dead': '1', 'pane_pid': reported_pid, 'dead_metadata': dead_metadata}
+
+        observer.exit_pane = observe_pane
 
         def capture(args, **_):
             if '-e' not in args:
@@ -1656,6 +1664,22 @@ class Tests(unittest.TestCase):
         self.assertFalse(self.claude_model_notice_fresh(dead_metadata='1|0|20|' + TMUX_DEAD_TIME,
                                                        dead_row=TMUX_DEAD_ROW[:24] + '\n'))
 
+    def test_claude_model_exit_rejects_earlier_run_footer_under_wrapper(self):
+        self.assertTrue(self.claude_model_notice_fresh())
+        # Same final footer and dead root, but the pinned run was a child
+        # of that root. The footer may be left over from the earlier run.
+        self.assertFalse(self.claude_model_notice_fresh(process_pid=456))
+        self.assertTrue(self.claude_model_notice_fresh(process_pid=456, opening=CLAUDE_PLAIN_NOTICE))
+
+    def test_claude_model_exit_requires_matching_dead_metadata_pid(self):
+        self.assertFalse(self.claude_model_notice_fresh(reported_pid='456'))
+        self.assertTrue(self.claude_model_notice_fresh(reported_pid=''))
+
+    def test_claude_model_exit_metadata_read_failure_stays_pending(self):
+        for error in (OSError('fixture metadata unavailable'), subprocess.TimeoutExpired('tmux', 1)):
+            with self.subTest(error=error):
+                self.assertFalse(self.claude_model_notice_fresh(metadata_error=error))
+
     def test_claude_model_exit_notice_stale_count_is_pending(self):
         output = CLAUDE_MODEL_NOTICE_HEADER + '\r\n' + CLAUDE_MODEL_NOTICE_COMMAND + '\x1b[0m\r\n'
         # Leave the quote untouched when the owned pane exits.
@@ -1667,6 +1691,9 @@ class Tests(unittest.TestCase):
         self.assertNotIn(CLAUDE_MODEL_NOTICE_COMMAND, self.command(*capture))
         module, observer = self.model_notice_observer(pane=pane)
         observer.tmux = self.tmux
+        pane_pid = module.pane_observation(self.tmux, pane)['pane_pid']
+        observer.state['identity']['pane_pid'] = pane_pid
+        observer.state['identity']['process']['pid'] = int(pane_pid)
         observer.exit_pane = lambda: module.pane_observation(self.tmux, pane)
         counts, _ = observer.exit_notices(FIXTURE_SESSION)
         self.assertEqual(counts, {'plain': 0, 'model': 1})

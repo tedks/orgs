@@ -207,15 +207,17 @@ For an ordinary retirement, confirm these facts read-only before resuming.
   the recorded server, the same pane is dead and its tty matches the held
   descriptor. Its native notice names the immutable shard's UUID, and the
   count for that form exceeds its saved count. Claude's explicit-model
-  notice requires the matching status-0 row from tmux.
+  notice requires Claude to be the pinned pane root and to be followed by
+  the matching status-0 row from tmux. A reported dead-pane PID must match
+  the pinned root PID.
 
 Run `scripts/retire.sh %PANE --resume STATE` once. It re-verifies the published
 handoff and current exit evidence through observation before publishing the
 retired receipt.
 
 Claude can clear the screen at exit and leave just the final notice. If the
-saved model count included a quoted model block that vanished, the single genuine notice
-can leave the count unchanged. The receipt stays pending.
+saved model count included a quoted model block that vanished, the single
+genuine notice can leave the count unchanged. The receipt stays pending.
 
 If an older version went pending on tmux 3.8 after sending exit and the state
 lacks the pre-exit pane or tty proof, keep the transaction pending and record

@@ -232,7 +232,12 @@ the unstyled capture and dim model notices from the styled capture. Either
 form can independently establish freshness by increasing its own count.
 For the model form, the newest match must be the final notice, followed
 by tmux's status-0 dead-pane row for that pane's recorded exit. A narrow
-pane can clip the row at the pane width.
+pane can clip the row at the pane width. Claude must have been the pinned
+pane root. The dead metadata must come from the anchored pane, and any
+reported dead-pane PID must match the pinned root. A failed metadata
+read leaves the model notice unverified.
+A custom dead-pane format or a post-exit resize leaves the explicit-model lane
+pending if the captured row differs from tmux's default row at the current width.
 `Shutting down...` is optional. Before requesting exit, save the two counts
 without terminal text. A legacy `before` count is the plain baseline, and
 the legacy model baseline is zero. If the Claude styled capture fails before

@@ -935,7 +935,8 @@ class Retirement:
         # naming the immutable shard's UUID can establish this lifecycle receipt.
         if not re.fullmatch(_SESSION_UUID, session_id):
             raise Stop('handoff verified; exit pending verifiable native session UUID')
-        agent = self.state['identity']['process']['agent']
+        process = self.state['identity']['process']
+        agent = process['agent']
         command = {'codex': 'codex resume ', 'claude': 'claude --resume '}.get(agent)
         if command is None:
             raise Stop('handoff verified; native exit notice unsupported')
@@ -961,10 +962,24 @@ class Retirement:
         counts['model'] = len(models)
         if before is None or not models:
             return counts, False
+        # A shell or wrapper can retain a footer from an earlier harness run.
+        # Require the pinned harness itself to be the root that tmux saw exit.
+        pane_pid = self.state['identity']['pane_pid']
+        if str(process['pid']) != pane_pid:
+            return counts, False
 
         # tmux clips its default dead-pane row to the pane width, even with
         # -J. Reconstruct that exact row from tmux's own exit metadata.
-        dead = self.exit_pane()['dead_metadata'].split('|')
+        try:
+            pane = self.exit_pane()
+        except (Stop, OSError, subprocess.SubprocessError):
+            return counts, False
+        # The pane anchor and held PTY bind the metadata even when tmux
+        # omits the dead root PID. A reported PID must still agree.
+        reported_pid = pane['pane_pid']
+        if reported_pid and reported_pid != pane_pid:
+            return counts, False
+        dead = pane['dead_metadata'].split('|')
         if len(dead) != 4 or dead[:2] != ['1', '0'] or not dead[2].isdigit() or not dead[3]:
             return counts, False
         width = int(dead[2])
@@ -991,9 +1006,11 @@ class Retirement:
             raise Stop('handoff verified; missing trustworthy pre-request exit notice baseline')
         try:
             counts, model_footer = self.exit_notices(session_id, before=plain_before)
-            pane_after = self.exit_pane()  # Recheck continuity across the capture commands.
             fresh = counts['plain'] > plain_before or (model_footer and counts['model'] > model_before)
-            return fresh and pane_after['pane_dead'] == '1'
+            if not fresh:
+                return False
+            pane_after = self.exit_pane()  # Recheck continuity across the capture commands.
+            return pane_after['pane_dead'] == '1'
         except PaneAbsent:
             return False  # Process end without a retained notice is not retirement.
 
