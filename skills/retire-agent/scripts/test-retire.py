@@ -1496,6 +1496,12 @@ class Tests(unittest.TestCase):
             path.write_text(json.dumps(missing_hold))
             self.assert_pending_exit_resume(path, state, 'trustworthy pre-exit pane identity')
 
+    def test_empty_process_start_cannot_prove_exit(self):
+        path, state = self.pending_fresh_exit_notice()
+        state['identity']['process']['start'] = ''
+        path.write_text(json.dumps(state))
+        self.assert_pending_exit_resume(path, state, 'trustworthy pre-exit process identity')
+
     def assert_retained_dead_pane(self):
         observation = self.command(*self.tmux, 'list-panes', '-a', '-F', '#{pane_id} #{pane_dead}')
         self.assertIn(self.pane + ' 1', observation.splitlines())

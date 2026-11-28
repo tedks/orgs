@@ -43,7 +43,7 @@ checkout was reset only after those dispositions were verified.
 ## Isolated retirement tests
 
 Run `scripts/test-retire.py` and `scripts/test-mutations.py` with tmux 3.8.
-Put tmux 3.6a first on `PATH` to check the exit paths on that release. Each
-behavioral test starts an isolated server, and the end-to-end tests require
-both versions to complete the retirement. Run the `missing dead pane PID
+Put tmux 3.6a first on `PATH` to check the exit paths on that release. The
+terminal fixtures use isolated servers and require both versions to complete
+retirement. Run the `missing dead pane PID
 accepted` mutation on 3.8, where the server drops that field.
