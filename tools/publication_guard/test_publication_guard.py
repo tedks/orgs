@@ -1,3 +1,4 @@
+import base64
 import contextlib
 from datetime import date
 import gzip
@@ -91,6 +92,19 @@ ENCODED_TERM = "grove" + ".mistral"
 #    escapes are out of scope; unquoted brackets around an allowed path fail closed
 #    (test_documented_escape_and_path_boundaries).
 # 15. PR verification distinguishes zero new findings from earlier reviewed matches.
+# Round 4
+# 1. Standard encoder wrap with a shorter last line: opaque on physical and
+#    decoded JSON lines (test_wrapped_standard_encoder_short_last_line).
+# 2. Commit-only push uses the reviewed SHA and an explicit ref.
+# 3. A letter before an allowed dashed UUID: hard. A mixed-case letters-only
+#    body: clean (test_uuid_left_extension_precedes_allowlist,
+#    test_opaque_requires_digit_class).
+# 4. Lower-case macOS-like URL path, low-diversity hex, and complete directives:
+#    clean. A wrapped JSON body is reported once (test_macos_home_prefix_case_and_exact_allowlist,
+#    test_long_hex_run_is_opaque, test_complete_printf_directives_with_modifiers,
+#    test_decoded_json_long_body_once).
+# 5–7. Slash-heavy opaque data, concatenated literals, digest ambiguity, and
+#    separate handling of surrogate halves: documented in the README.
 
 
 class PublicationGuard(unittest.TestCase):
@@ -157,6 +171,16 @@ class PublicationGuard(unittest.TestCase):
     def test_uuid(self):
         value = "-".join(("dd5aabc4", "c2df", "4276", "8111", "abcddcba3210"))
         self.identifier_twin("uuid", value.upper(), value)
+
+    def test_uuid_left_extension_precedes_allowlist(self):
+        value = "-".join(("dd5aabc4", "c2df", "4276", "8111", "abcddcba3210"))
+        self.allow.write_text(value + "\n", encoding="utf-8")
+        self.write("x" + value)
+        rc, rows, _ = self.scan("--allow-list", self.allow, "--unredacted")
+        self.assertEqual(rc, 1)
+        self.assertEqual([(row["rule"], row["match"]) for row in rows[:-1]], [("uuid", "x" + value)])
+        self.write(value + "\nx:" + value)
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
 
     def test_request_id(self):
         value = "req_" + "4ebcf1" * 4
@@ -265,6 +289,8 @@ class PublicationGuard(unittest.TestCase):
         self.write(upper)
         self.allow.write_text(upper, encoding="utf-8")
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
+        self.write("https://example.invalid/" + "users/morrow/work\n/" + "uSeRS/morrow/work")
+        self.assertEqual(self.scan()[0], 0)
 
     def test_home_path_punctuation_and_quoted_space(self):
         allowed = guard.HOME_PREFIX + "example/item"
@@ -315,6 +341,17 @@ class PublicationGuard(unittest.TestCase):
         filename.rename(self.tree / f"pane_{pane}.2f")
         self.write(f"format {pane}$s and {pane}.2f.log")
         self.assertEqual(self.scan()[0], 0)
+
+    def test_complete_printf_directives_with_modifiers(self):
+        percent = "%"
+        modifiers = (("hh", "d"), ("h", "d"), ("ll", "d"), ("l", "d"), ("L", "f"),
+                     ("j", "d"), ("z", "u"), ("t", "d"))
+        self.write("\n".join([percent + "12.3" + mark + conv for mark, conv in modifiers] + [
+            percent + "1$-10s", percent + "2$-08.4lld",
+        ]))
+        self.assertEqual(self.scan()[0], 0)
+        self.write("\n".join((percent + "12.3ll", percent + "1$-10")))
+        self.assertEqual([row["rule"] for row in self.scan()[1][:-1]], ["pane-id", "pane-id"])
 
     def test_deny_list_whole_word_and_redaction(self):
         self.write(f"known {TERM.upper()}.", name=f"{TERM}.txt")
@@ -538,6 +575,31 @@ class PublicationGuard(unittest.TestCase):
         self.write(json.dumps({"blob": f"{chunk}\nnot a body\n{chunk}\n{chunk}"}))
         self.assertEqual(self.scan()[0], 0)
 
+    def test_wrapped_standard_encoder_short_last_line(self):
+        encoded = base64.encodebytes(bytes(range(150))).decode("ascii")
+        lines = encoded.splitlines()
+        self.assertEqual([len(line) for line in lines], [76, 76, 48])
+        for rendered in (encoded, json.dumps({"blob": encoded})):
+            with self.subTest(rendered=rendered):
+                self.write(rendered)
+                rc, rows, _ = self.scan("--unredacted")
+                self.assertEqual(rc, 1)
+                self.assertEqual([(row["rule"], row["match"]) for row in rows[:-1]],
+                                 [("opaque", "".join(lines))])
+        truncated = "\n".join(lines[:-1])
+        for rendered in (truncated, json.dumps({"blob": truncated})):
+            self.write(rendered)
+            self.assertEqual(self.scan()[0], 0)
+
+    def test_decoded_json_long_body_once(self):
+        encoded = base64.encodebytes(bytes(index % 251 for index in range(285))).decode("ascii")
+        self.assertEqual([len(line) for line in encoded.splitlines()], [76] * 5)
+        self.write(json.dumps({"blob": encoded}))
+        rc, rows, _ = self.scan("--unredacted")
+        self.assertEqual(rc, 1)
+        self.assertEqual([(row["rule"], row["match"]) for row in rows[:-1]],
+                         [("opaque", "".join(encoded.splitlines()))])
+
     def test_base64_with_path_shaped_prefix(self):
         body = "rk9vXy9" * 30
         for prefix in ("/", "logs/"):
@@ -548,11 +610,22 @@ class PublicationGuard(unittest.TestCase):
         self.assertEqual(self.scan()[0], 0)
 
     def test_long_hex_run_is_opaque(self):
-        body = "7a1f" * 50
+        body = "7a1f4b2c" * 25
         self.write(body)
         self.assertEqual([r["rule"] for r in self.scan()[1][:-1]], ["opaque"])
         self.write(body[:-1])
         self.assertEqual(self.scan()[0], 0)
+        for low_diversity in ("f" * 200, "7a1F4b2" * 30):
+            self.write(low_diversity)
+            self.assertEqual(self.scan()[0], 0)
+
+    def test_opaque_requires_digit_class(self):
+        letters = "BravoxQz" * 30
+        self.assertEqual(len(letters), 240)
+        self.write(letters)
+        self.assertEqual(self.scan()[0], 0)
+        self.write(letters + "1")
+        self.assertEqual([row["rule"] for row in self.scan()[1][:-1]], ["opaque"])
 
     def test_wrapped_opaque_requires_wide_consistent_lines(self):
         line = "Rk9vXy9-" * 10
@@ -1067,6 +1140,8 @@ def run_mutations(baseline, mutations, stream):
 
 def mutation_check():
     original_uuid = guard.uuid_matches
+    original_wrapped = guard.wrapped_bodies
+    original_decoded_wrapped = guard.decoded_wrapped
     original_home = guard.home_tokens
     original_deny = guard.deny_patterns
     original_list_entries = guard.list_entries
@@ -1108,6 +1183,24 @@ def mutation_check():
     def without_compact_pair(line):
         return (result for result in original_uuid(line)
                 if result[0] != "codex-id" or len(result[1]) != 64)
+
+    def without_uuid_left_extension(line):
+        for rule, value, column, entry in original_uuid(line):
+            if rule == "uuid":
+                first = guard.DELIMITED_UUID.search(value).start()
+                value, column = value[first:], column + first
+            yield rule, value, column, entry
+
+    def without_short_final_line(lines):
+        for number, body, context in original_wrapped(lines):
+            first, *_, last = context.splitlines()
+            if len(first) == len(last):
+                yield number, body, context
+
+    def duplicate_decoded_interior(view):
+        yield from original_decoded_wrapped(view)
+        for _, body, _ in original_wrapped(enumerate(view.splitlines(), 1)):
+            yield "opaque", body, 1, None
 
     def partial_link_target(self, line, location, surface, number, member=None):
         if surface == "link":
@@ -1211,7 +1304,7 @@ def mutation_check():
          patch.object(guard, "MIN_WRAP_WIDTH", 1)),
         ("macos-home-prefix-case", "test_macos_home_prefix_case_and_exact_allowlist",
          patch.object(guard, "HOME_START", re.compile(guard.HOME_START.pattern.replace(
-             f"(?i:{re.escape(guard.MACOS_HOME)})", re.escape(guard.MACOS_HOME))))),
+             "|" + re.escape(guard.MACOS_HOME.upper()), "")))),
         ("deny-case-prefilter", "test_deny_prefilter_matches_unicode_case_variants",
          patch.object(guard, "deny_matches", old_case_prefilter)),
         ("missing-list-diagnostic", "test_missing_lists_are_distinct_from_invalid_encoding",
@@ -1222,6 +1315,21 @@ def mutation_check():
          keep_git_override("GIT_OBJECT_DIRECTORY")),
         ("empty-diff-is-not-empty-tree", "test_git_resolved_endpoints_and_whole_history",
          patch.object(guard.Audit, "summary", count_empty_diff_as_tree)),
+        ("short-final-wrap-line", "test_wrapped_standard_encoder_short_last_line",
+         patch.object(guard, "wrapped_bodies", without_short_final_line)),
+        ("uuid-left-extension", "test_uuid_left_extension_precedes_allowlist",
+         patch.object(guard, "uuid_matches", without_uuid_left_extension)),
+        ("opaque-digit-class", "test_opaque_requires_digit_class",
+         patch.object(guard, "BASE64_CLASSES", guard.BASE64_CLASSES[:-1])),
+        ("opaque-hex-diversity", "test_long_hex_run_is_opaque",
+         patch.object(guard, "MIN_HEX_DISTINCT", 1)),
+        ("macos-home-unrestricted-case", "test_macos_home_prefix_case_and_exact_allowlist",
+         patch.object(guard, "HOME_START", re.compile(guard.HOME_START.pattern, re.I))),
+        ("printf-complete-directive", "test_complete_printf_directives_with_modifiers",
+         patch.object(guard, "PRINTF_DIRECTIVE", re.compile(
+             r"%[0-9]+(?:\.[0-9]+|\$(?:[0-9]+)?(?:\.[0-9]+)?)[diouxXeEfFgGaAcCsSpn](?!\w)"))),
+        ("duplicate-decoded-json-body", "test_decoded_json_long_body_once",
+         patch.object(guard, "decoded_wrapped", duplicate_decoded_interior)),
     ])
     for rule, prefix in guard.PREFIXES[3:]:
         method = "test_" + rule.replace("-", "_") + "_boundary"

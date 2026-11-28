@@ -20,7 +20,13 @@ four rounds of percent or backslash decoding. Templates that double
 the percent signs in each escape of an encoded path can also retain
 their encoded form.
 Deny matching removes zero-width characters and normalizes text to NFC.
-It does not perform full Unicode case folding.
+It does not perform full Unicode case folding. The backslash decoder
+handles each escaped UTF-16 surrogate half separately.
+
+Opaque detection supplements the ID, path, and deny-list rules. Regularly
+spaced slashes can make a base64 body resemble a dotless path.
+Wrapped base64 written as concatenated source string literals requires
+review of the source.
 
 The input paths come from Linux and macOS. Windows home paths and
 upper-case spellings of Linux home prefixes are outside that coverage.
@@ -49,9 +55,10 @@ result and requires BASE to be an ancestor of TIP. Shallow history and
 active grafts produce hard findings. An empty range, empty directory scan,
 or empty commit tree in full-tree mode requires `--allow-empty-scan`.
 
-Use `git push --no-follow-tags origin "$branch"` for the commit-only
-publication push. Review annotated tag objects separately before pushing
-tags. Git mode audits the commits a tag points to.
+Use `git push --no-follow-tags origin <reviewed-sha>:refs/heads/<branch>`
+to push the exact audited commit to the publication branch. Review
+annotated tag objects separately before pushing tags. Git mode audits
+the commits a tag points to.
 
 The guard checks relative names, including directory names, symlink
 targets, and UTF-8 file content. It scans gzip member payloads both
@@ -67,21 +74,24 @@ variant nibbles, request, response, reasoning, message, and tool and
 function call IDs, home paths, and tmux pane targets. The compact UUID
 rule checks hex runs of 32 to 39 characters and pairs of adjacent compact
 UUIDs. A 40-character hex run is indistinguishable from a Git commit
-hash. If a digest matches the rule, add it to the allow list after review.
+hash. An MD5 digest can resemble a compact UUID, and a SHA-256 digest can
+resemble two adjacent compact UUIDs. Add exact known digests to the allow
+list after review.
 Home path detection covers common Linux home roots, the root account,
-named-user tilde paths, and case variants of the macOS home prefix.
+named-user tilde paths, and the title-case and upper-case macOS prefixes.
 A standalone percent-prefixed number is treated as a pane target.
 Percentages and complete format directives are ignored. The optional
 allow list accepts exact synthetic IDs and home path tokens, one per
 line. Path exemptions are case-sensitive and apply to the complete
 target of a symlink.
 
-The guard reports long hex or diverse base64-looking runs of at least
-200 characters as hard opaque findings. It also checks runs wrapped
-across consecutive base64-only lines of the same width, each at least
-40 characters, including in decoded text. Reviewers inspect encoded
-inputs and contextual details such as measured figures without
-corresponding deny-list entries.
+The guard reports hex runs of at least 200 characters with at least eight
+distinct hex digits, and base64-looking runs of at least 200 characters
+with upper-case letters, lower-case letters, and digits. For wrapped
+bodies, the initial lines share a width of at least 40 characters and
+the final line can be shorter. This works in decoded text as well.
+Reviewers inspect encoded inputs and contextual details such as measured
+figures without corresponding deny-list entries.
 
 The deny list accepts one ASCII term per line after NFC normalization
 and removal of zero-width characters. Matching applies the same text

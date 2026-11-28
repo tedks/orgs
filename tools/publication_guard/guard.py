@@ -23,16 +23,18 @@ COMPACT_UUID = re.compile(r"[0-9a-f]{12}[1-8][0-9a-f]{3}[89ab][0-9a-f]{15}", re.
 HEX_TOKEN = re.compile(r"(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])", re.I)
 DELIMITED_UUID = re.compile(UUID, re.I)
 ID_SUFFIX = r"[a-z0-9][a-z0-9_-]*(?![a-z0-9_-])"
-HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "root/")
 MACOS_HOME = "/" + "Users/"
+HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "root/", MACOS_HOME, MACOS_HOME.upper())
 HOME_START = re.compile(
-    "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + ")|(?i:" + re.escape(MACOS_HOME)
-    + r")|(?<![\w~])~[A-Za-z_][A-Za-z0-9_.-]*"
+    "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + r")|(?<![\w~])~[A-Za-z_][A-Za-z0-9_.-]*"
 )
-FORMAT_TAIL = r"(?:\.[0-9]+|\$(?:[0-9]+)?(?:\.[0-9]+)?)[diouxXeEfFgGaAcCsSpn](?!\w)"
+PRINTF_DIRECTIVE = re.compile(
+    r"%(?:[0-9]+\$)?[-+#0 ']*(?:[0-9]+|\*(?:[0-9]+\$)?)?"
+    r"(?:\.(?:[0-9]*|\*(?:[0-9]+\$)?))?(?:hh|ll|[hlLjzt])?"
+    r"[diouxXeEfFgGaAcCsSpn](?!\w)"
+)
 IDENTIFIERS = (
-    ("pane-id", re.compile(r"(?:(?<![\w%])|(?<=_)|(?<=-t)|(?<=\bpane))%[0-9]+(?![\w%]|"
-                           + FORMAT_TAIL + ")", re.I)),
+    ("pane-id", re.compile(r"(?:(?<![\w%])|(?<=_)|(?<=-t)|(?<=\bpane))%[0-9]+(?![\w%])", re.I)),
 )
 PREFIXES = (
     ("request-id", "req"),
@@ -50,8 +52,10 @@ PREFIXED_IDS = tuple(
 BASE64_CHARS = r"[A-Za-z0-9+/_-]"
 BASE64_LINE = re.compile(BASE64_CHARS + r"+={0,2}")
 BASE64_RUN = re.compile(BASE64_CHARS + r"{200,}={0,2}")
+BASE64_CLASSES = tuple(re.compile(pattern) for pattern in ("[A-Z]", "[a-z]", "[0-9]"))
 MIN_WRAP_WIDTH = 40
 HEX_RUN = re.compile(r"[0-9a-f]+", re.I)
+MIN_HEX_DISTINCT = 8
 DOTLESS_PATH = re.compile(r"/?(?:[A-Za-z0-9_-]{1,32}/){2,}[A-Za-z0-9_-]{0,32}")
 FORMAT_PERCENT = re.compile(r"(%%3[0-9](?![%\w$]|\.[0-9]))")
 GIT_OPTIONS = ("--no-replace-objects",)
@@ -231,12 +235,11 @@ def opaque_path(value):
 
 def opaque_body(value):
     unpadded = value.rstrip("=")
-    return len(unpadded) >= 200 and (
-        HEX_RUN.fullmatch(unpadded) is not None or (
-            re.search("[A-Z]", value) and re.search("[a-z]", value)
-            and re.search("[0-9]", value) and not opaque_path(value)
-        )
-    )
+    if len(unpadded) < 200:
+        return False
+    if HEX_RUN.fullmatch(unpadded):
+        return len(set(unpadded.lower())) >= MIN_HEX_DISTINCT
+    return all(pattern.search(value) for pattern in BASE64_CLASSES) and not opaque_path(value)
 
 
 def wrapped_bodies(lines):
@@ -245,15 +248,18 @@ def wrapped_bodies(lines):
     width = 0
     for number, line in chain(lines, ((None, ""),)):
         part = line.strip()
-        candidate = (len(part) >= MIN_WRAP_WIDTH and BASE64_LINE.fullmatch(part)
-                     and not opaque_path(part))
+        candidate = BASE64_LINE.fullmatch(part) and not opaque_path(part)
+        if parts and candidate and len(part) < width and not parts[-1].endswith("="):
+            # Encoders can emit a shorter final line, including without padding.
+            parts.append(part)
+            candidate = False
         if parts and (not candidate or len(part) != width or parts[-1].endswith("=")):
             if len(parts) > 1:
                 body = "".join(parts)
                 if opaque_body(body):
                     yield start, body, "\n".join(parts)
             parts.clear()
-        if candidate:
+        if candidate and len(part) >= MIN_WRAP_WIDTH:
             if not parts:
                 start, width = number, len(part)
             parts.append(part)
@@ -262,20 +268,18 @@ def wrapped_bodies(lines):
 def decoded_wrapped(view):
     if "\n" not in view and "\r" not in view:
         return
-    # Decoding a JSON string leaves its quotes and record punctuation in place.
-    # Check the whole view and each quoted payload in that view.
-    payloads = [(1, view)]
-    payloads.extend((match.start(1) + 1, match[1])
-                    for match in re.finditer(r'(?="([^"]*)")', view)
-                    if "\n" in match[1] or "\r" in match[1])
-    seen = Counter()
-    for start, payload in payloads:
-        occurrences = Counter()
+    def scan_payload(start, payload):
         for _, body, _ in wrapped_bodies(enumerate(payload.splitlines(), 1)):
-            occurrences[body] += 1
-            if occurrences[body] > seen[body]:
-                seen[body] = occurrences[body]
-                yield "opaque", body, start, None
+            yield "opaque", body, start + 1, None
+
+    # Scan quoted payloads separately so their interior lines are only read once.
+    start = 0
+    for match in re.finditer(r'(?="([^"]*)")', view):
+        if "\n" in match[1] or "\r" in match[1]:
+            yield from scan_payload(start, view[start:match.start()])
+            yield from scan_payload(match.start(1), match[1])
+            start = match.end(1) + 1
+    yield from scan_payload(start, view[start:])
 
 
 def matches(line, deny):
@@ -283,6 +287,8 @@ def matches(line, deny):
     yield from home_tokens(line)
     for rule, pattern in IDENTIFIERS:
         for match in pattern.finditer(line):
+            if rule == "pane-id" and PRINTF_DIRECTIVE.match(line, match.start()):
+                continue
             yield rule, match[0], match.start() + 1, None
     for rule, pattern in PREFIXED_IDS:
         for match in pattern.finditer(line):
