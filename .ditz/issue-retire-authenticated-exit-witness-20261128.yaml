@@ -14,3 +14,15 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-28T18:16:45-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Raised twice in council on draft PR #70 and ruled out of that change''s
+    scope. retire.py confirms an agent''s exit from the native resume notice shown
+    in its terminal pane. Pane text is not authenticated: a process with access to
+    the pane''s terminal can write the same cells. Process end and the session binding
+    are verified separately, so the exposure is a retiring agent that deliberately
+    writes the notice to its own pane and then ends its own process. An authenticated
+    witness would be a record the harness itself writes on exit (a session-end hook
+    writing the session id, process identity and time to a private file the controller
+    reads), checked alongside or instead of the pane text. Candidate work, not assigned.'
