@@ -5,6 +5,7 @@ from collections import Counter
 import gzip
 import hashlib
 import io
+from itertools import chain
 import json
 import os
 from pathlib import Path
@@ -19,15 +20,19 @@ import zlib
 HOME_PREFIX = "/ho" + "me/"
 UUID = r"[0-9a-f]{8}(?:[-_][0-9a-f]{4}){3}[-_][0-9a-f]{12}"
 COMPACT_UUID = re.compile(r"[0-9a-f]{12}[1-8][0-9a-f]{3}[89ab][0-9a-f]{15}", re.I)
-HEX_TOKEN = re.compile(r"(?<![a-z0-9])[0-9a-f]{32,}(?![a-z0-9])", re.I)
+HEX_TOKEN = re.compile(r"(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])", re.I)
 DELIMITED_UUID = re.compile(UUID, re.I)
 ID_SUFFIX = r"[a-z0-9][a-z0-9_-]*(?![a-z0-9_-])"
-HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "Users/", "/" + "root/")
+HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "root/")
+MACOS_HOME = "/" + "Users/"
 HOME_START = re.compile(
-    "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + r")|(?<![\w~])~[A-Za-z_][A-Za-z0-9_.-]*"
+    "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + ")|(?i:" + re.escape(MACOS_HOME)
+    + r")|(?<![\w~])~[A-Za-z_][A-Za-z0-9_.-]*"
 )
+FORMAT_TAIL = r"(?:\.[0-9]+|\$(?:[0-9]+)?(?:\.[0-9]+)?)[diouxXeEfFgGaAcCsSpn](?!\w)"
 IDENTIFIERS = (
-    ("pane-id", re.compile(r"(?:(?<![\w%])|(?<=_)|(?<=-t)|(?<=\bpane))%[0-9]+(?![\w%$]|\.[0-9])", re.I)),
+    ("pane-id", re.compile(r"(?:(?<![\w%])|(?<=_)|(?<=-t)|(?<=\bpane))%[0-9]+(?![\w%]|"
+                           + FORMAT_TAIL + ")", re.I)),
 )
 PREFIXES = (
     ("request-id", "req"),
@@ -45,6 +50,9 @@ PREFIXED_IDS = tuple(
 BASE64_CHARS = r"[A-Za-z0-9+/_-]"
 BASE64_LINE = re.compile(BASE64_CHARS + r"+={0,2}")
 BASE64_RUN = re.compile(BASE64_CHARS + r"{200,}={0,2}")
+MIN_WRAP_WIDTH = 40
+HEX_RUN = re.compile(r"[0-9a-f]+", re.I)
+DOTLESS_PATH = re.compile(r"/?(?:[A-Za-z0-9_-]{1,32}/){2,}[A-Za-z0-9_-]{0,32}")
 FORMAT_PERCENT = re.compile(r"(%%3[0-9](?![%\w$]|\.[0-9]))")
 GIT_OPTIONS = ("--no-replace-objects",)
 ESCAPE = re.compile(r"\\(?:u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|x([0-9a-fA-F]{2})|([0-7]{1,3})|(.))")
@@ -97,10 +105,11 @@ def deny_matches(line, deny):
     if not deny:
         return
     line = normalized(line)
-    lower = line.lower()
+    # The Unicode case variants recognized by re.I are broader than lower().
+    lower = line.lower() if line.isascii() else None
     seen = set()
     for prefix, pattern, entry in deny:
-        if prefix not in lower:
+        if lower is not None and prefix not in lower:
             continue
         for match in pattern.finditer(line):
             start, end = match.span(1)
@@ -173,7 +182,9 @@ def uuid_matches(line):
         # A compact suffix can also follow the last group of a dashed ID.
         if (32 <= len(token) <= 39 and (
             COMPACT_UUID.fullmatch(token[:32]) or COMPACT_UUID.fullmatch(token[-32:])
-        )) or (match.end() - 32 in right_edges and COMPACT_UUID.fullmatch(token[-32:])):
+        )) or (match.end() - 32 in right_edges and COMPACT_UUID.fullmatch(token[-32:])) or (
+            len(token) == 64 and COMPACT_UUID.fullmatch(token[:32]) and COMPACT_UUID.fullmatch(token[32:])
+        ):
             yield "codex-id", token, match.start() + 1, None
 
 
@@ -215,16 +226,56 @@ def home_tokens(line):
 
 
 def opaque_path(value):
-    return ("/" in value and "+" not in value and "=" not in value
-            and (value.startswith("/") or "-" in value or "_" in value
-                 or re.match(r"[a-z][a-z0-9]{0,23}/", value)))
+    return DOTLESS_PATH.fullmatch(value) is not None
 
 
 def opaque_body(value):
-    return (len(value.rstrip("=")) >= 200
-            and re.search("[A-Z]", value) and re.search("[a-z]", value)
-            and re.search("[0-9]", value)
-            and not opaque_path(value))
+    unpadded = value.rstrip("=")
+    return len(unpadded) >= 200 and (
+        HEX_RUN.fullmatch(unpadded) is not None or (
+            re.search("[A-Z]", value) and re.search("[a-z]", value)
+            and re.search("[0-9]", value) and not opaque_path(value)
+        )
+    )
+
+
+def wrapped_bodies(lines):
+    parts = []
+    start = None
+    width = 0
+    for number, line in chain(lines, ((None, ""),)):
+        part = line.strip()
+        candidate = (len(part) >= MIN_WRAP_WIDTH and BASE64_LINE.fullmatch(part)
+                     and not opaque_path(part))
+        if parts and (not candidate or len(part) != width or parts[-1].endswith("=")):
+            if len(parts) > 1:
+                body = "".join(parts)
+                if opaque_body(body):
+                    yield start, body, "\n".join(parts)
+            parts.clear()
+        if candidate:
+            if not parts:
+                start, width = number, len(part)
+            parts.append(part)
+
+
+def decoded_wrapped(view):
+    if "\n" not in view and "\r" not in view:
+        return
+    # Decoding a JSON string leaves its quotes and record punctuation in place.
+    # Check the whole view and each quoted payload in that view.
+    payloads = [(1, view)]
+    payloads.extend((match.start(1) + 1, match[1])
+                    for match in re.finditer(r'(?="([^"]*)")', view)
+                    if "\n" in match[1] or "\r" in match[1])
+    seen = Counter()
+    for start, payload in payloads:
+        occurrences = Counter()
+        for _, body, _ in wrapped_bodies(enumerate(payload.splitlines(), 1)):
+            occurrences[body] += 1
+            if occurrences[body] > seen[body]:
+                seen[body] = occurrences[body]
+                yield "opaque", body, start, None
 
 
 def matches(line, deny):
@@ -245,6 +296,7 @@ def matches(line, deny):
     for match in BASE64_RUN.finditer(line):
         if opaque_body(match[0]):
             yield "opaque", match[0], match.start() + 1, None
+    yield from decoded_wrapped(line)
     yield from deny_matches(line, deny)
 
 
@@ -351,7 +403,7 @@ class Audit:
 
     def text(self, line, location, surface, number, member=None):
         for rule, value, column, entry, decoded in decoded_matches(line, self.deny):
-            if rule == "home-path" and value in self.allowed_paths:
+            if rule == "home-path" and (line if surface == "link" else value) in self.allowed_paths:
                 continue
             if rule not in ("home-path", "deny-list", "opaque") and value.casefold() in self.allowed_ids:
                 continue
@@ -365,7 +417,9 @@ class Audit:
 
     def contents(self, stream, location, surface):
         try:
-            if stream.peek(2).startswith(b"\x1f\x8b"):
+            if surface == "link":
+                self.lines((stream.read(),), location, surface)
+            elif stream.peek(2).startswith(b"\x1f\x8b"):
                 members = self.gzip_members(stream, location)
                 if members > 1:
                     stream.seek(0)
@@ -412,39 +466,26 @@ class Audit:
             self.lines((bytes(value),), location, surface, member=member)
 
     def lines(self, stream, location, surface, *, member=None, count_bytes=True):
-        wrapped = []
-        start = None
+        def inspect_lines():
+            for number, data in enumerate(stream, 1):
+                if count_bytes:
+                    self.bytes += len(data)
+                try:
+                    line = data.decode("utf-8")
+                    if "\x00" in line:
+                        raise ValueError("NUL in text")
+                except ValueError:
+                    self.record("undecodable", location, surface, number, member=member)
+                    yield number, ""
+                    continue
+                if surface != "link":
+                    line = line.rstrip("\r\n")
+                self.text(line, location, surface, number, member)
+                yield number, line
 
-        def flush():
-            if len(wrapped) > 1:
-                body = "".join(wrapped)
-                if opaque_body(body):
-                    self.record("opaque", location, surface, start, value=body,
-                                context="\n".join(wrapped), member=member)
-            wrapped.clear()
-
-        for number, data in enumerate(stream, 1):
-            if count_bytes:
-                self.bytes += len(data)
-            try:
-                line = data.decode("utf-8").rstrip("\r\n")
-                if "\x00" in line:
-                    raise ValueError("NUL in text")
-            except ValueError:
-                flush()
-                self.record("undecodable", location, surface, number, member=member)
-                continue
-            self.text(line, location, surface, number, member)
-            part = line.strip()
-            if not BASE64_LINE.fullmatch(part) or (len(part) >= 200 and opaque_path(part)):
-                flush()
-                continue
-            if not wrapped:
-                start = number
-            wrapped.append(part)
-            if part.endswith("="):
-                flush()
-        flush()
+        for number, body, context in wrapped_bodies(inspect_lines()):
+            self.record("opaque", location, surface, number, value=body,
+                        context=context, member=member)
 
     def filesystem(self, root):
         if root.is_symlink() or not root.is_dir():
@@ -586,8 +627,12 @@ class Audit:
 def load_list(path, kind):
     try:
         return list(list_entries(path, deny=kind == "deny"))
-    except (OSError, UnicodeError) as error:
+    except FileNotFoundError as error:
+        raise ValueError(f"The {kind} list file is missing.") from error
+    except UnicodeError as error:
         raise ValueError(f"The {kind} list could not be read as UTF-8.") from error
+    except OSError as error:
+        raise ValueError(f"The {kind} list could not be read.") from error
 
 
 def main(argv=None):

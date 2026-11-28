@@ -19,6 +19,79 @@ from tools.publication_guard import build_fixtures, guard
 TERM = "quar" + "tzwillow"
 ENCODED_TERM = "grove" + ".mistral"
 
+# Council regression list (case, expected verdict, and test witness).
+# Round 1
+# 1. Percent, shell, and nested JSON escapes: finding / near miss clean
+#    (test_repeated_whole_line_decoding, test_escaped_json_string).
+# 2. Encoded-looking 200-character token: opaque / shorter clean (test_opaque_boundary).
+# 3. Gzip payload split at member boundaries: denied in either view / clean control
+#    (test_gzip_member_boundaries).
+# 4–5. Active grafts: incomplete; empty tree entry name: finding
+#    (test_git_grafts, test_git_empty_directory_name).
+# 6–8. Diverged changed base: incomplete; zero commits or files: config error;
+#    denied Git headers: review (test_changed_requires_ancestor,
+#    test_empty_git_range_requires_waiver, test_empty_tree_requires_waiver,
+#    test_git_header_surfaces).
+# 9–11. Home variants and colon suffix: hard; delimited and generated compact IDs,
+#    underscore-prefixed IDs and attached pane targets: hard until exactly allowed
+#    (test_home_variants_and_colon, test_uuid_boundaries_and_separators,
+#    test_request_boundaries_and_other_ids, test_pane_boundaries,
+#    test_every_generated_id_is_detected_without_allow_list).
+# 12–14. Digits, underscores, camel case, BOM, overlaps, varied whitespace,
+#    dash encoding and zero-width text: review; invalid entries: config error
+#    (test_deny_letter_boundaries, test_deny_bom_overlaps_and_whitespace,
+#    test_dash_encoded_deny_list, test_deny_zero_width_and_ascii_policy,
+#    test_deny_list_required_and_waivable).
+# 15–16. Sensitive names and matches: masked; bad refs and shallow history: incomplete
+#    (test_redacted_names_and_keyed_digests, test_deny_list_whole_word_and_redaction,
+#    test_bad_git_range, test_shallow_git).
+# Round 2
+# A–B. Inherited repository selection ignored; empty selected full tree: config error
+#    (test_git_ignores_repository_selection_environment,
+#    test_full_git_range_rejects_empty_commit_tree).
+# C–D. Path continuing after punctuation or a quoted space, an underscore pane
+#    filename, a compact ID beside hex, and a compact ID beside an allowed dashed ID:
+#    hard (test_home_path_punctuation_and_quoted_space,
+#    test_underscore_pane_in_filename, test_compact_extended_tokens).
+# E–F. Wrapped body: opaque; ordinary dotless paths and low-diversity text: clean;
+#    four provider ID prefixes: hard (test_wrapped_opaque_body, test_opaque_precision,
+#    test_response_id_boundary, test_reasoning_id_boundary,
+#    test_function_call_id_boundary, test_call_id_boundary).
+# G. Extended allowed ID and gzip extra data: hard; gzip comment, empty directory,
+#    later overlapping occurrence, and replaced private commit: finding
+#    (test_allow_id_is_exact, test_gzip_extra_field_is_reported,
+#    test_gzip_comment_is_reported, test_tree_empty_directory_name,
+#    test_overlapping_occurrences_of_one_deny_entry, test_git_ignores_replace_refs).
+# H–K. Failed baseline: no credit; Git endpoints: resolved;
+#    double percent before an escape: decoded; bad list files: config error
+#    (test_mutation_runner_requires_passing_baseline,
+#    test_git_resolved_endpoints_and_whole_history, test_percent_escape_after_percent,
+#    test_deny_entries_reject_controls, test_allow_and_deny_list_load_errors).
+# L–S. Tag annotation, Windows and upper-case Linux paths, cross-line phrase,
+#    fifth escape round, and zero-width hard-rule disguises: manual review;
+#    deliberate UUID overlap and mistyped args are documented limits
+#    (test_annotated_tag_resolves_to_commit, test_documented_escape_and_path_boundaries,
+#    test_deny_phrase_stays_within_physical_line). Unicode matching is covered
+#    below; no general Unicode case-folding equivalence is promised.
+# T. Evidence: the mutation runner reports results only after the baseline passes.
+# Round 3
+# 1–4. Letter-glued and paired compact IDs: hard, 40 hex: clean; decoded wrapped
+#    JSON body: opaque; link beyond its exact allowance and date-suffixed pane:
+#    hard (test_compact_nonhex_neighbors_and_pair, test_wrapped_opaque_body_in_decoded_record,
+#    test_symlink_allowlist_compares_complete_target, test_pane_date_suffix_is_not_a_format_directive).
+# 5–6. Leading-slash encoded body and long hex: opaque; short words, uneven wrap,
+#    dotless paths: clean; upper-case macOS prefix: hard until exactly allowed
+#    (test_base64_with_path_shaped_prefix, test_long_hex_run_is_opaque,
+#    test_wrapped_opaque_requires_wide_consistent_lines, test_macos_home_prefix_case_and_exact_allowlist).
+# 7–10. Commit-only push documented; dotless and dotted i: review; list errors:
+#    specific redacted diagnostics; surrogate pair beside a denied word: review
+#    (test_deny_prefilter_matches_unicode_case_variants,
+#    test_missing_lists_are_distinct_from_invalid_encoding, test_surrogates_are_separators).
+# 11–14. Source-tree provenance and decoding limits documented; doubled path
+#    escapes are out of scope; unquoted brackets around an allowed path fail closed
+#    (test_documented_escape_and_path_boundaries).
+# 15. PR verification distinguishes zero new findings from earlier reviewed matches.
+
 
 class PublicationGuard(unittest.TestCase):
     def setUp(self):
@@ -109,6 +182,15 @@ class PublicationGuard(unittest.TestCase):
         self.write(f"{compact}\n{dashed}\n{'f' * 40}")
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
 
+    def test_compact_nonhex_neighbors_and_pair(self):
+        compact = "".join(("02dd5aabc4a9", "7c2d", "a111", "abcddcba3210"))
+        for value in ("sess" + compact, "x" + compact, compact + "json", compact + compact):
+            with self.subTest(value=value):
+                self.write(value)
+                self.assertEqual([r["rule"] for r in self.scan()[1][:-1]], ["codex-id"])
+        self.write("fa15d08e" + compact)
+        self.assertEqual(self.scan()[0], 0)
+
     def test_uuid_boundaries_and_separators(self):
         parts = ("bd5aab34", "c2df", "4276", "8111", "abcddcba3210")
         self.write("a" + "-".join(parts) + "\n" + "_".join(parts))
@@ -171,6 +253,19 @@ class PublicationGuard(unittest.TestCase):
         self.write(paths[0] + ":private")
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 1)
 
+    def test_macos_home_prefix_case_and_exact_allowlist(self):
+        lower = "/" + "Users/morrow/work"
+        upper = "/" + "USERS/morrow/work"
+        self.allow.write_text(lower, encoding="utf-8")
+        self.write(upper)
+        self.assertEqual([r["rule"] for r in self.scan("--allow-list", self.allow)[1][:-1]],
+                         ["home-path"])
+        self.write(lower)
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
+        self.write(upper)
+        self.allow.write_text(upper, encoding="utf-8")
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
+
     def test_home_path_punctuation_and_quoted_space(self):
         allowed = guard.HOME_PREFIX + "example/item"
         self.allow.write_text(allowed, encoding="utf-8")
@@ -209,6 +304,16 @@ class PublicationGuard(unittest.TestCase):
         self.assertEqual([(r["rule"], r["surface"]) for r in self.scan()[1][:-1]],
                          [("pane-id", "name")])
         (self.tree / f"{prefix}{pane}.log").rename(self.tree / f"{prefix}{pane}.2f")
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_pane_date_suffix_is_not_a_format_directive(self):
+        pane = "%" + "12"
+        filename = self.tree / f"pane_{pane}.20400512.log"
+        filename.write_text("ordinary", encoding="utf-8")
+        self.assertEqual([(r["rule"], r["surface"]) for r in self.scan()[1][:-1]],
+                         [("pane-id", "name")])
+        filename.rename(self.tree / f"pane_{pane}.2f")
+        self.write(f"format {pane}$s and {pane}.2f.log")
         self.assertEqual(self.scan()[0], 0)
 
     def test_deny_list_whole_word_and_redaction(self):
@@ -272,6 +377,23 @@ class PublicationGuard(unittest.TestCase):
         rc, _, error = self.scan()
         self.assertEqual(rc, 2)
         self.assertNotIn("mural", error)
+
+    def test_deny_prefilter_matches_unicode_case_variants(self):
+        self.deny.write_text("finch\n", encoding="utf-8")
+        spellings = ["f" + letter + "nch" for letter in ("\u0131", "\u0130")]
+        self.write("\n".join(spellings))
+        self.assertEqual([(r["rule"], r["line"]) for r in self.scan()[1][:-1]],
+                         [("deny-list", 1), ("deny-list", 2)])
+        self.write("x" + spellings[0])
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_surrogates_are_separators(self):
+        escaped_surrogate_pair = r"\ud83d\ude4a"
+        self.write(escaped_surrogate_pair + TERM)
+        self.assertEqual([(row["rule"], row["view"]) for row in self.scan()[1][:-1]],
+                         [("deny-list", "decoded")])
+        self.write(escaped_surrogate_pair + TERM + "tail")
+        self.assertEqual(self.scan()[0], 0)
 
     def test_dash_encoded_deny_list(self):
         value = ENCODED_TERM.replace(".", "-").upper()
@@ -404,11 +526,53 @@ class PublicationGuard(unittest.TestCase):
         self.write(f"{chunk}\n{chunk}\nordinary text\n{chunk}")
         self.assertEqual(self.scan()[0], 0)
 
+    def test_wrapped_opaque_body_in_decoded_record(self):
+        chunk = "Rk9vXy9-" * 10
+        for data in (json.dumps({"blob": "\n".join([chunk] * 3)}),
+                     "%0A".join([chunk] * 3),
+                     json.dumps(json.dumps({"blob": "\n".join([chunk] * 3)}))):
+            with self.subTest(data=data):
+                self.write(data)
+                self.assertEqual([(r["rule"], r["view"]) for r in self.scan()[1][:-1]],
+                                 [("opaque", "decoded")])
+        self.write(json.dumps({"blob": f"{chunk}\nnot a body\n{chunk}\n{chunk}"}))
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_base64_with_path_shaped_prefix(self):
+        body = "rk9vXy9" * 30
+        for prefix in ("/", "logs/"):
+            with self.subTest(prefix=prefix):
+                self.write(prefix + body)
+                self.assertEqual([r["rule"] for r in self.scan()[1][:-1]], ["opaque"])
+        self.write("/" + "IndexedPath9/" * 20)
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_long_hex_run_is_opaque(self):
+        body = "7a1f" * 50
+        self.write(body)
+        self.assertEqual([r["rule"] for r in self.scan()[1][:-1]], ["opaque"])
+        self.write(body[:-1])
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_wrapped_opaque_requires_wide_consistent_lines(self):
+        line = "Rk9vXy9-" * 10
+        self.write("\n".join([line] * 3))
+        self.assertEqual([r["rule"] for r in self.scan()[1][:-1]], ["opaque"])
+        forty = line[:40]
+        self.write("\n".join([forty] * 5))
+        self.assertEqual([r["rule"] for r in self.scan()[1][:-1]], ["opaque"])
+        self.write("\n".join([forty[:-1]] * 6))
+        self.assertEqual(self.scan()[0], 0)
+        self.write("\n".join((line, line + "A123", line)))
+        self.assertEqual(self.scan()[0], 0)
+        self.write("\n".join(("Maple", "robin", "Node2", "Birch", "Page3") * 15))
+        self.assertEqual(self.scan()[0], 0)
+
     def test_opaque_precision(self):
         chunk = "Rk9vXy9-" * 25
         self.write(chunk)
         self.assertEqual(self.scan()[0], 1)
-        self.write("A" * 220 + "\n" + "/" + "IndexedPath9/" * 20 + "\n"
+        self.write("Z" * 220 + "\n" + "/" + "IndexedPath9/" * 20 + "\n"
                    + "source/" + "IndexedPath9/" * 20)
         self.assertEqual(self.scan()[0], 0)
 
@@ -479,6 +643,21 @@ class PublicationGuard(unittest.TestCase):
         self.allow.write_text("", encoding="utf-8")
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
 
+    def test_missing_lists_are_distinct_from_invalid_encoding(self):
+        self.write("ordinary")
+        other = self.root / "other.txt"
+        for kind, path in (("allow", self.allow), ("deny", other)):
+            with self.subTest(kind=kind):
+                rc, _, error = self.scan(f"--{kind}-list", path)
+                self.assertEqual(rc, 2)
+                self.assertIn(f"{kind} list file is missing", error)
+                self.assertNotIn(str(path), error)
+                path.write_bytes(b"\xff")
+                rc, _, error = self.scan(f"--{kind}-list", path)
+                self.assertEqual(rc, 2)
+                self.assertIn(f"{kind} list could not be read as UTF-8", error)
+                path.unlink()
+
 
     def test_empty_tree_requires_waiver(self):
         rc, results, _ = self.scan()
@@ -526,6 +705,19 @@ class PublicationGuard(unittest.TestCase):
         link.unlink()
         link.symlink_to("local-target")
         self.assertEqual(self.scan()[0], 0)
+
+    def test_symlink_allowlist_compares_complete_target(self):
+        allowed = guard.HOME_PREFIX + "example/work"
+        self.allow.write_text(allowed, encoding="utf-8")
+        link = self.tree / "shortcut"
+        for full in (allowed + " extra", allowed + "\n"):
+            link.symlink_to(full)
+            rc, rows, _ = self.scan("--allow-list", self.allow)
+            self.assertEqual(rc, 1)
+            self.assertEqual([(r["rule"], r["surface"]) for r in rows[:-1]], [("home-path", "link")])
+            link.unlink()
+        link.symlink_to(allowed)
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
 
     def test_git_range_audits_intermediate_commits_and_messages(self):
         self.init_git()
@@ -594,9 +786,56 @@ class PublicationGuard(unittest.TestCase):
         rc, rows, _ = self.git_scan("base..HEAD", "--changed")
         self.assertEqual(rc, 0)
         self.assertEqual((rows[-1]["base"], rows[-1]["tip"], rows[-1]["commits"]), (base, tip, 1))
+        self.assertEqual((rows[-1]["files"], rows[-1]["empty_trees"]), (0, 0))
         with self.assertRaises(SystemExit) as rejected:
             self.git_scan("..HEAD", "--changed")
         self.assertEqual(rejected.exception.code, 2)
+
+    def test_annotated_tag_resolves_to_commit(self):
+        base = self.init_git()
+        self.git("commit", "--allow-empty", "-m", "Ordinary")
+        self.git("tag", "-a", "sample", "-m", TERM)
+        tip = self.git("rev-parse", "HEAD")
+        rc, rows, _ = self.git_scan(f"{base}..sample")
+        self.assertEqual(rc, 0)
+        self.assertEqual(rows[-1]["tip"], tip)
+        self.git("commit", "--allow-empty", "-m", TERM)
+        self.git("tag", "-a", "next", "-m", "Ordinary")
+        rc, rows, _ = self.git_scan(f"{tip}..next")
+        self.assertEqual(rc, 1)
+        self.assertEqual([row["surface"] for row in rows[:-1]], ["message"])
+
+    def test_documented_escape_and_path_boundaries(self):
+        escaped = f"%{ord(TERM[0]):02X}" + TERM[1:]
+        escaped_percent = "%" + "25"
+        for _ in range(guard.ENCODING_DEPTH - 1):
+            escaped = escaped.replace("%", escaped_percent)
+        self.write(escaped)
+        self.assertEqual(self.scan()[0], 1)
+        self.write(escaped.replace("%", escaped_percent))
+        self.assertEqual(self.scan()[0], 0)
+
+        path = guard.HOME_PREFIX + "example"
+        self.allow.write_text(path, encoding="utf-8")
+        self.write(f"[{path}]")
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 1)
+        self.write(f'"{path}"')
+        self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
+
+        for outside in (r"C:\Users\morrow\work", "/" + "HOME/morrow/work",
+                        "%%2F" + "home" + "%%2F" + "quux", path[:3] + "\u200b" + path[3:]):
+            with self.subTest(outside=outside):
+                self.write(outside)
+                self.assertEqual(self.scan()[0], 0)
+
+    def test_deny_phrase_stays_within_physical_line(self):
+        self.deny.write_text(f"{TERM} valley", encoding="utf-8")
+        self.write(f"{TERM}\tvalley")
+        self.assertEqual(self.scan()[0], 1)
+        self.write(f"{TERM}\nvalley")
+        self.assertEqual(self.scan()[0], 0)
+        self.deny.write_text(f"{TERM}\n", encoding="utf-8")
+        self.assertEqual(self.scan()[0], 1)
 
     def test_git_ignores_repository_selection_environment(self):
         self.init_git()
@@ -610,10 +849,16 @@ class PublicationGuard(unittest.TestCase):
         self.git("-C", str(other), "commit", "-m", "Base tree")
         self.git("-C", str(other), "branch", "base")
         self.git("-C", str(other), "commit", "--allow-empty", "-m", "Ordinary")
-        with patch.dict(os.environ, GIT_DIR=str(other / ".git"), GIT_WORK_TREE=str(other)):
-            rc, rows, _ = self.git_scan("base..HEAD")
-            self.assertEqual(rc, 1)
-            self.assertEqual([r["surface"] for r in rows[:-1]], ["message"])
+        overrides = (
+            {"GIT_DIR": str(other / ".git"), "GIT_WORK_TREE": str(other)},
+            {"GIT_COMMON_DIR": str(other / ".git")},
+            {"GIT_OBJECT_DIRECTORY": str(other / ".git/objects")},
+        )
+        for override in overrides:
+            with self.subTest(variables=tuple(override)), patch.dict(os.environ, override):
+                rc, rows, _ = self.git_scan("base..HEAD")
+                self.assertEqual(rc, 1)
+                self.assertEqual([r["surface"] for r in rows[:-1]], ["message"])
         with patch.dict(os.environ, GIT_DIR=str(self.tree / ".git"), GIT_WORK_TREE=str(self.tree)):
             self.assertEqual(self.git_scan("base..HEAD", repo=other)[0], 0)
 
@@ -826,8 +1071,12 @@ def mutation_check():
     original_deny = guard.deny_patterns
     original_list_entries = guard.list_entries
     original_load_list = guard.load_list
+    original_deny_matches = guard.deny_matches
+    original_opaque_path = guard.opaque_path
     original_init = guard.Audit.__init__
     original_summary = guard.Audit.summary
+    original_text = guard.Audit.text
+    original_git_environment = guard.git_environment
 
     def only_plain_uuids(line):
         return (result for result in original_uuid(line)
@@ -855,6 +1104,38 @@ def mutation_check():
 
     def permit_missing_deny(path, kind):
         return [] if kind == "deny" and not path.exists() else original_load_list(path, kind)
+
+    def without_compact_pair(line):
+        return (result for result in original_uuid(line)
+                if result[0] != "codex-id" or len(result[1]) != 64)
+
+    def partial_link_target(self, line, location, surface, number, member=None):
+        if surface == "link":
+            line = line.split(maxsplit=1)[0]
+        original_text(self, line, location, surface, number, member)
+
+    def old_case_prefilter(line, deny):
+        lower = guard.normalized(line).lower()
+        return original_deny_matches(line, [entry for entry in deny if entry[0] in lower])
+
+    def old_missing_error(path, kind):
+        if not path.exists():
+            raise ValueError(f"The {kind} list could not be read as UTF-8.")
+        return original_load_list(path, kind)
+
+    def keep_git_override(variable):
+        def inherited():
+            env = original_git_environment()
+            if variable in os.environ:
+                env[variable] = os.environ[variable]
+            return env
+
+        return patch.object(guard, "git_environment", inherited)
+
+    def count_empty_diff_as_tree(self):
+        if self.scope == "changed-files" and not self.files:
+            self.empty_trees += 1
+        original_summary(self)
 
     mutations = [(rule, method, suppress_finding(rule=rule)) for rule, method in RULE_TESTS.items()]
     mutations.extend([
@@ -912,6 +1193,35 @@ def mutation_check():
          patch.object(guard, "load_list", permit_missing_deny)),
         ("allow-list-message", "test_allow_and_deny_list_load_errors",
          patch.object(guard, "load_list", lambda path, kind: original_load_list(path, "deny"))),
+        ("compact-alphabetic-neighbors", "test_compact_nonhex_neighbors_and_pair",
+         patch.object(guard, "HEX_TOKEN", re.compile(r"(?<![a-z0-9])[0-9a-f]{32,}(?![a-z0-9])", re.I))),
+        ("compact-id-pair", "test_compact_nonhex_neighbors_and_pair",
+         patch.object(guard, "uuid_matches", without_compact_pair)),
+        ("decoded-wrap", "test_wrapped_opaque_body_in_decoded_record",
+         patch.object(guard, "decoded_wrapped", lambda view: ())),
+        ("whole-link-target", "test_symlink_allowlist_compares_complete_target",
+         patch.object(guard.Audit, "text", partial_link_target)),
+        ("complete-format-directive", "test_pane_date_suffix_is_not_a_format_directive",
+         replace_pattern("pane-id", r"(?:(?<![\w%])|(?<=_)|(?<=-t)|(?<=\bpane))%[0-9]+(?![\w%$]|\.[0-9])")),
+        ("opaque-path-prefix", "test_base64_with_path_shaped_prefix",
+         patch.object(guard, "opaque_path", lambda value: value.startswith("/") or original_opaque_path(value))),
+        ("long-hex", "test_long_hex_run_is_opaque",
+         patch.object(guard, "HEX_RUN", re.compile(r"(?!)"))),
+        ("opaque-wrap-minimum-width", "test_wrapped_opaque_requires_wide_consistent_lines",
+         patch.object(guard, "MIN_WRAP_WIDTH", 1)),
+        ("macos-home-prefix-case", "test_macos_home_prefix_case_and_exact_allowlist",
+         patch.object(guard, "HOME_START", re.compile(guard.HOME_START.pattern.replace(
+             f"(?i:{re.escape(guard.MACOS_HOME)})", re.escape(guard.MACOS_HOME))))),
+        ("deny-case-prefilter", "test_deny_prefilter_matches_unicode_case_variants",
+         patch.object(guard, "deny_matches", old_case_prefilter)),
+        ("missing-list-diagnostic", "test_missing_lists_are_distinct_from_invalid_encoding",
+         patch.object(guard, "load_list", old_missing_error)),
+        ("git-common-dir-override", "test_git_ignores_repository_selection_environment",
+         keep_git_override("GIT_COMMON_DIR")),
+        ("git-object-dir-override", "test_git_ignores_repository_selection_environment",
+         keep_git_override("GIT_OBJECT_DIRECTORY")),
+        ("empty-diff-is-not-empty-tree", "test_git_resolved_endpoints_and_whole_history",
+         patch.object(guard.Audit, "summary", count_empty_diff_as_tree)),
     ])
     for rule, prefix in guard.PREFIXES[3:]:
         method = "test_" + rule.replace("-", "_") + "_boundary"
