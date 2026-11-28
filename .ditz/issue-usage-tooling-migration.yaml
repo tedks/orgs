@@ -15,3 +15,16 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-28T09:53:43-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Spec gate CLEAN for the Anthropic (Opus) and OpenAI (gpt-6.2-sol) seats
+    at d6fc839 after seven rounds; Google seat EMPTY (usage limit) throughout. Two
+    nits carried into the cutover (M3) brief rather than changing the gated head:
+    (1) the quota-service installer''s wait for the activation lock is bounded, then
+    it refuses and names the holder, and the activation step never invokes that installer
+    while holding the lock; (2) where a host''s cron record cannot be read and store
+    writes alone are accepted, the dotfiles owner''s decision is recorded beside that
+    receipt. Milestones: M1 quota service lands in dotfiles; M1b paths subcommand
+    in dotfiles; M2a publication audit; M2 import; M3 cutover per host. Removal of
+    the dotfiles copy needs a separate amendment.'
