@@ -49,7 +49,8 @@ MAX_FILE = 8 * 1024 * 1024
 # Measured on Claude Code 2.1.283/2.1.301 and Codex CLI 0.157.1/0.163.0.
 # Changed UI fails closed.
 _COMPACT_MARKERS = {'claude': 'Compacted (ctrl+o to see full summary)', 'codex': '• Context compacted'}
-_CLAUDE_COMPACT_ROW = re.compile(r'^[ \t]*⎿[ \t]+Compacted(?: \(ctrl\+o to see full summary\))?[ \t]*$', re.MULTILINE)
+# 2.1.332 renders the gap after ⎿ as exactly a space then NO-BREAK SPACE (U+00A0).
+_CLAUDE_COMPACT_ROW = re.compile(r'^[ \t]*⎿(?:[ \t]+| \u00a0)Compacted(?: \(ctrl\+o to see full summary\))?[ \t]*$', re.MULTILINE)
 _CLAUDE_COMPACTING = re.compile(r'^\s*[✢✽✻·✶*] Compacting conversation… \([0-9][^()\n]*\)\s*$', re.MULTILINE)
 SAMPLE_JOIN = 7  # verify_pane <=5s plus public read <=1s, then shutdown margin
 
@@ -258,8 +259,46 @@ def _compact_event(path, baseline, harness, session_id):
     return None
 
 
+# Claude session bookkeeping rows: no uuid, no message, never user input or a
+# tool call, so they neither start nor end a root turn and leave idle as it
+# was. Each must name this session, carry its measured typed field and none of
+# the turn fields. The first five were measured on 2.1.283; the rest on 2.1.332,
+# where each was observed both inside turns and after a completed turn's
+# turn_duration. Turn state stays with the user/assistant/system rows: a
+# pending tool call is an assistant tool_use row with no linked turn_duration.
+_CLAUDE_METADATA = {
+    'mode': ('mode', str), 'permission-mode': ('permissionMode', str), 'atis-latch': ('atis', str),
+    'ai-title': ('aiTitle', str), 'last-prompt': ('lastPrompt', str),
+    'session-owner': ('accountUuid', str), 'tools-used': ('tools', list),
+    'data-flow-records': ('records', list), 'cost-state': ('startTime', int),
+    'pr-link': ('prNumber', int),
+}
+# No measured bookkeeping row carries any of these; a row that does is not one.
+_CLAUDE_TURN_FIELDS = ('uuid', 'parentUuid', 'message', 'isSidechain')
+# Rows that clear idle without starting a turn. file-history-snapshot names
+# its prompt's user row by messageId. On 2.1.332 that row was written before
+# the snapshot for 241 of 455 snapshots and after it for 196, so an unmatched
+# snapshot is pending input: the session is not idle, whatever follows, until
+# that prompt row arrives. 18 of 455 never got their row (16 were the last row
+# of a session that then ended). They keep the session not idle; the accepted
+# cost is a refused or deferred compaction, never a send over input.
+_CLAUDE_BUSY = ('file-history-snapshot', 'queue-operation', 'progress')
+# Root prompt ids remembered for snapshot matching (max seen per file: 157).
+# A snapshot naming an older prompt stays pending, which fails closed.
+MAX_PROMPT_IDS = 1024
+# 2.1.332 rows measured only inside turns: validated, then busy. No measured
+# file-history-delta names a session; one that names another session raises.
+# continued-in (the conversation moved to another session) stays unknown, and
+# so does derived-from: on 2.1.332 it was seen only after an arriving prompt.
+_CLAUDE_IN_TURN = {
+    'file-history-delta': (('messageId', str), ('snapshotMessageId', str), ('trackingPath', str),
+                           ('timestamp', str), ('backup', dict)),
+    'data-flow-incomplete': (('sessionId', str), ('v', int)),
+}
+
+
 def _native_idle(record, focus_after=None):
-    """Measured Claude Code 2.1.283 / Codex CLI 0.157.1 root-turn markers.
+    """Measured Claude Code 2.1.283 and 2.1.332 / Codex CLI 0.157.1 root-turn markers.
 
     Read a bounded tail; never persist message content. Completion is evidence
     of observed idle, not an atomic reservation against later human input.
@@ -280,7 +319,7 @@ def _native_idle(record, focus_after=None):
                       'parent': None, 'focus_seen': focus_after is None, 'final_assistant': False,
                       'focus_input_seen': False, 'focus_turn_seen': False,
                       'turns_seen': 0, 'user_turns_seen': 0, 'queued_input_seen': False,
-                      'children': []}
+                      'children': [], 'pending_prompts': [], 'prompt_ids': []}
         else:
             start = cursor['offset']
         if info.st_size < start:
@@ -303,6 +342,8 @@ def _native_idle(record, focus_after=None):
     turns_seen = cursor.get('turns_seen', 0)
     user_turns_seen = cursor.get('user_turns_seen', 0)
     queued_input_seen = cursor.get('queued_input_seen', False)
+    pending_prompts = list(cursor.get('pending_prompts', []))
+    prompt_ids = list(cursor.get('prompt_ids', []))
     for line in lines:
         offset = start
         start += len(line)
@@ -376,6 +417,8 @@ def _native_idle(record, focus_after=None):
                 elif kind not in ('session_meta', 'token_usage_record', 'world_state'):
                     raise ControlError('idle_record_shape_unknown')
             else:
+                if not isinstance(kind, str):
+                    raise ControlError('idle_record_shape_unknown')
                 if kind in ('api-request-shape', 'api-request-blob', 'api-request'):
                     if row.get('isSidechain') is True:
                         continue
@@ -397,11 +440,21 @@ def _native_idle(record, focus_after=None):
                         turns_seen = max(user_turns_seen, 1)
                     else:
                         raise ControlError('superseded_by_new_input')
-                metadata = {'mode': 'mode', 'permission-mode': 'permissionMode', 'atis-latch': 'atis',
-                            'ai-title': 'aiTitle', 'last-prompt': 'lastPrompt'}
-                if kind in metadata:
-                    if row.get('sessionId') != record['session_id'] or not isinstance(row.get(metadata[kind]), str):
+                if kind in _CLAUDE_METADATA:
+                    field, types = _CLAUDE_METADATA[kind]
+                    value = row.get(field)
+                    if (row.get('sessionId') != record['session_id'] or not isinstance(value, types)
+                            or isinstance(value, bool) or any(name in row for name in _CLAUDE_TURN_FIELDS)):
                         raise ControlError('idle_metadata_malformed')
+                    continue
+                if kind in _CLAUDE_IN_TURN:
+                    if (any(not isinstance(row.get(name), types) or isinstance(row.get(name), bool)
+                            for name, types in _CLAUDE_IN_TURN[kind]) or
+                            row.get('sessionId', record['session_id']) != record['session_id'] or
+                            ('codes' in row and not isinstance(row['codes'], list)) or
+                            any(name in row for name in _CLAUDE_TURN_FIELDS)):
+                        raise ControlError('idle_metadata_malformed')
+                    idle = False
                     continue
                 if kind == 'system' and row.get('subtype') == 'compact_boundary':
                     if row.get('sessionId') != record['session_id'] or row.get('isSidechain') is True:
@@ -414,10 +467,15 @@ def _native_idle(record, focus_after=None):
                         parent = row['uuid']
                     continue
                 if kind not in ('user', 'assistant', 'tool', 'attachment', 'system'):
-                    if kind not in ('file-history-snapshot', 'queue-operation', 'progress'):
+                    if kind not in _CLAUDE_BUSY:
                         raise ControlError('idle_record_shape_unknown')
-                    if kind != 'file-history-snapshot':
-                        idle = False
+                    if kind == 'file-history-snapshot':
+                        message_id = row.get('messageId')
+                        if not isinstance(message_id, str) or not message_id:
+                            raise ControlError('idle_metadata_malformed')
+                        if message_id not in prompt_ids and message_id not in pending_prompts:
+                            pending_prompts.append(message_id)
+                    idle = False
                     continue
                 if row.get('isSidechain') is True:
                     continue
@@ -442,6 +500,12 @@ def _native_idle(record, focus_after=None):
                     content = message.get('content')
                     user_input = not (isinstance(content, list) and bool(content) and
                                       all(isinstance(c, dict) and c.get('type') == 'tool_result' for c in content))
+                    if (kind == 'user' and user_input and row.get('isMeta') is not True and
+                            row.get('isCompactSummary') is not True):
+                        # This prompt has landed; its snapshot no longer pends.
+                        if identifier in pending_prompts:
+                            pending_prompts.remove(identifier)
+                        prompt_ids = (prompt_ids + [identifier])[-MAX_PROMPT_IDS:]
                     if (kind == 'user' and user_input and row.get('isMeta') is not True and
                             row.get('isCompactSummary') is not True and offset >= baseline['offset']):
                         exact = content == record.get('focus') or (isinstance(content, list) and len(content) == 1 and isinstance(content[0], dict) and content[0].get('text') == record.get('focus'))
@@ -484,11 +548,12 @@ def _native_idle(record, focus_after=None):
                   focus_seen=focus_seen, final_assistant=final_assistant,
                   focus_input_seen=focus_input_seen, focus_turn_seen=focus_turn_seen,
                   turns_seen=turns_seen, user_turns_seen=user_turns_seen,
-                  queued_input_seen=queued_input_seen, children=children)
+                  queued_input_seen=queued_input_seen, children=children,
+                  pending_prompts=pending_prompts, prompt_ids=prompt_ids)
     record['_idle_cursor'] = cursor
     if incomplete:
         return {'state': 'unknown', 'reason': 'idle_transcript_incomplete'}
-    return {'state': 'idle' if idle else 'busy_or_unknown', 'source': 'native_root_turn',
+    return {'state': 'idle' if idle and not pending_prompts else 'busy_or_unknown', 'source': 'native_root_turn',
             'observed_at': time.time(), 'turn_id': turn, 'offset': start,
             'focus_observed': focus_seen if focus_after is not None else None,
             'turns_seen': turns_seen}

@@ -4,6 +4,7 @@
 --mutation-check proves the guards/witness tests reject intentionally broken
 variants loaded from private temporary modules, without editing the worktree.
 """
+import copy
 from contextlib import nullcontext
 import hashlib
 import importlib.util
@@ -322,6 +323,200 @@ class ControlTests(unittest.TestCase):
         self.transcript.write_text('')
         self.rows(*self.codex_idle_rows(), {'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': 'child', 'root_turn_id': 'one'}}, {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'child'}})
         self.assertEqual('idle', self.native_idle_result(self.idle_record('codex'))['state'])
+
+    # Claude Code 2.1.332: structure-only capture of a real root turn, two real
+    # post-turn tails that read idle, and real rows that must read busy. The
+    # compact baseline falls mid-turn, as it does when an agent calls
+    # self_compact from inside its own turn.
+    CLAUDE_332 = json.loads((MODULE.parent / 'fixtures/claude-2.1.332-idle-turn.json').read_text())
+    # Written independently of the production table: kind -> (required field,
+    # a measured-type value, a wrong-type value). Every kind here occurs in the
+    # fixture's real rows.
+    CLAUDE_NEUTRAL = {
+        'mode': ('mode', 'fixture', 1), 'permission-mode': ('permissionMode', 'fixture', 1),
+        'atis-latch': ('atis', 'fixture', 1), 'ai-title': ('aiTitle', 'fixture', 1),
+        'last-prompt': ('lastPrompt', 'fixture', 1), 'session-owner': ('accountUuid', 'fixture', 1),
+        'tools-used': ('tools', ['fixture'], 'fixture'), 'data-flow-records': ('records', [], 'fixture'),
+        'cost-state': ('startTime', 1, 'fixture'), 'pr-link': ('prNumber', 1, 'fixture'),
+    }
+    CLAUDE_TABLE = {
+        'mode': ('mode', str), 'permission-mode': ('permissionMode', str), 'atis-latch': ('atis', str),
+        'ai-title': ('aiTitle', str), 'last-prompt': ('lastPrompt', str), 'session-owner': ('accountUuid', str),
+        'tools-used': ('tools', list), 'data-flow-records': ('records', list), 'cost-state': ('startTime', int),
+        'pr-link': ('prNumber', int),
+    }
+    TURN_FIELDS = {'uuid': 'fixture', 'parentUuid': 'fixture', 'message': {'content': 'fixture'}, 'isSidechain': False}
+
+    def claude_332_record(self, before=None, action='compact'):
+        """Write the turn's rows up to the baseline; return an idle record."""
+        fixture = self.CLAUDE_332
+        self.transcript.write_text('')
+        self.rows(*copy.deepcopy(fixture['turn'][:fixture['baseline_after_row']] if before is None else before))
+        record = self.idle_record()
+        record['action'] = action
+        return record
+
+    def claude_332_rest(self):
+        return copy.deepcopy(self.CLAUDE_332['turn'][self.CLAUDE_332['baseline_after_row']:])
+
+    def claude_332_busy(self, name):
+        return copy.deepcopy(self.CLAUDE_332['busy_rows'][name])
+
+    def test_claude_332_completed_turn_and_post_turn_metadata_read_idle(self):
+        fixture_kinds = {row['type'] for rows in [self.CLAUDE_332['turn'], *self.CLAUDE_332['idle_tails']] for row in rows}
+        self.assertLessEqual(set(self.CLAUDE_NEUTRAL), fixture_kinds)
+        self.assertEqual(set(self.CLAUDE_NEUTRAL), set(self.CLAUDE_TABLE))
+        self.assertEqual(self.CLAUDE_TABLE, h._CLAUDE_METADATA)
+        for index, tail in enumerate([[]] + self.CLAUDE_332['idle_tails']):
+            with self.subTest(tail=index):
+                record = self.claude_332_record()
+                self.rows(*self.claude_332_rest(), *copy.deepcopy(tail))
+                result = self.native_idle_result(record)
+                self.assertEqual('idle', result['state'])
+                self.assertEqual(0, result['turns_seen'])
+        record = self.claude_332_record()
+        self.rows(*self.claude_332_rest(), *[{'type': kind, 'sessionId': SID, field: good}
+                                             for kind, (field, good, _) in self.CLAUDE_NEUTRAL.items()])
+        self.assertEqual('idle', self.native_idle_result(record)['state'])
+
+    def test_claude_332_mid_turn_pending_tool_and_arriving_prompt_stay_busy(self):
+        rest = self.claude_332_rest()
+        tail = copy.deepcopy(self.CLAUDE_332['idle_tails'][1])
+        # Mid-turn: everything except the closing turn_duration.
+        record = self.claude_332_record()
+        self.rows(*rest[:-1], *tail)
+        self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+        # Pending tool call: the turn stops at an assistant tool_use row and the
+        # 2.1.332 bookkeeping rows that accompany it keep arriving.
+        pending = 1 + max(i for i, row in enumerate(rest) if row['type'] == 'assistant' and
+                          row['message']['stop_reason'] == 'tool_use')
+        self.assertEqual('tool_use', rest[pending - 1]['message']['content'][-1]['type'])
+        record = self.claude_332_record()
+        self.rows(*rest[:pending], *[row for row in rest if row['type'] in ('data-flow-records', 'tools-used', 'session-owner')], *tail)
+        self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+        # A closing turn_duration after a final tool_use is not a completed
+        # answer; keep a text block so only stop_reason distinguishes it.
+        record = self.claude_332_record()
+        ended_on_tool = copy.deepcopy(rest)
+        final = next(row for row in reversed(ended_on_tool) if row['type'] == 'assistant')
+        final['message']['stop_reason'] = 'tool_use'
+        final['message']['content'] = [{'type': 'text', 'text': 'fixture'},
+                                       {'type': 'tool_use', 'id': 'fixture', 'name': 'fixture', 'input': {}}]
+        self.rows(*ended_on_tool, *tail)
+        self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+        # The real non-update snapshot that followed the first tail is written
+        # for an arriving prompt, often before that prompt's user row.
+        snapshot = self.claude_332_busy('arriving_prompt_snapshot')
+        self.assertIs(False, snapshot['isSnapshotUpdate'])
+        delta = next(row for row in rest if row['type'] == 'file-history-delta')
+        landed = {**copy.deepcopy(snapshot), 'messageId': self.CLAUDE_332['turn'][0]['uuid']}
+        for name, row in (('arriving_prompt_snapshot', snapshot), ('snapshot_for_landed_prompt', landed),
+                          ('data_flow_incomplete', self.claude_332_busy('data_flow_incomplete')),
+                          ('file_history_delta', copy.deepcopy(delta))):
+            with self.subTest(row=name):
+                record = self.claude_332_record()
+                self.rows(*copy.deepcopy(rest), *copy.deepcopy(self.CLAUDE_332['idle_tails'][0]), row)
+                self.assertNotEqual('idle', self.native_idle_result(record)['state'])
+
+    def test_claude_332_new_input_after_idle_witness_blocks_dispatch(self):
+        rest = self.claude_332_rest()
+        tail = copy.deepcopy(self.CLAUDE_332['idle_tails'][1])
+        fresh = copy.deepcopy(self.CLAUDE_332['turn'][0])
+        fresh.update(uuid='fixture-fresh', parentUuid=self.CLAUDE_332['turn'][-1]['uuid'])
+        for name, arrival in (('fresh_user', [fresh]), ('queue_enqueue', [self.claude_332_busy('queue_enqueue')])):
+            with self.subTest(arrival=name):
+                record = self.claude_332_record()
+                self.rows(*copy.deepcopy(rest), *copy.deepcopy(tail))
+                self.assertEqual('idle', self.native_idle_result(record)['state'])
+                self.rows(*arrival, *copy.deepcopy(tail))
+                result = self.native_idle_result(record)
+                self.assertNotEqual('idle', result['state'])
+                self.assertEqual(1, result['turns_seen'])
+                record.pop('_idle_cursor')
+                record['baseline'] = record['idle_baseline']
+                self.native_idle.side_effect = self.real_native_idle
+                waited = h._wait_idle(record, self.identity, time.monotonic() + 1)
+                self.assertEqual({'state': 'cancelled', 'reason': 'intervening_turn'},
+                                 {key: waited.get(key) for key in ('state', 'reason')})
+                record = self.claude_332_record(action='exit')
+                self.rows(*copy.deepcopy(rest), *copy.deepcopy(tail), *copy.deepcopy(arrival), *copy.deepcopy(tail))
+                with self.assertRaisesRegex(h.ControlError, 'superseded_by_new_input'):
+                    self.real_native_idle(record)
+
+    def test_claude_332_snapshot_before_turn_duration_pends_until_prompt_lands(self):
+        rest = self.claude_332_rest()
+        tail = copy.deepcopy(self.CLAUDE_332['idle_tails'][0])
+        snapshot = {**self.claude_332_busy('arriving_prompt_snapshot'), 'messageId': 'fixture-next'}
+        # Final assistant row, the NEXT prompt's snapshot, then this turn's
+        # linked turn_duration; the prompt's user row is not yet written.
+        self.assertEqual(['assistant', 'system'], [row['type'] for row in rest[-2:]])
+        record = self.claude_332_record()
+        self.rows(*rest[:-1], snapshot, rest[-1], *tail)
+        result = self.native_idle_result(record)
+        self.assertNotEqual('idle', result['state'])
+        self.assertEqual(0, result['turns_seen'])
+        # The prompt lands: ordinary new-input logic applies.
+        fresh = {**copy.deepcopy(self.CLAUDE_332['turn'][0]), 'uuid': 'fixture-next', 'parentUuid': rest[-1]['uuid']}
+        self.rows(fresh, *tail)
+        result = self.native_idle_result(record)
+        self.assertNotEqual('idle', result['state'])
+        self.assertEqual(1, result['turns_seen'])
+        # Once that prompt's own turn completes, nothing pends and it reads idle.
+        answer = {**copy.deepcopy(rest[-2]), 'uuid': 'fixture-next-a', 'parentUuid': 'fixture-next'}
+        duration = {**copy.deepcopy(rest[-1]), 'uuid': 'fixture-next-d', 'parentUuid': 'fixture-next-a'}
+        self.rows(answer, duration, *tail)
+        result = self.native_idle_result(record)
+        self.assertEqual('idle', result['state'])
+        self.assertEqual(1, result['turns_seen'])
+
+    def assert_claude_refused(self, row, reason):
+        record = self.claude_332_record()
+        self.rows(*self.claude_332_rest(), row)
+        with self.assertRaises(Exception) as caught:
+            self.real_native_idle(record)
+        self.assertIsInstance(caught.exception, h.ControlError)
+        self.assertEqual(reason, str(caught.exception))
+
+    def test_claude_332_truncated_unknown_and_malformed_rows_fail_closed(self):
+        # Truncated record: the last tail row has no newline yet.
+        record = self.claude_332_record()
+        self.rows(*self.claude_332_rest())
+        with self.transcript.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(self.CLAUDE_332['idle_tails'][1][-1])[:-5])
+        self.assertEqual('unknown', self.native_idle_result(record)['state'])
+        # Unknown kinds still raise: continued-in, derived-from (seen only after
+        # an arriving prompt), kinds never seen on 2.1.332, and invented ones.
+        for kind in ('continued-in', 'derived-from', 'agent-name', 'bridge-session', 'frame-link',
+                     'artifact-comment-monitor', 'artifact-autoreact-ledger', 'fixture-new-kind'):
+            with self.subTest(kind=kind):
+                self.assert_claude_refused({'type': kind, 'sessionId': SID, 'sessions': []}, 'idle_record_shape_unknown')
+        for kind in (['mode'], {'mode': 1}, 1, None):
+            with self.subTest(type=repr(kind)):
+                self.assert_claude_refused({'type': kind, 'sessionId': SID, 'mode': 'fixture'}, 'idle_record_shape_unknown')
+        # Accepted metadata must name this session, carry its typed field and
+        # none of the turn fields.
+        for kind, (field, good, wrong) in self.CLAUDE_NEUTRAL.items():
+            rows = [{'type': kind, 'sessionId': 'other', field: good}, {'type': kind, field: good},
+                    {'type': kind, 'sessionId': SID}, {'type': kind, 'sessionId': SID, field: wrong},
+                    {'type': kind, 'sessionId': SID, field: True}]
+            rows += [{'type': kind, 'sessionId': SID, field: good, name: value} for name, value in self.TURN_FIELDS.items()]
+            for row in rows:
+                with self.subTest(kind=kind, row=sorted(row, key=str)):
+                    self.assert_claude_refused(row, 'idle_metadata_malformed')
+        # The 2.1.332 rows seen only inside turns are validated too.
+        delta = next(row for row in self.claude_332_rest() if row['type'] == 'file-history-delta')
+        incomplete = self.claude_332_busy('data_flow_incomplete')
+        bad = [{**delta, 'sessionId': 'other'}, {**delta, 'messageId': 1}, {**delta, 'backup': 'fixture'},
+               {key: value for key, value in delta.items() if key != 'trackingPath'},
+               {**incomplete, 'sessionId': 'other'}, {key: value for key, value in incomplete.items() if key != 'sessionId'},
+               {**incomplete, 'v': 'fixture'}, {**incomplete, 'v': True}, {**incomplete, 'codes': 'fixture'}]
+        bad += [{**base, name: value} for base in (delta, incomplete) for name, value in self.TURN_FIELDS.items()]
+        snapshot = self.claude_332_busy('arriving_prompt_snapshot')
+        bad += [{**snapshot, 'messageId': 1}, {**snapshot, 'messageId': ''},
+                {key: value for key, value in snapshot.items() if key != 'messageId'}]
+        for row in bad:
+            with self.subTest(row=sorted(row.items(), key=str)):
+                self.assert_claude_refused(copy.deepcopy(row), 'idle_metadata_malformed')
 
     def test_idle_wait_busy_then_new_idle_and_timeout_no_send(self):
         oid = self.request('exit')
@@ -795,6 +990,16 @@ class ControlTests(unittest.TestCase):
     def test_claude_current_compaction_row_is_counted(self):
         for line, expected in (('  ⎿  Compacted', 1),
                                ('  ⎿  Compacted (ctrl+o to see full summary)', 1),
+                               # Claude Code 2.1.332 row, escapes removed: space, U+00A0.
+                               ('  ⎿ \u00a0Compacted ', 1),
+                               ('  ⎿\tCompacted', 1),
+                               # Unmeasured gaps stay uncounted.
+                               ('  ⎿\u00a0Compacted', 0),
+                               ('  ⎿\u00a0 Compacted', 0),
+                               ('  ⎿ \u00a0\tCompacted', 0),
+                               ('  ⎿  \u00a0Compacted', 0),
+                               ('\u00a0⎿ \u00a0Compacted', 0),
+                               ('  ⎿ \u00a0Compacted\u00a0soon', 0),
                                ('assistant said Compacted', 0)):
             with patch.object(h.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, line, '')):
                 marker = h._pane_marker(self.identity)
@@ -2040,6 +2245,33 @@ def mutations():
         ('live_worker_receipt', 'return record  # live observer owns the final receipt, including continuation', 'pass  # broken: overwrites live observer receipt'),
         ('cancelled_observer_lease_race', atomic_claim, obsolete_lease_first),
         ('scope', "[identity.boot_id, identity.pid, identity.starttime, session_id]", "[identity.boot_id, identity.pid, identity.starttime, session_id, identity.cwd]"),
+        ('claude_332_pane_nbsp', r"⎿(?:[ \t]+| \u00a0)Compacted", r"⎿[ \t]+Compacted"),
+        ('claude_332_pane_loose_gap', r"⎿(?:[ \t]+| \u00a0)Compacted", r"⎿[ \t\u00a0]+Compacted"),
+        ('claude_332_owner_unknown', "'session-owner': ('accountUuid', str), ", ''),
+        ('claude_332_data_flow_unknown', "'data-flow-records': ('records', list), ", ''),
+        ('claude_332_unshown_kind_accepted', "    'pr-link': ('prNumber', int),\n}", "    'pr-link': ('prNumber', int), 'derived-from': ('sessions', list),\n}"),
+        ('claude_332_delta_unknown', "    'file-history-delta': (('messageId', str),", "    'file-history-delta-x': (('messageId', str),"),
+        ('claude_332_in_turn_rows_neutral', "                        raise ControlError('idle_metadata_malformed')\n                    idle = False\n                    continue", "                        raise ControlError('idle_metadata_malformed')\n                    continue"),
+        ('claude_in_turn_any_session', "row.get('sessionId', record['session_id']) != record['session_id'] or", ''),
+        ('claude_in_turn_any_shape', "any(not isinstance(row.get(name), types) or isinstance(row.get(name), bool)\n                            for name, types in _CLAUDE_IN_TURN[kind]) or", 'False or'),
+        ('claude_in_turn_codes', "('codes' in row and not isinstance(row['codes'], list)) or", 'False or'),
+        ('claude_in_turn_turn_fields', "('codes' in row and not isinstance(row['codes'], list)) or\n                            any(name in row for name in _CLAUDE_TURN_FIELDS)):", "('codes' in row and not isinstance(row['codes'], list))):"),
+        ('claude_snapshot_neutral', "                            pending_prompts.append(message_id)\n                    idle = False", "                            pending_prompts.append(message_id)\n                    if kind != 'file-history-snapshot':\n                        idle = False"),
+        ('claude_pending_prompt_ignored', "'idle' if idle and not pending_prompts else", "'idle' if idle else"),
+        ('claude_pending_prompt_never_matched', "                            pending_prompts.remove(identifier)", "                            pass"),
+        ('claude_prompt_ids_forgotten', "prompt_ids = (prompt_ids + [identifier])[-MAX_PROMPT_IDS:]", 'pass'),
+        ('claude_snapshot_message_id_unchecked', "if not isinstance(message_id, str) or not message_id:\n                            raise ControlError('idle_metadata_malformed')", "if False:\n                            raise ControlError('idle_metadata_malformed')"),
+        ('claude_table_type_widened', "'cost-state': ('startTime', int),", "'cost-state': ('startTime', (int, float)),"),
+        ('claude_unknown_accepted', 'if kind not in _CLAUDE_BUSY:', 'if False:'),
+        ('claude_type_not_classified', "if not isinstance(kind, str):\n                    raise ControlError('idle_record_shape_unknown')", "if False:\n                    raise ControlError('idle_record_shape_unknown')"),
+        ('claude_metadata_any_session', "row.get('sessionId') != record['session_id'] or not isinstance(value, types)", 'not isinstance(value, types)'),
+        ('claude_metadata_any_type', "row.get('sessionId') != record['session_id'] or not isinstance(value, types)", "row.get('sessionId') != record['session_id']"),
+        ('claude_metadata_bool_as_int', 'or isinstance(value, bool) or any(', 'or any('),
+        ('claude_metadata_turn_fields', 'isinstance(value, bool) or any(name in row for name in _CLAUDE_TURN_FIELDS)):', 'isinstance(value, bool)):'),
+        ('claude_queue_after_idle_ignored', "                    if cancel_on_turn:\n                        queued_input_seen = True\n                        turns_seen = max(user_turns_seen, 1)\n                    else:\n                        raise ControlError('superseded_by_new_input')\n                if kind in _CLAUDE_METADATA:", "                    pass\n                if kind in _CLAUDE_METADATA:"),
+        ('claude_fresh_input_after_idle_ignored', '                            user_turns_seen += 1\n', '                            pass\n'),
+        ('claude_final_tool_use_completes', "message.get('stop_reason') == 'end_turn' and", ''),
+        ('claude_partial_row_completes', "return {'state': 'unknown', 'reason': 'idle_transcript_incomplete'}", 'pass'),
     ]
     failures = []
     with tempfile.TemporaryDirectory() as directory:
