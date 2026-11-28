@@ -9,8 +9,9 @@
   `quota_contract.py`. These five are the program files. The install layer
   keeps one symlink per host, the selector, at a fixed path under the home
   directory; it names either the Orgs copy or the dotfiles copy. A proxy
-  runs the selected copy's entry point with `exec`, passing the caller's
-  arguments and environment unchanged.
+  resolves the selector once and runs the selected copy's entry point by
+  its resolved real path with `exec`, passing the caller's arguments and
+  environment unchanged.
 - **Behavioral invariants (implementation):** each entry point finds its
   sibling modules from its own real location, so it works by absolute path,
   through a symlinked directory and from any working directory. It does not
@@ -20,7 +21,7 @@
   - The selector's path depends on the home directory only. No environment
     variable, including `AGENT_SKILLS_ROOT`, changes which copy a proxy
     runs.
-  - Until the dotfiles copy is removed, a proxy on a host with no selector
+  - Until M5a, a proxy on a host with no selector
     runs the dotfiles copy beside it, with the same arguments, environment,
     output and exit status as running that entry point directly. Pulling
     the dotfiles checkout and running any installer other than the
@@ -33,20 +34,27 @@
     environment, exits 0 with schema `token-usage-paths/1` and the same
     `config`, `config_exists` and `state_dir` as the installed command. If
     any check fails it changes nothing and says which.
-  - Activation holds an exclusive lock, records whether the serve unit was
-    active, stops it if so, replaces the selector by one atomic rename,
-    restores the unit's recorded state and verifies it. On a failed start
-    or check it renames the previous selector back, restores the unit on
-    the previous copy and exits nonzero. Rerunning after an interruption
+  - Activation holds an exclusive lock, reloads the unit manager and
+    confirms the loaded unit does not restart on status 127, records
+    whether the serve unit was active, stops it if so, replaces the
+    selector by one atomic rename, restores the unit's recorded state and
+    verifies it. On a failed start or check it stops the unit, confirms the
+    new process has ended, renames the previous selector back, restores and
+    verifies the unit on the previous copy and exits nonzero. Rerunning after an interruption
     completes or reverses the switch from its record.
   - Activation toward the dotfiles copy performs no check of the Orgs copy
-    and cannot be blocked by it.
+    and cannot be blocked by it, until M5a removes that target.
+  - From M5a, a host with no selector, or one naming the dotfiles copy, is
+    an installer error, and installing a host includes activation toward
+    Orgs validated against the Orgs copy alone: entry points executable,
+    program-file digests equal to the pins, `paths` answering with an
+    absolute state directory.
   - Installers obtain the tool's paths from `token-usage paths --json` and
     do not import the modules.
 - **Failure semantics:** a proxy whose selector names a directory or entry
   point that is missing or not executable prints one line to stderr naming
-  the path and the remedy and exits 127. It never runs the other copy. After
-  the dotfiles copy is removed, a proxy with no selector does the same. The
+  the path and the remedy and exits 127. It never runs the other copy. From
+  M5a, a proxy with no selector does the same. The
   serve unit does not restart on that status.
 - **Intentionally unspecified:** every other file in the Orgs copy; module
   structure; the selector's exact path and the activation step's command
@@ -67,6 +75,9 @@
   with it inactive, on a synthetic store that a state-changing command
   writes before and after; a failed unit start reverses the switch; an
   interruption before and after the rename is resolved by a rerun; two
-  concurrent activations serialize.
+  concurrent activations serialize; a process started before a switch
+  loads its later modules from the copy it started in; activation refused
+  when the loaded unit lacks the no-restart policy; from M5a, a host with
+  no selector fails the installer and is repaired by activation.
 - **Interpretation register:** the Interpretations Log of
   `docs/specs/usage-tooling-migration.md`.

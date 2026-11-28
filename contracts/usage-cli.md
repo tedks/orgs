@@ -25,23 +25,31 @@ only implementation and this is its description.
   and fixtures come from that same revision. The shapes consumers depend on
   today, with the consumer's own check as the normative test of each:
   - `token-usage posture --no-scan --json` (closed shape; `get_usage`
-    rejects any other; its validator in `harness-control/server.py` is the
-    test): an object with exactly the keys `provider` (`openai`, `anthropic`
-    or `none`), `reason` (string), `gated`, `scores`, `used_percent`,
-    `resets_at`, `stale` and `staleness`. The five maps each have exactly
-    the keys `openai` and `anthropic`: `gated` and `stale` hold booleans;
-    `scores` and `used_percent` hold a finite number or null, null exactly
-    when that provider's reading has expired; `resets_at` holds a string or
-    a finite number. `staleness` has `stale` (bool), `newest_observed`
-    (string), `age_seconds` (int) and optional `expired`, an object mapping
-    meter ids to non-negative integer ages.
-  - `token-usage meters --check --json` (the monitor reads the windows it
-    knows and ignores other keys; `valid_reading` in
-    `tools/quota_reset/monitor.py` is the test): an object keyed by meter id
-    whose values are objects with `window_minutes` (int, the window's
-    length), `account_scope`, `account_epoch` and `source` (non-empty
-    strings), `used_percent` (number, 0 to 100), `observed` (timestamp) and
-    `resets_at` (timestamp, or epoch seconds).
+    rejects any other, and what `_read_usage_posture` in
+    `harness-control/server.py` accepts is the definition): an object with
+    exactly the keys `provider` (`openai`, `anthropic` or `none`), `reason`
+    (string), `gated`, `scores`, `used_percent`, `resets_at`, `stale` and
+    `staleness`. The five maps each have exactly the keys `openai` and
+    `anthropic`: `gated` and `stale` hold booleans; `scores` and
+    `used_percent` hold a finite number or null; `resets_at` holds a string
+    or a finite number. `staleness` has `stale` (bool), `newest_observed`
+    (string), `age_seconds` (int) and optional `expired`, an object whose
+    keys are among `openai`, `anthropic.seven_day` and
+    `anthropic.five_hour` with non-negative integer ages. A provider's
+    score and percentage are null exactly when its weekly meter is listed
+    as expired.
+  - `token-usage meters --check --json`: an object keyed by meter id. Each
+    value is an object with `observed` (ISO-8601 string with offset),
+    `used_percent` (number), `window_minutes`, `resets_at` (ISO-8601 string
+    or epoch seconds) and `source` as the provider reported them, and
+    `account_scope` and `account_epoch` (non-empty string, or null when the
+    identity is unbound or masked). With `--check` and exit 0, `openai` and
+    `anthropic.seven_day` are present with `used_percent` in 0 to 100,
+    `window_minutes` equal to 10080 and valid `observed` and `resets_at`.
+    The quota-reset monitor reads the windows it knows, ignores other keys,
+    and additionally requires a non-null identity, an integer window,
+    freshness and `resets_at` after `observed`; it ignores readings that
+    fail (`valid_reading` in `tools/quota_reset/monitor.py`).
   - `token-usage sessions|totals|meters --no-scan [--json]`, `token-usage
     scan`, `token-tripwire status [--json]`: passed through by the `usage`
     skill without interpretation.
@@ -53,12 +61,14 @@ only implementation and this is its description.
     that does not exist is not an error for any subcommand; `config_exists`
     is then false and defaults apply. `state_dir` is
     `${XDG_STATE_HOME:-~/.local/state}/token-usage` unless the config sets
-    it. Both paths are reported exactly as the other subcommands resolve
-    them, with user expansion and nothing else, so they are absolute
-    whenever the values supplied are; an installer rejects a result that is
-    not absolute. `paths` reads only the config file and creates nothing.
-- **Behavioral invariants:** from M2 to M5 the two copies' program files are
-  byte-identical, so every command behaves identically on either. Reads with
+    it. Both are reported exactly as the other subcommands resolve them:
+    `config` as given, `state_dir` with `${XDG_STATE_HOME}` substituted and
+    user expansion. The installers require an absolute `state_dir`, as they
+    do today, and place no new requirement on `config`. `paths` reads only
+    the config file and creates nothing.
+- **Behavioral invariants:** from M2 to M5b the two copies' program files
+  are byte-identical and frozen, so every command behaves identically on
+  either and on every host. Reads with
   `--no-scan` do not scan. Output carries counts, identifiers, times and, for
   `paths`, filesystem paths; never message content. Python 3.11 or later,
   standard library only.
@@ -66,8 +76,10 @@ only implementation and this is its description.
   or an unknown schema as "usage unavailable", never as zero usage or a
   fresh store. `paths` with a config file that exists but cannot be read or
   parsed exits 1 with the reason on stderr and prints nothing on stdout.
-  Exit 127 from an installed name means the host's selector names a copy
-  that is not present.
+  Exit 127 from an installed name means the selected copy cannot be run:
+  the selector names a missing directory or a missing or non-executable
+  entry point, or, from M5a, the host has no
+  selector. A missing `python3` gives the same status.
 - **Intentionally unspecified:** the store's layout and formats; module
   names, functions and import paths; log wording; and, for versions after
   the migration completes, text-mode column widths and JSON key order.

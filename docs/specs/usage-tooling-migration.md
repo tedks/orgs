@@ -54,8 +54,7 @@ Goals:
    hostnames, user names, home paths, project or worktree names, pane ids,
    or figures measured on a real host, in any pushed commit.
 4. A host can be switched back to the dotfiles copy by one command, with
-   no store migration in either direction, until the dotfiles copy is
-   removed.
+   no store migration in either direction, until M5a closes that way back.
 5. The in-review quota-service work lands where it is being reviewed and is
    imported at its merged head. It is not restarted or rebased onto this
    move.
@@ -107,21 +106,26 @@ Boundaries:
   entries become proxies. Each resolves one per-host symlink, the selector,
   at a fixed path under the home directory that no environment variable
   changes, and runs the entry point in the directory it names. The selector
-  names either the dotfiles copy or the Orgs copy. While a host has no
-  selector, the proxies run the dotfiles copy beside them, so merging and
+  names either the dotfiles copy or the Orgs copy. Until M5a, while a host
+  has no selector, the proxies run the dotfiles copy beside them, so merging and
   pulling the cutover change, and every later installer run, leave the host
   on the code it ran before. Nothing but the activation step creates or
-  changes the selector, and no step edits `~/.bin`.
+  changes the selector, and no step edits `~/.bin`. A proxy resolves the
+  selector once and runs the entry point by its resolved real path, so a
+  process started before a switch keeps loading modules from the copy it
+  started in.
 - **Activation is one atomic rename, validated and reversible.** Under an
   exclusive lock, the activation step validates the Orgs copy (the three
   entry points are executable; the five program files are byte-identical to
   the dotfiles copy; `paths` run there by path answers with the expected
   schema and the same values as the installed command under the cron row's
-  environment). It records whether the serve unit was active, stops it if
-  so, renames a new selector into place, starts the unit again if it was
-  active, and checks the result. If the start or a check fails it renames
-  the previous selector back, restarts the unit on the previous copy and
-  exits nonzero. A command that starts before the rename runs the old copy
+  environment). It reloads the unit manager and confirms the loaded unit
+  carries the no-restart-on-127 policy. It records whether the serve unit
+  was active, stops it if so, renames a new selector into place, starts the
+  unit again if it was active, and checks the result. If the start or a
+  check fails it stops the unit, confirms the new process has ended, renames
+  the previous selector back, restores the unit on the previous copy,
+  verifies that state and exits nonzero. A command that starts before the rename runs the old copy
   to completion and one that starts after runs the new one; no caller sees a
   mix. Switching back is the same step toward the dotfiles copy and is never
   blocked by the state of the Orgs checkout.
@@ -136,16 +140,19 @@ Boundaries:
   makes the proxy print one line naming the path and the remedy and exit
   127; it never falls back to the other copy. The serve unit must not
   restart-loop on that status. That unit edit reaches hosts on pull and
-  takes effect at the next daemon reload; it is behaviour-neutral because
-  the status cannot occur before a selector exists.
+  takes effect at the next daemon reload. Before a selector exists it
+  changes one thing: a missing interpreter, which also exits 127, stops the
+  unit instead of restart-looping.
 - **`token-usage paths`.** `install-token-tripwire` and
   `install-quota-service` import `token_usage` to learn the state directory.
   A read-only subcommand replaces those imports. It lands in dotfiles before
   the import, so both copies have it, the installers' tests keep running
-  against the dotfiles copy, and the two copies stay byte-identical. It is an
-  ordinary dotfiles change that hosts receive on pull: it adds a subcommand
-  (so help text and the invalid-subcommand message list one more name) and
-  changes how two installers look up a directory.
+  against the dotfiles copy, and the two copies stay byte-identical. Hosts
+  receive it on pull: it adds a subcommand (so help text and the
+  invalid-subcommand message list one more name) and changes how two
+  installers look up a directory, keeping the rule they apply today that
+  the state directory must be absolute. Because it changes installed
+  behaviour for this migration, it needs the go.
 - **Program files are byte-identical; everything else is audited.** The five
   program files are copied unchanged if the publication audit finds nothing
   private in them. If it finds something, the fix lands in dotfiles first and
@@ -153,15 +160,17 @@ Boundaries:
   its copied tests and its fixtures are also unchanged. README, the other
   tests and all other fixtures are rewritten or rebuilt for publication.
 - **Publication audit, a named gate (M2a).** Described under Milestones.
-- **Both copies are frozen** from the import commit until the dotfiles copy
-  is removed. Each repository carries a test pinning the digests of the five
-  program files (`token_usage.py`, `tripwire.py`, `calibrate.py`,
-  `quota_service.py`, `quota_contract.py`), so no revision of either default
-  branch in that window carries an unpaired program file. A fix changes both
-  pins: it lands in dotfiles, is ported to Orgs unchanged, and may not change
-  the store's format or the config's meaning, so hosts on either revision of
-  either copy read each other's store. Activation toward Orgs also compares
-  the two copies on the host and refuses if they differ.
+- **Both copies are frozen, with no exceptions inside the window.** From
+  the import commit until the dotfiles copy is removed, the five program
+  files (`token_usage.py`, `tripwire.py`, `calibrate.py`,
+  `quota_service.py`, `quota_contract.py`) do not change in either
+  repository. Each repository carries a test pinning their digests.
+  Activation toward Orgs also compares the two copies on the host and
+  refuses if they differ. If a fix cannot wait, the window is closed first:
+  every activated host is switched back, the fix lands in dotfiles, and the
+  import is repeated from the new commit through the publication audit with
+  new pins before any host is activated again. Hosts therefore never run
+  differing program files against one store.
 - **Gates.** The unit suites and the quota suites become Bazel targets under
   `skills/_shared/usage/` and join `//:portable_tools_test`. The mutation
   checks `tests/mutate_tripwire.py` and `tests/mutate_calibrate.py` are
@@ -217,9 +226,8 @@ None yet.
 ## Milestones
 
 Owners are named. "Go" means the dotfiles owner's and the CEO's explicit
-approval. M3 activation and M5 change which copy a host runs and need the
-go. M1 and M1b are ordinary dotfiles changes that reach hosts on pull under
-the dotfiles owner's own approval.
+approval. M1b, M3 activation and M5 need the go. M1 is the dotfiles owner's
+existing review of two pull requests and stays on its own path.
 
 - **M0. Spec.** This document and its contracts, CLEAN at a formal council
   round. Owner: Orgs.
@@ -230,7 +238,9 @@ the dotfiles owner's own approval.
 - **M1b. `paths` lands in dotfiles.** `token-usage paths` as the CLI
   contract defines it, with tests; `install-token-tripwire` and
   `install-quota-service` call it instead of importing. Owner: dotfiles,
-  drafted by Orgs on request. Acceptance: installer tests pass; `paths`
+  drafted by Orgs on request; merges with the go. Acceptance: the installers
+  accept and reject exactly the configurations they did before, including
+  relative config paths, shown by tests; installer tests pass; `paths`
   reports the `state_dir` the import returned, on the same environment, for
   each config-precedence case; apart from help text and the
   invalid-subcommand message, no other subcommand's output changes.
@@ -250,12 +260,16 @@ the dotfiles owner's own approval.
      is kept outside Orgs and supplied at run time; pane ids not on the list
      of synthetic ids. Files copied unchanged from the public frontend
      repository are scanned too; their hits are reviewed and, when synthetic,
-     added to the lists by the reviewer, never edited. The guard runs
-     locally on every commit about to be pushed to the import branch, before
-     each push, including pushes that answer review findings.
-  4. A fresh reviewer at the Lead tier, with access to both trees, reads the
-     staged tree and the guard's output and returns a verdict on publication
-     alone. The foreign council seats cannot see the private tree and do not
+     added to the lists by the reviewer, never edited. The deny list also
+     carries the figures the private README and tests quote from a real
+     host. The guard runs locally on every commit about to be pushed to the
+     import branch, including its message, before each push, including
+     pushes that answer review findings. The first push is a single commit
+     built from the audited tree.
+  4. A fresh reviewer at the Lead tier, with access to both trees, reads
+     the exact commits about to be pushed, their messages and every
+     intermediate change, with the guard's output, and returns a verdict on
+     publication alone. The same review precedes every later push. The foreign council seats cannot see the private tree and do not
      substitute for this reviewer.
   5. The audit record (inventory, guard output, reviewer verdict, the
      dotfiles owner's sign-off, the comparison output and the dotfiles
@@ -289,11 +303,13 @@ the dotfiles owner's own approval.
   3. Evidence, recorded per host in the dotfiles owner's host inventory:
      the selector names the Orgs copy; through the installed names,
      `token-usage paths`, `snapshot --no-scan` and `token-tripwire status`
-     exit 0; one `token-tripwire tick` run by the activation step through
-     the installed name under the cron row's environment exits 0, its exit
-     status is recorded, and the store it wrote is the one `paths` reports;
-     the next scheduled tick advances that store with no new error line in
-     the cron log; where the unit was active, it is active again, its
+     exit 0; one `token-tripwire tick --dry-run` run by the activation step
+     through the installed name under the cron row's environment exits 0,
+     so activation itself adds no production writes; the next scheduled
+     tick is confirmed from the tripwire's own record of a completed tick,
+     in the store `paths` reports, later than the switch, with no new error
+     line in the cron log, and a tick skipped because another was running
+     does not count; where the unit was active, it is active again, its
      restart count is unchanged afterwards, its main process runs from the
      selected directory, and it answers a snapshot request with a valid
      object; `get_usage` returns a posture.
@@ -309,33 +325,42 @@ the dotfiles owner's own approval.
   dotfiles. Frontend owner: the "where the code lives" section of its spec.
   dotfiles owner: its agent instructions' pointer to the usage README.
   Acceptance: each names the shipped layout.
-- **M5. Remove the dotfiles copy.** Owner: dotfiles, with the go. Requires:
-  the host inventory lists every host, including ones that were offline;
-  each host's selector is re-read at M5 time and names the Orgs copy; each
-  has M3 evidence and at least one weekly quota window since with no switch
-  back (a minimum the dotfiles owner may extend); the dotfiles commit that
-  still holds the copy is recorded as the recovery revision; and a rehearsal
-  on one host, starting from the M5 change applied, restores the copy from
-  the recovery revision and switches that host back with the switch-back
-  evidence. The change removes the program files, their tests, the Bazel
-  exports of them and both digest pins' dotfiles side; makes a proxy with no
-  selector exit 127 instead of running the removed copy; drops the
-  activation step's comparison; and points the installer tests at a stub
-  `paths` or a pinned Orgs checkout. It does not remove the proxies, the
-  selector, installers, the unit file or anything an enabled host links.
+- **M5. Remove the dotfiles copy.** Owner: dotfiles, with the go, in two
+  changes.
+  - **M5a. Close the way back.** Requires: the host inventory lists every
+    host, including ones that were offline; each has M3 evidence and at
+    least one weekly quota window since with no switch back (a minimum the
+    dotfiles owner may extend); the dotfiles commit before M5a is recorded
+    as the recovery revision. The change makes the activation step refuse
+    the dotfiles copy as a target; makes a proxy, and every installer run,
+    fail loudly on a host with no selector or a selector naming the dotfiles
+    copy, without touching the copy; and makes installing a host include
+    activation toward Orgs, validated against the Orgs copy alone (entry
+    points executable, digests equal to the pins, `paths` answering with an
+    absolute state directory). The copy is still present, so a host that
+    fails here is repaired by activating it. Acceptance: every host has
+    pulled M5a and its installer run passed; a host with no selector has
+    been installed through activation with the M3 evidence.
+  - **M5b. Delete.** Requires M5a's acceptance on every host, re-read at
+    that time, and a rehearsal on one host that, starting from the M5b
+    change applied, restores the copy and the previous activation step from
+    the recovery revision and switches that host back with the switch-back
+    evidence. The change removes the program files, their tests, the Bazel
+    exports of them and the dotfiles digest pin, drops the activation
+    step's two-copy comparison, and points the installer tests at a stub
+    `paths` or a pinned Orgs checkout. It does not remove the proxies, the
+    selector, installers, the unit file or anything an enabled host links.
+    From here the freeze ends and the Orgs copy changes under its contracts.
 
-**The two-copy window (M2 to M5).** The dotfiles owner approves any fix; the
-Orgs owner ports it and both digest pins change together; the pair of
-commits is recorded privately in the dotfiles tracker, and the Orgs tracker
-names only the Orgs commit. Changes to the installers, the unit or the
-vendored contract in that window are checked against both copies before
-they merge. The pins hold the pairing on both default branches; the
-activation step's comparison checks it on the host at each activation run.
-Between runs a host runs whatever its checkouts carry, which the pins keep
-paired and store-compatible.
+**The two-copy window (M2 to M5b).** No program file changes; the pins in
+both repositories and the activation step's comparison enforce it. Changes
+to the installers, the unit or the vendored contract's tests in that window
+are checked against both copies before they merge. Closing the window for a
+fix follows the rule under Decisions and is the dotfiles owner's call with
+the go. Commit pairs are recorded privately; the Orgs tracker names only
+Orgs commits.
 
-Stop conditions: a consumer-visible difference at any milestone; a fix in
-the two-copy window that would change the store's format; a guard hit
+Stop conditions: a consumer-visible difference at any milestone; a guard hit
 or reviewer finding that cannot be fixed in dotfiles; private data found in a
 pushed Orgs commit (stop all pushes, report to the CEO at once; the remedy is
 removal of the commits and the pull request's refs by the hosting provider,
@@ -345,5 +370,5 @@ and the data is treated as disclosed); the go withheld.
 
 1. **Which hosts activate, in what order, and when.** Decides: dotfiles
    owner with the CEO. Blocks: M3 activation only.
-2. **Soak length before M5.** This spec says one weekly quota window.
-   Decides: dotfiles owner. Blocks: M5 only.
+2. **Soak length before M5a.** This spec says one weekly quota window.
+   Decides: dotfiles owner. Blocks: M5a only.
