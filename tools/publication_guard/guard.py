@@ -24,9 +24,12 @@ HEX_TOKEN = re.compile(r"(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])", re.I)
 DELIMITED_UUID = re.compile(UUID, re.I)
 ID_SUFFIX = r"[a-z0-9][a-z0-9_-]*(?![a-z0-9_-])"
 MACOS_HOME = "/" + "Users/"
-HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "root/", MACOS_HOME, MACOS_HOME.upper())
+HOME_ROOTS = ("/var" + HOME_PREFIX, HOME_PREFIX, "/" + "root/")
+MACOS_PATH_START = r"(?<![\w./-])"
 HOME_START = re.compile(
-    "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + r")|(?<![\w~])~[A-Za-z_][A-Za-z0-9_.-]*"
+    "(?:" + "|".join(map(re.escape, HOME_ROOTS)) + ")"
+    + "|" + MACOS_PATH_START + "(?i:" + re.escape(MACOS_HOME) + ")"
+    + r"|(?<![\w~])~[A-Za-z_][A-Za-z0-9_.-]*"
 )
 PRINTF_DIRECTIVE = re.compile(
     r"%(?:[0-9]+\$)?[-+#0 ']*(?:[0-9]+|\*(?:[0-9]+\$)?)?"
@@ -249,14 +252,16 @@ def wrapped_bodies(lines):
     for number, line in chain(lines, ((None, ""),)):
         part = line.strip()
         candidate = BASE64_LINE.fullmatch(part) and not opaque_path(part)
-        if parts and candidate and len(part) < width and not parts[-1].endswith("="):
+        short_tail = parts and candidate and len(part) < width and not parts[-1].endswith("=")
+        if short_tail:
             # Encoders can emit a shorter final line, including without padding.
             parts.append(part)
-            candidate = False
         if parts and (not candidate or len(part) != width or parts[-1].endswith("=")):
             if len(parts) > 1:
                 body = "".join(parts)
                 if opaque_body(body):
+                    if short_tail:
+                        candidate = False
                     yield start, body, "\n".join(parts)
             parts.clear()
         if candidate and len(part) >= MIN_WRAP_WIDTH:

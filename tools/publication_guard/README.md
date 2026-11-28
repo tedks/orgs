@@ -55,10 +55,15 @@ result and requires BASE to be an ancestor of TIP. Shallow history and
 active grafts produce hard findings. An empty range, empty directory scan,
 or empty commit tree in full-tree mode requires `--allow-empty-scan`.
 
-Use `git push --no-follow-tags origin <reviewed-sha>:refs/heads/<branch>`
-to push the exact audited commit to the publication branch. Review
-annotated tag objects separately before pushing tags. Git mode audits
-the commits a tag points to.
+Set `reviewed_sha` to the exact audited commit ID and `branch` to the
+publication branch name.
+
+```sh
+git push --no-follow-tags origin "${reviewed_sha}:refs/heads/${branch}"
+```
+
+Review annotated tag objects separately before pushing tags. Git mode
+audits the commits a tag points to.
 
 The guard checks relative names, including directory names, symlink
 targets, and UTF-8 file content. It scans gzip member payloads both
@@ -78,7 +83,10 @@ hash. An MD5 digest can resemble a compact UUID, and a SHA-256 digest can
 resemble two adjacent compact UUIDs. Add exact known digests to the allow
 list after review.
 Home path detection covers common Linux home roots, the root account,
-named-user tilde paths, and the title-case and upper-case macOS prefixes.
+named-user tilde paths, and the macOS Users root in any case at the start
+of a path. A bare macOS Users path string in code is a finding by design,
+including with a lower-case root. Embedded URL and REST path segments
+are outside this rule.
 A standalone percent-prefixed number is treated as a pane target.
 Percentages and complete format directives are ignored. The optional
 allow list accepts exact synthetic IDs and home path tokens, one per

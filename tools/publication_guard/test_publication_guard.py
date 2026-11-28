@@ -2,10 +2,13 @@ import base64
 import contextlib
 from datetime import date
 import gzip
+import hashlib
+import inspect
 import io
 import json
 import os
 from pathlib import Path
+import random
 import re
 import shutil
 import subprocess
@@ -105,6 +108,14 @@ ENCODED_TERM = "grove" + ".mistral"
 #    test_decoded_json_long_body_once).
 # 5–7. Slash-heavy opaque data, concatenated literals, digest ambiguity, and
 #    separate handling of surrogate halves: documented in the README.
+# Round 5
+# 1. Checksum immediately before three standard encoder lines: opaque
+#    (test_wrapped_body_after_longer_checksum).
+# 2. Any case at a macOS path start: hard; embedded segments: clean
+#    (test_macos_home_only_at_path_start).
+# 3. Wrapped data before an unrelated multiline quote: opaque
+#    (test_decoded_wrap_before_quoted_payload).
+# 4. Exact-commit push quotes the source and destination shell variables.
 
 
 class PublicationGuard(unittest.TestCase):
@@ -289,7 +300,28 @@ class PublicationGuard(unittest.TestCase):
         self.write(upper)
         self.allow.write_text(upper, encoding="utf-8")
         self.assertEqual(self.scan("--allow-list", self.allow)[0], 0)
-        self.write("https://example.invalid/" + "users/morrow/work\n/" + "uSeRS/morrow/work")
+        self.write("https://example.invalid/" + "users/morrow/work")
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_macos_home_only_at_path_start(self):
+        lower = "/" + "users/morrow"
+        paths = (
+            lower + "/work",
+            "cd " + lower,
+            json.dumps({"cwd": lower + "/x"}, separators=(",", ":")),
+            guard.MACOS_HOME + "quux/x",
+            guard.MACOS_HOME.upper() + "quux/x",
+            "/" + "uSeRS/morrow/work",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                self.write(path)
+                self.assertEqual([row["rule"] for row in self.scan()[1][:-1]], ["home-path"])
+        self.write("\n".join((
+            "https://api.example.com/" + "users/quux/repos",
+            'fetch("/api' + "/" + 'users/42/profile")',
+            "relative" + lower, "." + lower, "/" + lower, "-" + lower,
+        )))
         self.assertEqual(self.scan()[0], 0)
 
     def test_home_path_punctuation_and_quoted_space(self):
@@ -590,6 +622,31 @@ class PublicationGuard(unittest.TestCase):
         for rendered in (truncated, json.dumps({"blob": truncated})):
             self.write(rendered)
             self.assertEqual(self.scan()[0], 0)
+
+    def test_wrapped_body_after_longer_checksum(self):
+        checksum = hashlib.sha384(b"synthetic checksum input").hexdigest()
+        encoded = base64.encodebytes(bytes(range(171))).decode("ascii")
+        lines = encoded.splitlines()
+        self.assertEqual(len(checksum), 96)
+        self.assertEqual([len(line) for line in lines], [76] * 3)
+        self.write(checksum + "\n" + encoded)
+        rc, rows, _ = self.scan("--unredacted")
+        self.assertEqual(rc, 1)
+        self.assertEqual([(row["rule"], row["line"], row["match"]) for row in rows[:-1]],
+                         [("opaque", 2, "".join(lines))])
+        self.write("\n".join((checksum, *lines[:-1])))
+        self.assertEqual(self.scan()[0], 0)
+
+    def test_decoded_wrap_before_quoted_payload(self):
+        encoded = base64.encodebytes(random.Random(23).randbytes(600)).decode("ascii")
+        suffix = r' tail "a\nb"'
+        self.write("log: " + encoded.replace("\n", r"\n") + suffix)
+        rc, rows, _ = self.scan()
+        self.assertEqual(rc, 1)
+        self.assertEqual([(row["rule"], row["view"]) for row in rows[:-1]], [("opaque", "decoded")])
+        short = r"\n".join(encoded.splitlines()[:3])
+        self.write("log: " + short + suffix)
+        self.assertEqual(self.scan()[0], 0)
 
     def test_decoded_json_long_body_once(self):
         encoded = base64.encodebytes(bytes(index % 251 for index in range(285))).decode("ascii")
@@ -1110,6 +1167,16 @@ def only_raw_deny_entries(entries):
             for term, source, line in entries]
 
 
+def source_mutant(function, original, replacement):
+    source = inspect.getsource(function)
+    if source.count(original) != 1:
+        raise ValueError(f"Mutation anchor changed in {function.__name__}.")
+    namespace = dict(vars(guard))
+    code = compile(source.replace(original, replacement), function.__code__.co_filename, "exec")
+    exec(code, namespace)
+    return patch.object(guard, function.__name__, namespace[function.__name__])
+
+
 def baseline_passes(suite, stream):
     result = unittest.TextTestRunner(stream=stream).run(suite)
     if not result.wasSuccessful() or result.skipped:
@@ -1304,7 +1371,7 @@ def mutation_check():
          patch.object(guard, "MIN_WRAP_WIDTH", 1)),
         ("macos-home-prefix-case", "test_macos_home_prefix_case_and_exact_allowlist",
          patch.object(guard, "HOME_START", re.compile(guard.HOME_START.pattern.replace(
-             "|" + re.escape(guard.MACOS_HOME.upper()), "")))),
+             "(?i:" + re.escape(guard.MACOS_HOME) + ")", re.escape(guard.MACOS_HOME))))),
         ("deny-case-prefilter", "test_deny_prefilter_matches_unicode_case_variants",
          patch.object(guard, "deny_matches", old_case_prefilter)),
         ("missing-list-diagnostic", "test_missing_lists_are_distinct_from_invalid_encoding",
@@ -1323,13 +1390,21 @@ def mutation_check():
          patch.object(guard, "BASE64_CLASSES", guard.BASE64_CLASSES[:-1])),
         ("opaque-hex-diversity", "test_long_hex_run_is_opaque",
          patch.object(guard, "MIN_HEX_DISTINCT", 1)),
-        ("macos-home-unrestricted-case", "test_macos_home_prefix_case_and_exact_allowlist",
-         patch.object(guard, "HOME_START", re.compile(guard.HOME_START.pattern, re.I))),
+        ("macos-home-without-path-start", "test_macos_home_only_at_path_start",
+         patch.object(guard, "HOME_START", re.compile(
+             guard.HOME_START.pattern.replace(guard.MACOS_PATH_START, "")))),
         ("printf-complete-directive", "test_complete_printf_directives_with_modifiers",
          patch.object(guard, "PRINTF_DIRECTIVE", re.compile(
              r"%[0-9]+(?:\.[0-9]+|\$(?:[0-9]+)?(?:\.[0-9]+)?)[diouxXeEfFgGaAcCsSpn](?!\w)"))),
         ("duplicate-decoded-json-body", "test_decoded_json_long_body_once",
          patch.object(guard, "decoded_wrapped", duplicate_decoded_interior)),
+        ("discarded-short-wrap-line", "test_wrapped_body_after_longer_checksum",
+         source_mutant(guard.wrapped_bodies,
+                       "            parts.append(part)\n        if parts",
+                       "            parts.append(part)\n            candidate = False\n        if parts")),
+        ("decoded-prefix-segment", "test_decoded_wrap_before_quoted_payload",
+         source_mutant(guard.decoded_wrapped,
+                       "yield from scan_payload(start, view[start:match.start()])", "pass")),
     ])
     for rule, prefix in guard.PREFIXES[3:]:
         method = "test_" + rule.replace("-", "_") + "_boundary"
