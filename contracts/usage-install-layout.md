@@ -2,53 +2,71 @@
 
 - **Owner:** Orgs, usage implementation. **Consumers (ack list):** dotfiles
   install layer.
-- **Inputs / outputs:** the implementation directory is
-  `${TOKEN_USAGE_IMPL:-$HOME/.claude/skills/_shared/usage}`. It contains the
-  executable files `token_usage.py`, `tripwire.py` and `calibrate.py`, each
-  with a `python3` interpreter line, and the modules they import. A proxy
-  runs one of the three with `exec`, passing the caller's arguments and
-  environment unchanged. The directory is not derived from
-  `AGENT_SKILLS_ROOT`.
+- **Inputs / outputs:** the Orgs copy is the directory
+  `~/.claude/skills/_shared/usage`. It contains the executable entry points
+  `token_usage.py`, `tripwire.py` and `calibrate.py`, each with a `python3`
+  interpreter line, and the modules `quota_service.py` and
+  `quota_contract.py`. These five are the program files. The install layer
+  keeps one symlink per host, the selector, at a fixed path under the home
+  directory; it names either the Orgs copy or the dotfiles copy. A proxy
+  runs the selected copy's entry point with `exec`, passing the caller's
+  arguments and environment unchanged.
 - **Behavioral invariants (implementation):** each entry point finds its
   sibling modules from its own real location, so it works by absolute path,
   through a symlinked directory and from any working directory. It does not
-  depend on the name it was invoked as, on dotfiles being present, or on a
-  package install.
+  depend on the name it was invoked as, on dotfiles being present, on any
+  environment variable to locate its modules, or on a package install.
 - **Behavioral invariants (install layer):**
-  - Pulling the dotfiles checkout changes nothing a host runs. Only the
-    activation step repoints `~/.bin/token-usage`, `~/.bin/token-tripwire`
-    and `~/.bin/token-calibrate`.
-  - Before repointing to the Orgs copy, activation verifies in the
-    implementation directory: the three entry points are executable; the
-    five program files are byte-identical to the dotfiles copy while that
-    copy exists; and running `token_usage.py paths --json` there, by path,
-    exits 0 with schema `token-usage-paths/1`. If any check fails it changes
-    nothing and reports which.
-  - Activation stops the serve unit when it is enabled, switches the names,
-    starts the unit again and reports each step. It records which names it
-    switched, so a rerun in either direction completes or reverses a partial
-    switch.
+  - The selector's path depends on the home directory only. No environment
+    variable, including `AGENT_SKILLS_ROOT`, changes which copy a proxy
+    runs.
+  - Until the dotfiles copy is removed, a proxy on a host with no selector
+    runs the dotfiles copy beside it, with the same arguments, environment,
+    output and exit status as running that entry point directly. Pulling
+    the dotfiles checkout and running any installer other than the
+    activation step never creates or changes the selector and never changes
+    which copy a host runs.
+  - Activation toward the Orgs copy first verifies, in that directory: the
+    three entry points are executable; the five program files are
+    byte-identical to the dotfiles copy while it exists; and
+    `token_usage.py paths --json`, run there by path under the cron row's
+    environment, exits 0 with schema `token-usage-paths/1` and the same
+    `config`, `config_exists` and `state_dir` as the installed command. If
+    any check fails it changes nothing and says which.
+  - Activation holds an exclusive lock, records whether the serve unit was
+    active, stops it if so, replaces the selector by one atomic rename,
+    restores the unit's recorded state and verifies it. On a failed start
+    or check it renames the previous selector back, restores the unit on
+    the previous copy and exits nonzero. Rerunning after an interruption
+    completes or reverses the switch from its record.
+  - Activation toward the dotfiles copy performs no check of the Orgs copy
+    and cannot be blocked by it.
   - Installers obtain the tool's paths from `token-usage paths --json` and
     do not import the modules.
-- **Failure semantics:** a proxy whose implementation directory is not an
-  absolute path, or whose target is missing or not executable, prints one
-  line to stderr naming the path and the remedy and exits 127. It never runs
-  another copy. The serve unit does not restart on that status.
-- **Intentionally unspecified:** every other file in the implementation
-  directory; module structure; where in dotfiles the proxies live and how
-  the activation step is invoked; how the skills view is built.
-- **Versioning / compatibility policy:** renaming or removing an entry-point
-  file, changing the implementation directory's default, or requiring more
-  than Python 3.11 standard library is breaking and follows the ack rule in
-  `usage-cli`.
-- **Boundary tests:** in Orgs, the absolute-path, symlinked-directory,
-  unrelated-working-directory run of each entry point. In dotfiles, against
-  a synthetic implementation directory: proxy present, missing,
-  non-executable and relative-path cases; activation refused on a missing
-  entry point, a differing program file and a missing `paths`; activation
-  and switch-back with the unit enabled; an interrupted switch completed by
-  a rerun; `npm-ai-update` with a proxy that exits 127; a run with
-  `AGENT_SKILLS_ROOT` set to another directory still using the
-  implementation directory.
+- **Failure semantics:** a proxy whose selector names a directory or entry
+  point that is missing or not executable prints one line to stderr naming
+  the path and the remedy and exits 127. It never runs the other copy. After
+  the dotfiles copy is removed, a proxy with no selector does the same. The
+  serve unit does not restart on that status.
+- **Intentionally unspecified:** every other file in the Orgs copy; module
+  structure; the selector's exact path and the activation step's command
+  line and record format; how the skills view is built.
+- **Versioning / compatibility policy:** renaming or removing a program
+  file, moving the Orgs copy, or requiring more than Python 3.11 standard
+  library is breaking and follows the ack rule in `usage-cli`.
+- **Boundary tests:** in Orgs, each entry point run by absolute path,
+  through a symlinked directory, from an unrelated working directory, with
+  `AGENT_SKILLS_ROOT` set elsewhere. In dotfiles, against synthetic copies
+  and a synthetic home: a proxy with no selector equals the direct run; a
+  selector naming each copy; a dangling selector exits 127 and runs neither
+  copy; `AGENT_SKILLS_ROOT` set elsewhere changes nothing; an installer
+  rerun after activation leaves the selector and the selected copy
+  unchanged, including on a host whose `~/.bin` is the checkout's `.bin`;
+  activation refused on a missing entry point, a differing program file and
+  a `paths` mismatch; activation and switch-back with the unit active and
+  with it inactive, on a synthetic store that a state-changing command
+  writes before and after; a failed unit start reverses the switch; an
+  interruption before and after the rename is resolved by a rerun; two
+  concurrent activations serialize.
 - **Interpretation register:** the Interpretations Log of
   `docs/specs/usage-tooling-migration.md`.
