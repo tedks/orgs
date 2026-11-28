@@ -1010,7 +1010,18 @@ class Retirement:
             if not fresh:
                 return False
             pane_after = self.exit_pane()  # Recheck continuity across the capture commands.
-            return pane_after['pane_dead'] == '1'
+            if pane_after['pane_dead'] != '1':
+                return False
+            # Legacy model evidence needs the controller's attestation on this
+            # invocation. The audit record is history.
+            if model_footer and 'model' not in baseline:
+                if not self.args.attest_single_harness_pane:
+                    raise Stop('Legacy model exit notice requires --attest-single-harness-pane on resume. '
+                               'See the SKILL.md recovery section "Recover a pending exit on a retained pane".')
+                self.state['attested_single_harness_pane'] = True
+                self.persist()
+                self.audit('single-harness-pane-attested')
+            return True
         except PaneAbsent:
             return False  # Process end without a retained notice is not retirement.
 
@@ -1296,12 +1307,16 @@ def main():
     modes.add_argument('--waiting', action='store_true')
     modes.add_argument('--handoff', nargs=2, metavar=('AGENT', 'MODEL'))
     parser.add_argument('--resume')
+    parser.add_argument('--attest-single-harness-pane', action='store_true',
+                        help='attest one harness invocation in a legacy Claude pane on resume')
     parser.add_argument('--caller-shard', action='store_true')
     parser.add_argument('--retry-deferred', choices=('offer', 'exit'))
     parser.add_argument('--wait', type=float, default=300)
     parser.add_argument('--poll', type=float, default=60)
     parser.add_argument('--roles')
     args = parser.parse_args()
+    if args.attest_single_harness_pane and not args.resume:
+        parser.error('--attest-single-harness-pane requires --resume')
     try:
         config = load_config()
     except (OSError, ValueError) as error:

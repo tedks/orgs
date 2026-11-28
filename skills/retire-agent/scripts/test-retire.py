@@ -39,6 +39,7 @@ FIXTURE_PANE = f'%{1}'
 CLAUDE_MODEL_NOTICE_HEADER = '\x1b[2mResume this session with:'
 CLAUDE_MODEL_NOTICE_COMMAND = 'claude --model opus --resume ' + FIXTURE_SESSION
 CLAUDE_PLAIN_NOTICE = 'Resume this session with:\nclaude --resume ' + FIXTURE_SESSION + '\n'
+ATTEST_SINGLE_HARNESS_PANE = '--attest-single-harness-pane'
 TMUX_DEAD_TIME = 'Fri Jan  1 00:00:00 2021'
 TMUX_DEAD_ROW = '\x1b[0mPane is dead (status 0, ' + TMUX_DEAD_TIME + ')\n'
 
@@ -281,8 +282,6 @@ def terminal(directory, mode):
                 elif mode == 'codex-real-reply-row-late':
                     history += '• RETIRE-DONE-' + event + '\r\n• Worked for 19s • 19:35\r\n'
                     record_codex_completion('RETIRE-DONE-' + event)
-                else:
-                    history += '● RETIRE-DONE-' + event + '\r\n'
                 due = None
                 draw()
             cleared = directory / 'human-cleared-history'
@@ -461,8 +460,6 @@ def terminal(directory, mode):
                                     history += '● RETIRE-DONE-' + ('0' * 32) + '\r\n'
                                 elif mode == 'prose-marker':
                                     history += '● Shard written.\r\n  RETIRE-DONE-' + event + '\r\n'
-                                elif mode == 'late-done':
-                                    due = time.monotonic() + .2
                                 elif mode in ('claude-real-reply-row-late', 'claude-real-reply-row-status-late', 'codex-real-reply-row-late'):
                                     due = time.monotonic() + 1
                                 elif 'claude-hint' in mode:
@@ -1335,7 +1332,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(state['exit_notice'], {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 0})
         self.assertEqual(self.observed()['exit_enters'], 1)
 
-    def legacy_claude_model_exit_pending(self):
+    def claude_model_exit_cleared_quote_pending(self):
         self.actor('claude-model-exit-notice-with-quote', retain_dead=True)
         stuck = self.invoke()
         self.assert_retained_dead_pane()
@@ -1344,34 +1341,58 @@ class Tests(unittest.TestCase):
         path, pending = self.state()
         saved = pending['exit_notice']
         self.assertEqual(saved, {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 1})
-        # Store the pre-change representation of the same captured baseline.
-        pending['exit_notice'] = {'session_id': FIXTURE_SESSION, 'before': saved['plain']}
-        path.write_text(json.dumps(pending))
         self.assertEqual(pending['exit']['enters'], 1)
         self.assertIsNone(process_token(pending['identity']['process']['pid']))
         receipt_path = 'origin/master:' + pending['handoff_receipt']
         self.assertEqual(json.loads(self.git('show', receipt_path))['status'], 'pending-exit')
         return path, pending, receipt_path
 
-    def test_stuck_claude_model_exit_recovers_with_plain_resume(self):
+    def legacy_claude_model_exit_pending(self):
+        path, pending, receipt_path = self.claude_model_exit_cleared_quote_pending()
+        # Store the pre-change representation of the same captured baseline.
+        pending['exit_notice'] = {'session_id': FIXTURE_SESSION, 'before': pending['exit_notice']['plain']}
+        path.write_text(json.dumps(pending))
+        return path, pending, receipt_path
+
+    def test_legacy_claude_model_exit_resume_requires_attestation(self):
         path, pending, receipt_path = self.legacy_claude_model_exit_pending()
-        resumed = self.invoke('--resume', str(path))
+        original_receipt = self.git('show', receipt_path)
+        for previously_attested in (False, True):
+            with self.subTest(previously_attested=previously_attested):
+                if previously_attested:
+                    pending['attested_single_harness_pane'] = True
+                    path.write_text(json.dumps(pending))
+                resumed = self.invoke('--resume', str(path))
+                self.assertEqual(resumed.returncode, 2, resumed.stderr)
+                self.assertIn(ATTEST_SINGLE_HARNESS_PANE, resumed.stderr)
+                self.assertIn('SKILL.md recovery section', resumed.stderr)
+                self.assertEqual(self.git('show', receipt_path), original_receipt)
+                self.assertEqual(self.state()[1]['exit'], pending['exit'])
+                self.assertEqual(self.observed()['exit_enters'], 1)
+        ledger = [json.loads(line) for line in path.with_suffix('.jsonl').read_text().splitlines()]
+        self.assertEqual([row['phase'] for row in ledger if row['action'] == 'send-attempt'], ['offer', 'exit'])
+
+    def test_stuck_claude_model_exit_recovers_with_attested_resume(self):
+        path, pending, receipt_path = self.legacy_claude_model_exit_pending()
+        resumed = self.invoke('--resume', str(path), ATTEST_SINGLE_HARNESS_PANE)
         self.assertEqual(resumed.returncode, 0, resumed.stderr)
         state = self.state()[1]
         self.assertEqual(state['status'], 'retired')
         self.assertEqual(state['exit_notice'], pending['exit_notice'])
+        self.assertIs(state['attested_single_harness_pane'], True)
         self.assertEqual(state['exit'], pending['exit'])
         self.assertEqual(state['shard_hash'], pending['shard_hash'])
         receipt = json.loads(self.git('show', receipt_path))
         self.assertEqual((receipt['status'], receipt['exit_notice_session']), ('retired', FIXTURE_SESSION))
         ledger = [json.loads(line) for line in path.with_suffix('.jsonl').read_text().splitlines()]
         self.assertEqual([row['phase'] for row in ledger if row['action'] == 'send-attempt'], ['offer', 'exit'])
+        self.assertIn('single-harness-pane-attested', [row['action'] for row in ledger])
         self.assertEqual(self.observed()['exit_enters'], 1)
         holder = pending['exit_pty']['process']
         self.wait_for(lambda: process_token(holder['pid']) != holder)
 
-    def pending_fresh_exit_notice(self):
-        self.actor('claude-model-exit-notice')
+    def pending_fresh_exit_notice(self, mode='claude-model-exit-notice'):
+        self.actor(mode)
         before = '        self.exit_verified = True  # Current process+notice pair, never loaded state authority.'
         entry = self.instrument(before, '        raise Stop("fixture held publication")\n' + before)
         with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
@@ -1514,6 +1535,43 @@ class Tests(unittest.TestCase):
         observation = self.command(*self.tmux, 'list-panes', '-a', '-F', '#{pane_id} #{pane_dead}')
         self.assertIn(self.pane + ' 1', observation.splitlines())
 
+    def test_modern_claude_model_exit_ignores_attestation(self):
+        for attest in (False, True):
+            with self.subTest(attest=attest):
+                self.assertTrue(self.claude_model_notice_fresh(model_before=0, attest=attest))
+        path, original, receipt_path = self.claude_model_exit_cleared_quote_pending()
+        original_receipt = self.git('show', receipt_path)
+        resumed = self.invoke('--resume', str(path), ATTEST_SINGLE_HARNESS_PANE)
+        self.assertEqual(resumed.returncode, 2, resumed.stderr)
+        self.assertIn('pending original process end and fresh same-session exit notice', resumed.stderr)
+        self.assertEqual(self.git('show', receipt_path), original_receipt)
+        state = self.state()[1]
+        self.assertEqual(state['exit_notice'], original['exit_notice'])
+        self.assertNotIn('attested_single_harness_pane', state)
+        self.assertEqual(self.observed()['exit_enters'], 1)
+
+    def test_modern_claude_model_exit_does_not_record_attestation(self):
+        path, _ = self.pending_fresh_exit_notice()
+        result = self.invoke('--resume', str(path), ATTEST_SINGLE_HARNESS_PANE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('attested_single_harness_pane', self.state()[1])
+
+    def test_legacy_claude_plain_exit_ignores_attestation(self):
+        path, pending = self.pending_fresh_exit_notice(mode='claude')
+        pending['exit_notice'] = {'session_id': FIXTURE_SESSION, 'before': pending['exit_notice']['plain']}
+        path.write_text(json.dumps(pending))
+        result = self.invoke('--resume', str(path), ATTEST_SINGLE_HARNESS_PANE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('attested_single_harness_pane', self.state()[1])
+
+    def test_attest_single_harness_pane_requires_resume(self):
+        self.pane = FIXTURE_PANE
+        result = self.invoke(ATTEST_SINGLE_HARNESS_PANE)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('usage:', result.stderr)
+        self.assertIn(ATTEST_SINGLE_HARNESS_PANE + ' requires --resume', result.stderr)
+        self.assertFalse((self.repo / '.git' / 'retirements').exists())
+
     def test_legacy_claude_model_exit_refuses_different_pane_root(self):
         path, pending, receipt_path = self.legacy_claude_model_exit_pending()
         prior_receipt = self.git('show', receipt_path)
@@ -1521,25 +1579,18 @@ class Tests(unittest.TestCase):
         self.assertNotEqual(pending['identity']['pane_pid'], different_pid)
         pending['identity']['pane_pid'] = different_pid
         path.write_text(json.dumps(pending))
-        result = self.invoke('--resume', str(path))
+        result = self.invoke('--resume', str(path), ATTEST_SINGLE_HARNESS_PANE)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('pane root identity changed', result.stderr)
         self.assertEqual(self.git('show', receipt_path), prior_receipt)
+        self.assertNotIn('attested_single_harness_pane', self.state()[1])
         self.assertEqual(self.observed()['exit_enters'], 1)
 
     def test_claude_model_exit_cleared_quote_can_mask_real_notice(self):
-        self.actor('claude-model-exit-notice-with-quote', retain_dead=True)
-        result = self.invoke()
-        self.assert_retained_dead_pane()
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn('fresh same-session exit notice', result.stderr)
-        state = self.state()[1]
-        self.assertEqual(state['exit_notice'], {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 1})
+        self.claude_model_exit_cleared_quote_pending()
         screen = self.command(*self.tmux, 'capture-pane', '-p', '-J', '-S', '-', '-t', self.pane)
         self.assertEqual(screen.count(CLAUDE_MODEL_NOTICE_COMMAND), 1)
         self.assertNotIn('Quoted exit notice', screen)
-        receipt = json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))
-        self.assertEqual(receipt['status'], 'pending-exit')
 
     def run_wrapped_claude_model_exit(self, mode, suffix):
         self.actor(mode, retain_dead=True)
@@ -1585,20 +1636,23 @@ class Tests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('retire-claude-model-notice-test', script)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        observer = module.Retirement(SimpleNamespace(pane=pane))
+        observer = module.Retirement(SimpleNamespace(pane=pane, attest_single_harness_pane=True))
         observer.tmux = ['tmux', '-L', 'inert-owned-unit-test']
         observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': agent, 'pid': 123}},
                           'exit': {'status': 'ambiguous', 'input_attempted': True, 'enters': 1},
                           'exit_notice': {'session_id': FIXTURE_SESSION, 'before': 0}}
         observer.exit_pane = lambda: {'pane_dead': '1'}
+        observer.persist = lambda: None
+        observer.audit = lambda *_: None
         return module, observer
 
     def claude_model_notice_fresh(self, command=CLAUDE_MODEL_NOTICE_COMMAND, header=CLAUDE_MODEL_NOTICE_HEADER,
                                   before=0, model_before=None, tail='', opening='', agent='claude',
                                   styled_error=None, dead_metadata='1|0|240|' + TMUX_DEAD_TIME,
                                   dead_row=TMUX_DEAD_ROW, plain_capture=None, process_pid=123, metadata_error=None,
-                                  reported_pid='123'):
+                                  reported_pid='123', attest=True):
         module, observer = self.model_notice_observer(agent=agent)
+        observer.args.attest_single_harness_pane = attest
         observer.state['identity']['process']['pid'] = process_pid
         if model_before is None:
             observer.state['exit_notice']['before'] = before
@@ -1718,6 +1772,7 @@ class Tests(unittest.TestCase):
 
     def test_claude_exit_notice_fresh_plain_needs_no_styled_capture(self):
         self.assertTrue(self.claude_model_notice_fresh(opening=CLAUDE_PLAIN_NOTICE,
+                                                      attest=False,
                                                       styled_error=AssertionError('unexpected styled capture')))
 
     def test_claude_exit_notice_styled_capture_failure_leaves_model_pending(self):
@@ -3004,8 +3059,20 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.observed()['pastes'], 1)
 
     def test_last_poll_interval_is_observed(self):
-        self.actor('late-done')
-        result = self.invoke('--poll', '.4')
+        self.actor()
+        before = '                    while time.monotonic() < deadline:\n                        disposition = self.observe()\n'
+        # Drive one ordinary miss and expire the deadline during that sample.
+        # The real terminal observer can then see DONE only at the final read.
+        after = ('                    observe = self.observe\n'
+                 '                    def miss_first_poll():\n'
+                 '                        nonlocal deadline\n'
+                 '                        deadline = time.monotonic()\n'
+                 '                        self.observe = observe\n'
+                 '                        return None\n'
+                 '                    self.observe = miss_first_poll\n' + before)
+        entry = self.instrument(before, after)
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            result = self.invoke('--wait', '4')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.state()[1]['disposition'], 'DONE')
 

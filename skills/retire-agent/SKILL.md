@@ -215,6 +215,16 @@ Run `scripts/retire.sh %PANE --resume STATE` once. It re-verifies the published
 handoff and current exit evidence through observation before publishing the
 retired receipt.
 
+A legacy state has no `model` baseline. To recover it with a Claude model
+notice, first confirm the pane and tty proof above. Check the launcher record
+and start command to establish that this pane was created for the lane and
+held only the pinned harness invocation. Its scrollback must hold exactly
+one notice for the session. Then run
+`scripts/retire.sh %PANE --resume STATE --attest-single-harness-pane` once.
+The flag permits a zero model baseline on that invocation and records a
+private attestation when the model evidence verifies. Supply the flag on each
+resume that relies on legacy model evidence.
+
 Claude can clear the screen at exit and leave just the final notice. If the
 saved model count included a quoted model block that vanished, the single
 genuine notice can leave the count unchanged. The receipt stays pending.
