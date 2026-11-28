@@ -25,6 +25,47 @@ sys.dont_write_bytecode = True
 
 HERE = Path(__file__).resolve().parent
 SHARED = Path(os.environ.get('RETIRE_TEST_SHARED_SCRIPTS', str(HERE.parents[1] / 'spawn-agent' / 'scripts')))
+# Sanitized real Claude Code 2.1.332 rows from the marker down (see its header).
+CLAUDE_HINT_FIXTURE = [row for row in (HERE / 'fixtures/claude-2.1.332-clear-hint-agent-footer.txt').read_text().split('\n')
+                       if row and not row.startswith('#')]
+CLAUDE_HINT_EVENT = 'feedfacecafebeef0123456789abcdef'
+CLAUDE_HINT_WIDTH = 381
+
+
+def claude_hint_rows(mode, event, disposition):
+    """The fixture rows with this test's event, and one named twin change."""
+    rows = [row.replace(CLAUDE_HINT_EVENT, event) for row in CLAUDE_HINT_FIXTURE]
+    if disposition == 'DECLINED':
+        rows[0] = rows[0].replace('RETIRE-DONE-', 'RETIRE-DECLINED-')
+    marker, hint, permission = rows[0], rows[1], rows[6]
+    assert 'RETIRE-' in marker and '●' in marker and 'new task?' in hint and '1 agent' in permission
+    if mode.endswith('no-agent'):
+        rows[6] = permission.replace(' · ← 1 agent', '')
+    elif mode.endswith('agent-above'):
+        rows.insert(2, permission)  # The indicator row in the response region.
+    elif mode.endswith('prose'):
+        prose = ' Recovery still needs correction.'
+        rows[1] = hint.replace(' ' * len(prose), '', 1) + prose  # Same width and right edge.
+    elif mode.endswith('duplicate'):
+        rows.insert(2, hint)
+    elif mode.endswith('duration'):
+        rows.insert(1, '✻ Baked for 19s · done 1:27 PM')
+    elif mode.endswith('later-assistant'):
+        rows.insert(2, '● Recovery still needs correction.')
+    elif mode.endswith('unaligned'):
+        rows[1] = hint.replace(' ' * 10, '', 1)
+    elif mode.endswith('indented'):
+        rows[1] = '  ' + hint.lstrip(' ')
+    elif mode.endswith('count'):
+        rows[1] = hint.replace('276.8k tokens', '276800 tokens')  # Same width.
+    elif mode.endswith('quoted'):
+        rows[0] = marker.replace('●', ' ', 1)  # The bullet is followed by an SGR reset.
+    elif mode.endswith('user'):
+        rows[0] = marker.replace('●', '❯', 1)
+    if mode not in ('claude-hint', 'claude-hint-ambiguous', 'claude-hint-decline', 'done-claude-hint'):
+        # A twin must differ from the real rows, or its refusal proves nothing.
+        assert rows != [row.replace(CLAUDE_HINT_EVENT, event) for row in CLAUDE_HINT_FIXTURE], mode
+    return rows
 
 
 def shard_data(event, identity):
@@ -122,6 +163,7 @@ def terminal(directory, mode):
     due = None
     children = []
     typing_tick = 0
+    hint_rows = None  # Real 2.1.332 marker-to-footer rows, once the reply lands.
     def record_codex_completion(message, later_started=False):
         native_fd.write(json.dumps({'type': 'event_msg', 'payload': {
             'type': 'task_complete', 'turn_id': 'fixture-turn',
@@ -172,8 +214,17 @@ def terminal(directory, mode):
                 body = history + '\r\n' + '─' * 80 + '\r\n❯\u00a0\r\n' + draft.decode(errors='replace') + '\r\n' + '─' * 80 + '\r\n'
         if mode == 'modal':
             body = 'Do you trust the contents of this directory?\r\n  1. Yes\r\n  2. No\r\n'
+        if hint_rows:
+            # Typed control input (the literal /exit) still renders in the
+            # fixture's own composer row; empty, the row is byte-identical.
+            rows = list(hint_rows)
+            prompt = next(i for i, line in enumerate(rows) if '❯\u00a0' in line and 'RETIRE-' not in line)
+            rows[prompt] += collapsed
+            body = history + '\r\n'.join(rows) + '\r\n'
         sys.stdout.write('\x1b[?2004h\x1b[2J\x1b[H' + body)
         row = history.count('\n') + (3 if mode.startswith('claude') else 2)
+        if hint_rows:
+            row = history.count('\n') + prompt + 1
         if mode == 'claude-real-reply-row-status-late' and 'globalVersion:' in history and os.get_terminal_size().columns < 125:
             row += 1  # The synthetic status line occupies two display rows.
         if visible_marker:
@@ -328,7 +379,11 @@ def terminal(directory, mode):
                         history = ('❯' if mode.startswith('claude') else '›') + ' [Pasted Content ' + str(len(payload)) + ' chars]\r\n'
                         if mode.startswith('claude'):
                             history = '• Messages to be submitted after next tool call\r\n  ↳ [Pasted Content ' + str(len(payload)) + ' chars]\r\n'
-                        if mode.startswith('ambiguous'):
+                        if mode == 'claude-hint-ambiguous':
+                            # The stuck shape: offer ambiguous, shard written, marker final.
+                            history = 'Assistant continues without acceptance evidence.\r\n'
+                            hint_rows = claude_hint_rows(mode, event, 'DONE')
+                        elif mode.startswith('ambiguous'):
                             history = 'Assistant continues without acceptance evidence.\r\n'
                             if mode != 'ambiguous':
                                 marker_event = '0' * 32 if mode == 'ambiguous-done-wrong' else event
@@ -355,6 +410,8 @@ def terminal(directory, mode):
                                     due = time.monotonic() + .2
                                 elif mode in ('claude-real-reply-row-late', 'claude-real-reply-row-status-late', 'codex-real-reply-row-late'):
                                     due = time.monotonic() + 1
+                                elif 'claude-hint' in mode:
+                                    hint_rows = claude_hint_rows(mode, event, 'DECLINED' if mode.endswith('-decline') else disposition)
                                 else:
                                     reply_bullet = '•' if mode.startswith('codex-12h-footer') or mode in ('codex-real-reply-row', 'codex-real-reply-row-invalid-shard', 'decline-codex-real-reply-row', 'codex-spoofed-footer-reply',
                                                                    'codex-bullet-footer-later-turn',
@@ -589,7 +646,8 @@ class Tests(unittest.TestCase):
         inner = 'exec -a ' + ('node' if node else ('claude' if mode.startswith('claude') else 'codex')) + ' ' + command
         outer = fixture_command(self.directory, inner)
         options = ['-c', str(self.directory)] if relative else []
-        pane = self.command(*self.tmux, 'new-session', '-d', '-P', '-F', '#{pane_id}', '-x', '240', '-y', '40', *options, outer)
+        width = str(CLAUDE_HINT_WIDTH) if 'claude-hint' in mode else '240'
+        pane = self.command(*self.tmux, 'new-session', '-d', '-P', '-F', '#{pane_id}', '-x', width, '-y', '40', *options, outer)
         self.pane = pane
         self.wait_for(lambda: (self.directory / 'terminal.json').exists())
         return pane
@@ -2894,6 +2952,93 @@ class Tests(unittest.TestCase):
 
     def test_claude_ui_footer_later_assistant_is_pending(self):
         self.assert_completion_block_pending('claude-footer-later-assistant')
+
+    def test_claude_2_1_332_clear_hint_footer_allows_completion(self):
+        # Real rows: marker, right-aligned /clear hint, composer, status line
+        # and the permission-mode row ending in the background-agent indicator.
+        self.actor('claude-hint')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.observed()['pastes'], 1)
+        self.assertEqual(self.observed()['exit_enters'], 1)
+
+    def test_claude_2_1_332_clear_hint_without_agent_indicator_allows_completion(self):
+        self.actor('claude-hint-no-agent')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.observed()['exit_enters'], 1)
+
+    def test_claude_2_1_332_clear_hint_decline_is_observed(self):
+        self.actor('claude-hint-decline')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('agent declined', result.stderr)
+        self.assertEqual(self.state()[1]['disposition'], 'DECLINED')
+
+    def test_claude_agent_indicator_above_composer_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-agent-above')
+
+    def test_claude_clear_hint_with_prose_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-prose')
+
+    def test_claude_duplicate_clear_hint_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-duplicate')
+
+    def test_claude_clear_hint_after_duration_is_pending(self):
+        # Unmeasured on 2.1.332: stays pending until a real capture shows it.
+        self.assert_completion_block_pending('claude-hint-duration')
+
+    def test_claude_clear_hint_later_assistant_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-later-assistant')
+
+    def test_claude_unaligned_clear_hint_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-unaligned')
+
+    def test_claude_indented_clear_hint_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-indented')
+
+    def test_claude_unmeasured_clear_hint_count_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-count')
+
+    def test_claude_clear_hint_quoted_marker_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-quoted')
+
+    def test_claude_clear_hint_user_marker_is_pending(self):
+        self.assert_completion_block_pending('claude-hint-user')
+
+    def test_codex_cannot_use_claude_clear_hint(self):
+        self.assert_completion_block_pending('done-claude-hint')
+
+    def test_stuck_ambiguous_claude_hint_transaction_recovers_with_plain_resume(self):
+        # Shape of the stuck transaction: ambiguous offer, agent shard on
+        # disk, exact marker final above the 2.1.332 hint, and an earlier
+        # pre-fix resume that recorded 'DONE not observed'.
+        self.actor('claude-hint-ambiguous')
+        self.assertEqual(self.invoke().returncode, 2)
+        path, state = self.state()
+        self.assertEqual(state['offer']['status'], 'ambiguous')
+        self.assertTrue(path.with_suffix('.shard').is_file())
+        prefix = self.instrument('        if tail and not (codex_footer or claude_footer or claude_hint):',
+                                 '        if tail and not (codex_footer or claude_footer):')
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(prefix)}):
+            stuck = self.invoke('--resume', str(path))
+        self.assertEqual(stuck.returncode, 2, stuck.stderr)
+        self.assertIn('DONE not observed', stuck.stderr)
+        state = self.state()[1]
+        self.assertIsNone(state['disposition'])
+        self.assertNotIn('handoff_receipt', state)
+        resumed = self.invoke('--resume', str(path))
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        state = self.state()[1]
+        self.assertEqual(state['offer']['status'], 'ambiguous')
+        self.assertEqual(state['disposition'], 'DONE')
+        self.assertTrue(state.get('handoff_receipt'))
+        self.assertEqual(self.observed()['pastes'], 1)  # Never resent.
+        self.assertEqual(self.observed()['exit_enters'], 1)
+        self.assertEqual(json.loads(self.git('show', 'origin/master:' + state['shard']))['event'], state['id'])
+        ledger = [json.loads(line) for line in path.with_suffix('.jsonl').read_text().splitlines()]
+        self.assertTrue(any(row['action'] == 'ambiguous-offer-completion-observed'
+                            and row['disposition'] == 'DONE' for row in ledger))
 
     def test_codex_marker_suffix_is_not_completion(self):
         self.assert_completion_block_pending('done-suffix')

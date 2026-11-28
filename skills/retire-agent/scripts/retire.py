@@ -37,6 +37,13 @@ _CLAUDE_AUTO_UPDATE = (r'globalVersion: [0-9]+(?:\.[0-9]+)+ · latestVersion: [0
                        r'(?: ✘ Auto-update failed: no write permission to npm prefix · Run claude doctor)?')
 _CLAUDE_TOKENS_ROW = r' +[0-9]+ tokens(?:·| · ' + _CLAUDE_AUTO_UPDATE + r')?'
 _CLAUDE_VERSION_ROW = r' +' + _CLAUDE_AUTO_UPDATE
+# Claude 2.1.332 (measured 2026-11-28 at 381 columns) renders a short reply with
+# no duration row and one right-aligned hint between the marker and the
+# composer rule: "new task? /clear to save 276.8k tokens", ending two columns
+# before the rule's right end. Only that alignment and count shape is measured;
+# a hint after a duration row, at another offset or in another count format
+# stays pending until it is measured and added here.
+_CLAUDE_CLEAR_HINT_ROW = r' +new task\? /clear to save [1-9][0-9]*\.[0-9]k tokens'
 
 
 class Stop(Exception):
@@ -557,7 +564,14 @@ class Retirement:
                          and re.fullmatch(r'✻ (?:Baked|Brewed|Churned|Cogitated|Cooked|Crunched|Sautéed|Worked) for (?:[0-5]?[0-9]s|[1-9][0-9]*m [0-5]?[0-9]s) · done (?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM)', tail[0].rstrip())
                          and (len(tail) == 1 or any(re.fullmatch(_CLAUDE_TOKENS_ROW, status) for status in claude_statuses)
                               or any(re.fullmatch(_CLAUDE_VERSION_ROW, status) for status in claude_statuses)))
-        if tail and not (codex_footer or claude_footer):
+        # The shared reader ends at the Claude composer prompt, whose measured
+        # frame has its upper rule directly above: rows[-1] spans the pane.
+        rule = rows[-1].rstrip()
+        claude_hint = (agent == 'claude'
+                       and len(tail) == 1
+                       and re.fullmatch(_CLAUDE_CLEAR_HINT_ROW, tail[0].rstrip())
+                       and len(tail[0].rstrip()) == len(rule) - 2)
+        if tail and not (codex_footer or claude_footer or claude_hint):
             return None
         return marker[1]
 
