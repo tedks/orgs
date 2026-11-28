@@ -42,8 +42,8 @@ checkout was reset only after those dispositions were verified.
 
 ## Isolated retirement tests
 
-Run `scripts/test-retire.py` and `scripts/test-mutations.py` with a tmux
-server that keeps `#{pane_pid}` for retained dead panes. tmux 3.6a satisfies
-this requirement. On tmux 3.8, where the dead pane can lose its PID, the
-end-to-end tests fail the gate with a diagnostic. Put the compatible tmux
-binary first on `PATH` before launching the suites' isolated servers.
+Run `scripts/test-retire.py` and `scripts/test-mutations.py` with tmux 3.8.
+Put tmux 3.6a first on `PATH` to check the exit paths on that release. Each
+behavioral test starts an isolated server, and the end-to-end tests require
+both versions to complete the retirement. Run the `missing dead pane PID
+accepted` mutation on 3.8, where the server drops that field.
