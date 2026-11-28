@@ -49,8 +49,8 @@ MAX_FILE = 8 * 1024 * 1024
 # Measured on Claude Code 2.1.283/2.1.301 and Codex CLI 0.157.1/0.163.0.
 # Changed UI fails closed.
 _COMPACT_MARKERS = {'claude': 'Compacted (ctrl+o to see full summary)', 'codex': '• Context compacted'}
-# 2.1.332 renders the gap after ⎿ as a space and a NO-BREAK SPACE (U+00A0).
-_CLAUDE_COMPACT_ROW = re.compile(r'^[ \t]*⎿[ \t\u00a0]+Compacted(?: \(ctrl\+o to see full summary\))?[ \t]*$', re.MULTILINE)
+# 2.1.332 renders the gap after ⎿ as exactly a space then NO-BREAK SPACE (U+00A0).
+_CLAUDE_COMPACT_ROW = re.compile(r'^[ \t]*⎿(?:[ \t]+| \u00a0)Compacted(?: \(ctrl\+o to see full summary\))?[ \t]*$', re.MULTILINE)
 _CLAUDE_COMPACTING = re.compile(r'^\s*[✢✽✻·✶*] Compacting conversation… \([0-9][^()\n]*\)\s*$', re.MULTILINE)
 SAMPLE_JOIN = 7  # verify_pane <=5s plus public read <=1s, then shutdown margin
 
@@ -261,27 +261,33 @@ def _compact_event(path, baseline, harness, session_id):
 
 # Claude session bookkeeping rows: no uuid, no message, never user input or a
 # tool call, so they neither start nor end a root turn and leave idle as it
-# was. Each must name this session and carry its measured typed field. The
-# first five were measured on 2.1.283; the rest on 2.1.332, where every one was
-# observed after a completed turn's turn_duration and before the next input.
-# Turn state stays with the user/assistant/system rows: a pending tool call is
-# an assistant tool_use row with no linked turn_duration after it.
+# was. Each must name this session, carry its measured typed field and none of
+# the turn fields. The first five were measured on 2.1.283; the rest on 2.1.332,
+# where each was observed both inside turns and after a completed turn's
+# turn_duration. Turn state stays with the user/assistant/system rows: a
+# pending tool call is an assistant tool_use row with no linked turn_duration.
 _CLAUDE_METADATA = {
     'mode': ('mode', str), 'permission-mode': ('permissionMode', str), 'atis-latch': ('atis', str),
     'ai-title': ('aiTitle', str), 'last-prompt': ('lastPrompt', str),
     'session-owner': ('accountUuid', str), 'tools-used': ('tools', list),
     'data-flow-records': ('records', list), 'cost-state': ('startTime', int),
-    'pr-link': ('prNumber', int), 'agent-name': ('agentName', str),
-    'bridge-session': ('bridgeSessionId', str), 'frame-link': ('artifactCount', int),
-    'artifact-comment-monitor': ('artifacts', dict), 'artifact-autoreact-ledger': ('artifacts', dict),
-    'derived-from': ('sessions', list),
+    'pr-link': ('prNumber', int),
 }
-# Non-message rows that clear idle (file-history-snapshot alone is neutral).
-# file-history-delta and data-flow-incomplete were measured on 2.1.332 only
-# inside turns, so they read as busy until a later linked turn_duration.
-# continued-in (the conversation moved to another session) stays unknown.
-_CLAUDE_BUSY_OR_NEUTRAL = ('file-history-snapshot', 'queue-operation', 'progress',
-                           'file-history-delta', 'data-flow-incomplete')
+# No measured bookkeeping row carries any of these; a row that does is not one.
+_CLAUDE_TURN_FIELDS = ('uuid', 'parentUuid', 'message', 'isSidechain')
+# Rows that clear idle without starting a turn. file-history-snapshot is
+# written for an arriving prompt, often before that prompt's user row, so it
+# is busy evidence even after a turn_duration.
+_CLAUDE_BUSY = ('file-history-snapshot', 'queue-operation', 'progress')
+# 2.1.332 rows measured only inside turns: validated, then busy. No measured
+# file-history-delta names a session; one that names another session raises.
+# continued-in (the conversation moved to another session) stays unknown, and
+# so does derived-from: on 2.1.332 it was seen only after an arriving prompt.
+_CLAUDE_IN_TURN = {
+    'file-history-delta': (('messageId', str), ('snapshotMessageId', str), ('trackingPath', str),
+                           ('timestamp', str), ('backup', dict)),
+    'data-flow-incomplete': (('sessionId', str), ('v', int)),
+}
 
 
 def _native_idle(record, focus_after=None):
@@ -402,6 +408,8 @@ def _native_idle(record, focus_after=None):
                 elif kind not in ('session_meta', 'token_usage_record', 'world_state'):
                     raise ControlError('idle_record_shape_unknown')
             else:
+                if not isinstance(kind, str):
+                    raise ControlError('idle_record_shape_unknown')
                 if kind in ('api-request-shape', 'api-request-blob', 'api-request'):
                     if row.get('isSidechain') is True:
                         continue
@@ -427,8 +435,17 @@ def _native_idle(record, focus_after=None):
                     field, types = _CLAUDE_METADATA[kind]
                     value = row.get(field)
                     if (row.get('sessionId') != record['session_id'] or not isinstance(value, types)
-                            or isinstance(value, bool)):
+                            or isinstance(value, bool) or any(name in row for name in _CLAUDE_TURN_FIELDS)):
                         raise ControlError('idle_metadata_malformed')
+                    continue
+                if kind in _CLAUDE_IN_TURN:
+                    if (any(not isinstance(row.get(name), types) or isinstance(row.get(name), bool)
+                            for name, types in _CLAUDE_IN_TURN[kind]) or
+                            row.get('sessionId', record['session_id']) != record['session_id'] or
+                            ('codes' in row and not isinstance(row['codes'], list)) or
+                            any(name in row for name in _CLAUDE_TURN_FIELDS)):
+                        raise ControlError('idle_metadata_malformed')
+                    idle = False
                     continue
                 if kind == 'system' and row.get('subtype') == 'compact_boundary':
                     if row.get('sessionId') != record['session_id'] or row.get('isSidechain') is True:
@@ -441,10 +458,9 @@ def _native_idle(record, focus_after=None):
                         parent = row['uuid']
                     continue
                 if kind not in ('user', 'assistant', 'tool', 'attachment', 'system'):
-                    if kind not in _CLAUDE_BUSY_OR_NEUTRAL:
+                    if kind not in _CLAUDE_BUSY:
                         raise ControlError('idle_record_shape_unknown')
-                    if kind != 'file-history-snapshot':
-                        idle = False
+                    idle = False
                     continue
                 if row.get('isSidechain') is True:
                     continue

@@ -324,24 +324,42 @@ class ControlTests(unittest.TestCase):
         self.rows(*self.codex_idle_rows(), {'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': 'child', 'root_turn_id': 'one'}}, {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'child'}})
         self.assertEqual('idle', self.native_idle_result(self.idle_record('codex'))['state'])
 
-    # Claude Code 2.1.332: structure-only capture of a real root turn and two
-    # real post-turn tails. The compact baseline falls mid-turn, as it does
-    # when an agent calls self_compact from inside its own turn.
+    # Claude Code 2.1.332: structure-only capture of a real root turn, two real
+    # post-turn tails that read idle, and real rows that must read busy. The
+    # compact baseline falls mid-turn, as it does when an agent calls
+    # self_compact from inside its own turn.
     CLAUDE_332 = json.loads((MODULE.parent / 'fixtures/claude-2.1.332-idle-turn.json').read_text())
+    # Written independently of the production table: kind -> (required field,
+    # a measured-type value, a wrong-type value). Every kind here occurs in the
+    # fixture's real rows.
+    CLAUDE_NEUTRAL = {
+        'mode': ('mode', 'fixture', 1), 'permission-mode': ('permissionMode', 'fixture', 1),
+        'atis-latch': ('atis', 'fixture', 1), 'ai-title': ('aiTitle', 'fixture', 1),
+        'last-prompt': ('lastPrompt', 'fixture', 1), 'session-owner': ('accountUuid', 'fixture', 1),
+        'tools-used': ('tools', ['fixture'], 'fixture'), 'data-flow-records': ('records', [], 'fixture'),
+        'cost-state': ('startTime', 1, 'fixture'), 'pr-link': ('prNumber', 1, 'fixture'),
+    }
+    TURN_FIELDS = {'uuid': 'fixture', 'parentUuid': 'fixture', 'message': {'content': 'fixture'}, 'isSidechain': False}
 
-    def claude_332_record(self, before=None):
-        """Write the turn's rows up to the baseline; return a compact record."""
+    def claude_332_record(self, before=None, action='compact'):
+        """Write the turn's rows up to the baseline; return an idle record."""
         fixture = self.CLAUDE_332
         self.transcript.write_text('')
         self.rows(*copy.deepcopy(fixture['turn'][:fixture['baseline_after_row']] if before is None else before))
         record = self.idle_record()
-        record['action'] = 'compact'
+        record['action'] = action
         return record
 
     def claude_332_rest(self):
         return copy.deepcopy(self.CLAUDE_332['turn'][self.CLAUDE_332['baseline_after_row']:])
 
+    def claude_332_busy(self, name):
+        return copy.deepcopy(self.CLAUDE_332['busy_rows'][name])
+
     def test_claude_332_completed_turn_and_post_turn_metadata_read_idle(self):
+        fixture_kinds = {row['type'] for rows in [self.CLAUDE_332['turn'], *self.CLAUDE_332['idle_tails']] for row in rows}
+        self.assertLessEqual(set(self.CLAUDE_NEUTRAL), fixture_kinds)
+        self.assertEqual(set(self.CLAUDE_NEUTRAL), set(h._CLAUDE_METADATA))
         for index, tail in enumerate([[]] + self.CLAUDE_332['idle_tails']):
             with self.subTest(tail=index):
                 record = self.claude_332_record()
@@ -349,14 +367,12 @@ class ControlTests(unittest.TestCase):
                 result = self.native_idle_result(record)
                 self.assertEqual('idle', result['state'])
                 self.assertEqual(0, result['turns_seen'])
-        # The same tail still reads idle when every new kind follows the turn.
         record = self.claude_332_record()
-        late = [{'type': kind, 'sessionId': SID, field: ({str: 'fixture', int: 1, list: [], dict: {}}[kinds])}
-                for kind, (field, kinds) in h._CLAUDE_METADATA.items()]
-        self.rows(*self.claude_332_rest(), *late)
+        self.rows(*self.claude_332_rest(), *[{'type': kind, 'sessionId': SID, field: good}
+                                             for kind, (field, good, _) in self.CLAUDE_NEUTRAL.items()])
         self.assertEqual('idle', self.native_idle_result(record)['state'])
 
-    def test_claude_332_mid_turn_and_pending_tool_call_stay_busy(self):
+    def test_claude_332_mid_turn_pending_tool_and_arriving_prompt_stay_busy(self):
         rest = self.claude_332_rest()
         tail = copy.deepcopy(self.CLAUDE_332['idle_tails'][1])
         # Mid-turn: everything except the closing turn_duration.
@@ -371,54 +387,99 @@ class ControlTests(unittest.TestCase):
         record = self.claude_332_record()
         self.rows(*rest[:pending], *[row for row in rest if row['type'] in ('data-flow-records', 'tools-used', 'session-owner')], *tail)
         self.assertNotEqual('idle', self.native_idle_result(record)['state'])
-        # A closing turn_duration after a final tool_use (no end_turn text) is
-        # not a completed answer either.
+        # A closing turn_duration after a final tool_use is not a completed
+        # answer; keep a text block so only stop_reason distinguishes it.
         record = self.claude_332_record()
         ended_on_tool = copy.deepcopy(rest)
         final = next(row for row in reversed(ended_on_tool) if row['type'] == 'assistant')
         final['message']['stop_reason'] = 'tool_use'
-        # Keep a text block so only stop_reason distinguishes it from a final answer.
         final['message']['content'] = [{'type': 'text', 'text': 'fixture'},
                                        {'type': 'tool_use', 'id': 'fixture', 'name': 'fixture', 'input': {}}]
         self.rows(*ended_on_tool, *tail)
         self.assertNotEqual('idle', self.native_idle_result(record)['state'])
-        # Rows measured only inside turns clear idle until the next turn ends.
-        for kind in ('file-history-delta', 'data-flow-incomplete'):
-            with self.subTest(kind=kind):
+        # The real non-update snapshot that followed the first tail is written
+        # for an arriving prompt, often before that prompt's user row.
+        snapshot = self.claude_332_busy('arriving_prompt_snapshot')
+        self.assertIs(False, snapshot['isSnapshotUpdate'])
+        delta = next(row for row in rest if row['type'] == 'file-history-delta')
+        for name, row in (('arriving_prompt_snapshot', snapshot),
+                          ('data_flow_incomplete', self.claude_332_busy('data_flow_incomplete')),
+                          ('file_history_delta', copy.deepcopy(delta))):
+            with self.subTest(row=name):
                 record = self.claude_332_record()
-                self.rows(*copy.deepcopy(rest), {'type': kind, 'sessionId': SID, 'v': 1})
+                self.rows(*copy.deepcopy(rest), *copy.deepcopy(self.CLAUDE_332['idle_tails'][0]), row)
                 self.assertNotEqual('idle', self.native_idle_result(record)['state'])
 
-    def test_claude_332_truncated_unknown_and_malformed_rows_fail_closed(self):
+    def test_claude_332_new_input_after_idle_witness_blocks_dispatch(self):
         rest = self.claude_332_rest()
+        tail = copy.deepcopy(self.CLAUDE_332['idle_tails'][1])
+        fresh = copy.deepcopy(self.CLAUDE_332['turn'][0])
+        fresh.update(uuid='fixture-fresh', parentUuid=self.CLAUDE_332['turn'][-1]['uuid'])
+        for name, arrival in (('fresh_user', [fresh]), ('queue_enqueue', [self.claude_332_busy('queue_enqueue')])):
+            with self.subTest(arrival=name):
+                record = self.claude_332_record()
+                self.rows(*copy.deepcopy(rest), *copy.deepcopy(tail))
+                self.assertEqual('idle', self.native_idle_result(record)['state'])
+                self.rows(*arrival, *copy.deepcopy(tail))
+                result = self.native_idle_result(record)
+                self.assertNotEqual('idle', result['state'])
+                self.assertEqual(1, result['turns_seen'])
+                record.pop('_idle_cursor')
+                record['baseline'] = record['idle_baseline']
+                self.native_idle.side_effect = self.real_native_idle
+                waited = h._wait_idle(record, self.identity, time.monotonic() + 1)
+                self.assertEqual({'state': 'cancelled', 'reason': 'intervening_turn'},
+                                 {key: waited.get(key) for key in ('state', 'reason')})
+                record = self.claude_332_record(action='exit')
+                self.rows(*copy.deepcopy(rest), *copy.deepcopy(tail), *copy.deepcopy(arrival), *copy.deepcopy(tail))
+                with self.assertRaisesRegex(h.ControlError, 'superseded_by_new_input'):
+                    self.real_native_idle(record)
+
+    def assert_claude_refused(self, row, reason):
+        record = self.claude_332_record()
+        self.rows(*self.claude_332_rest(), row)
+        with self.assertRaises(Exception) as caught:
+            self.real_native_idle(record)
+        self.assertIsInstance(caught.exception, h.ControlError)
+        self.assertEqual(reason, str(caught.exception))
+
+    def test_claude_332_truncated_unknown_and_malformed_rows_fail_closed(self):
         # Truncated record: the last tail row has no newline yet.
         record = self.claude_332_record()
-        self.rows(*rest)
+        self.rows(*self.claude_332_rest())
         with self.transcript.open('a', encoding='utf-8') as stream:
             stream.write(json.dumps(self.CLAUDE_332['idle_tails'][1][-1])[:-5])
         self.assertEqual('unknown', self.native_idle_result(record)['state'])
-        # Unknown kinds after the baseline still raise, including the measured
-        # but deliberately unaccepted continued-in row.
-        for kind in ('continued-in', 'session-owner-v2', 'fixture-new-kind'):
+        # Unknown kinds still raise: continued-in, derived-from (seen only after
+        # an arriving prompt), kinds never seen on 2.1.332, and invented ones.
+        for kind in ('continued-in', 'derived-from', 'agent-name', 'bridge-session', 'frame-link',
+                     'artifact-comment-monitor', 'artifact-autoreact-ledger', 'fixture-new-kind'):
             with self.subTest(kind=kind):
-                record = self.claude_332_record()
-                self.rows(*copy.deepcopy(rest), {'type': kind, 'sessionId': SID, 'continuedInSessionId': SID})
-                with self.assertRaisesRegex(h.ControlError, 'idle_record_shape_unknown'):
-                    self.real_native_idle(record)
-        # Accepted metadata must name this session and carry its typed field.
-        for kind, (field, kinds) in h._CLAUDE_METADATA.items():
-            good = {str: 'fixture', int: 1, list: [], dict: {}}[kinds]
-            wrong = 1 if kinds is str else 'fixture'
-            for row in ({'type': kind, 'sessionId': 'other', field: good},
-                        {'type': kind, field: good},
-                        {'type': kind, 'sessionId': SID},
-                        {'type': kind, 'sessionId': SID, field: wrong},
-                        {'type': kind, 'sessionId': SID, field: True}):
-                with self.subTest(kind=kind, row=sorted(row.items(), key=str)):
-                    record = self.claude_332_record()
-                    self.rows(*copy.deepcopy(rest), row)
-                    with self.assertRaisesRegex(h.ControlError, 'idle_metadata_malformed'):
-                        self.real_native_idle(record)
+                self.assert_claude_refused({'type': kind, 'sessionId': SID, 'sessions': []}, 'idle_record_shape_unknown')
+        for kind in (['mode'], {'mode': 1}, 1, None):
+            with self.subTest(type=repr(kind)):
+                self.assert_claude_refused({'type': kind, 'sessionId': SID, 'mode': 'fixture'}, 'idle_record_shape_unknown')
+        # Accepted metadata must name this session, carry its typed field and
+        # none of the turn fields.
+        for kind, (field, good, wrong) in self.CLAUDE_NEUTRAL.items():
+            rows = [{'type': kind, 'sessionId': 'other', field: good}, {'type': kind, field: good},
+                    {'type': kind, 'sessionId': SID}, {'type': kind, 'sessionId': SID, field: wrong},
+                    {'type': kind, 'sessionId': SID, field: True}]
+            rows += [{'type': kind, 'sessionId': SID, field: good, name: value} for name, value in self.TURN_FIELDS.items()]
+            for row in rows:
+                with self.subTest(kind=kind, row=sorted(row, key=str)):
+                    self.assert_claude_refused(row, 'idle_metadata_malformed')
+        # The 2.1.332 rows seen only inside turns are validated too.
+        delta = next(row for row in self.claude_332_rest() if row['type'] == 'file-history-delta')
+        incomplete = self.claude_332_busy('data_flow_incomplete')
+        bad = [{**delta, 'sessionId': 'other'}, {**delta, 'messageId': 1}, {**delta, 'backup': 'fixture'},
+               {key: value for key, value in delta.items() if key != 'trackingPath'},
+               {**incomplete, 'sessionId': 'other'}, {key: value for key, value in incomplete.items() if key != 'sessionId'},
+               {**incomplete, 'v': 'fixture'}, {**incomplete, 'v': True}, {**incomplete, 'codes': 'fixture'}]
+        bad += [{**base, name: value} for base in (delta, incomplete) for name, value in self.TURN_FIELDS.items()]
+        for row in bad:
+            with self.subTest(row=sorted(row.items(), key=str)):
+                self.assert_claude_refused(copy.deepcopy(row), 'idle_metadata_malformed')
 
     def test_idle_wait_busy_then_new_idle_and_timeout_no_send(self):
         oid = self.request('exit')

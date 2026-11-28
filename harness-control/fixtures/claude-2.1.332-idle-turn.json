@@ -1,5 +1,5 @@
 {
- "description": "Structure-only capture of one Claude Code 2.1.332 root turn (user input, tool round trips, final end_turn text, turn_duration) and two observed post-turn metadata tails. All ids, paths, text, numbers and timestamps are replaced; keys, value types, record order and the uuid/parentUuid chain are kept.",
+ "description": "Structure-only capture from Claude Code 2.1.332: one root turn (user input, tool round trips, final end_turn text, turn_duration), two observed post-turn metadata tails that read idle, and observed rows that must read busy (the non-update file-history-snapshot that followed the first tail is written for an arriving prompt; a queue enqueue; a data-flow-incomplete). All ids, paths, text, numbers and timestamps are replaced; keys, value types, record order and the uuid/parentUuid chain are kept.",
  "source_version": "2.1.332",
  "baseline_after_row": 7,
  "turn": [
@@ -1210,42 +1210,13 @@
      }
     },
     "hasUnknownModelCost": false
-   },
-   {
-    "type": "file-history-snapshot",
-    "messageId": "00000000-0000-4000-8000-000000000026",
-    "snapshot": {
-     "messageId": "00000000-0000-4000-8000-000000000026",
-     "trackedFileBackups": {
-      "key_0": {
-       "backupFileName": "fixture",
-       "version": 1,
-       "backupTime": "fixture",
-       "realParentDir": "fixture"
-      },
-      "key_1": {
-       "backupFileName": "fixture",
-       "version": 1,
-       "backupTime": "fixture",
-       "realParentDir": "fixture"
-      },
-      "key_2": {
-       "backupFileName": "fixture",
-       "version": 1,
-       "backupTime": "fixture",
-       "realParentDir": "fixture"
-      }
-     },
-     "timestamp": "fixture"
-    },
-    "isSnapshotUpdate": false
    }
   ],
   [
    {
     "type": "last-prompt",
     "lastPrompt": "fixture",
-    "leafUuid": "00000000-0000-4000-8000-000000000027",
+    "leafUuid": "00000000-0000-4000-8000-000000000026",
     "sessionId": "12345678-1234-1234-1234-123456789abc"
    },
    {
@@ -1281,6 +1252,19 @@
     "prUrl": "fixture",
     "prRepository": "fixture",
     "timestamp": "fixture"
+   },
+   {
+    "type": "data-flow-records",
+    "v": 1,
+    "sessionId": "12345678-1234-1234-1234-123456789abc",
+    "records": [
+     {
+      "response_id": "00000000-0000-4000-8000-000000000027",
+      "listed": [
+       "fixture"
+      ]
+     }
+    ]
    },
    {
     "type": "data-flow-records",
@@ -1398,20 +1382,53 @@
       ]
      }
     ]
-   },
-   {
-    "type": "data-flow-records",
-    "v": 1,
-    "sessionId": "12345678-1234-1234-1234-123456789abc",
-    "records": [
-     {
-      "response_id": "00000000-0000-4000-8000-000000000037",
-      "listed": [
-       "fixture"
-      ]
-     }
-    ]
    }
   ]
- ]
+ ],
+ "busy_rows": {
+  "arriving_prompt_snapshot": {
+   "type": "file-history-snapshot",
+   "messageId": "00000000-0000-4000-8000-000000000037",
+   "snapshot": {
+    "messageId": "00000000-0000-4000-8000-000000000037",
+    "trackedFileBackups": {
+     "key_0": {
+      "backupFileName": "fixture",
+      "version": 1,
+      "backupTime": "fixture",
+      "realParentDir": "fixture"
+     },
+     "key_1": {
+      "backupFileName": "fixture",
+      "version": 1,
+      "backupTime": "fixture",
+      "realParentDir": "fixture"
+     },
+     "key_2": {
+      "backupFileName": "fixture",
+      "version": 1,
+      "backupTime": "fixture",
+      "realParentDir": "fixture"
+     }
+    },
+    "timestamp": "fixture"
+   },
+   "isSnapshotUpdate": false
+  },
+  "queue_enqueue": {
+   "type": "queue-operation",
+   "operation": "fixture",
+   "timestamp": "fixture",
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "content": "fixture"
+  },
+  "data_flow_incomplete": {
+   "type": "data-flow-incomplete",
+   "v": 1,
+   "sessionId": "12345678-1234-1234-1234-123456789abc",
+   "codes": [
+    1
+   ]
+  }
+ }
 }
