@@ -63,3 +63,18 @@ log_events:
     a lane that relies on self_compact cannot compact at a checkpoint and needs a
     peer to type /compact. Candidate work, not assigned; one fixture capture of the
     current footer would serve all three issues.'
+- time: 2026-11-28T12:26:58-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Claude cause found (draft PR #69, head 2eb49fd, in council). Claude Code
+    2.1.332 writes session bookkeeping rows into the transcript (session-owner and
+    data-flow-records in every turn, plus others) that the idle check did not know,
+    so it raised idle_record_shape_unknown; over 517 real completed turns the old
+    check raised on 463. A second 2.1.332 change, a no-break space in the pane''s
+    Compacted row, would have left a successful compaction unconfirmed. The fix recognizes
+    the measured rows (each must name the session and carry its typed field), keeps
+    two in-turn row types as busy and one as unknown, and widens the pane row match
+    only in that gap. The October Codex report is a different cause and stays open:
+    current Codex rollouts contain an in-turn metadata row the Codex branch does not
+    accept, and a settings row after task completion clears idle. Hosts need the packaged
+    harness-control rebuilt to get the fix.'
