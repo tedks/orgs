@@ -15,3 +15,43 @@ log_events:
   who: Ted Smith
   what: created
   comment: ""
+- time: 2026-11-28T09:58:04-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Reported by a peer CTO on 2026-11-28; pane read by the Orgs CTO, nothing
+    hand-edited. A retire.sh --retire offer to a Claude Opus lane (Claude Code 2.1.332,
+    a very wide pane) returned ''offer ambiguous; exact payload preserved'' but landed.
+    The agent wrote its assigned shard and replied with the exact RETIRE-DONE marker
+    as its whole final reply, twice. Three --resume runs each ended ''DONE not observed;
+    resume observes, never resends''; the private state log shows completion-observed
+    with a null disposition, then a failure-or-deferral stop. State stays requesting,
+    shard unpublished, index untouched.
+
+
+    What the pane shows after the marker: a blank row, the composer separator, an
+    empty composer, the separator again, then two footer rows: the host''s custom
+    status line (user@host:path, branch, model, remaining context) and the permission-mode
+    row ending with a background-agent indicator (''<arrow> 1 agent''). There is no
+    native duration row, since the reply was a single short line.
+
+
+    Hypothesis, not verified against retire.py: the completion recognizer accepts
+    the measured suffix rows in references/protocol.md (duration row, tokens / version
+    rows) and treats the permission-mode row only in its plain form; the appended
+    agent indicator, or the absence of a duration row on 2.1.332, makes the suffix
+    unrecognized, so the marker is never the ''final assistant block''. The same indicator
+    made tmux-message report a false mixed-input result the same day (see spawn-agent-claude-task-rows-mixed-input).
+
+
+    Supported recovery today: none that publishes the shard. --resume only observes;
+    --caller-shard applies only after a decline or a DONE with no shard file. If the
+    hypothesis holds, one retry is legitimate under ''retry only when conditions change'':
+    once the lane''s background agent is gone and the footer no longer shows the indicator,
+    a single --resume may observe the existing marker. Otherwise the transaction stays
+    pending until the recognizer is fixed.
+
+
+    Fix sketch: capture this footer read-only as a fixture; accept the permission-mode
+    row with an agent indicator and a marker with no duration row for the measured
+    version; mutation-check. Candidate work, not assigned. Related: retire-claude-footer-empty-version-width,
+    retire-bare-clear-hint-row, retire-codex-offer-always-ambiguous-20261117.'
