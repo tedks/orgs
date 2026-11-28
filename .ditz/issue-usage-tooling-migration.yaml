@@ -28,3 +28,11 @@ log_events:
     receipt. Milestones: M1 quota service lands in dotfiles; M1b paths subcommand
     in dotfiles; M2a publication audit; M2 import; M3 cutover per host. Removal of
     the dotfiles copy needs a separate amendment.'
+- time: 2026-11-28T09:56:49-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'M0 done: spec PR #65 merged to master as 201dcb7 (head d6fc839, council
+    CLEAN Anthropic+OpenAI, Google EMPTY; local leak guard OK; spec, contracts, commit
+    messages and PR text checked against the private deny list with only ordinary-word
+    hits). Waiting on M1 (the two dotfiles quota-service pull requests). Local preparation
+    of the M2a guard and synthetic fixtures has started; nothing from it is pushed.'
