@@ -53,3 +53,18 @@ log_events:
   who: Ted Smith
   what: started
   comment: ""
+- time: 2026-11-28T19:26:53-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Draft PR #70 (stacked on #68) is council CLEAN at 6ee6490 for the Anthropic
+    and OpenAI seats after five rounds (Google seat EMPTY, usage limit). The explicit-model
+    notice is accepted when it is dimmed, names the pinned session, is the final footer
+    above tmux''s own status-0 dead-pane row, the pinned harness is the pane''s root
+    process and the dead-pane metadata reports that process. Baselines and counts
+    are kept per notice form. A receipt recorded by the old code needs the controller''s
+    explicit attestation on the resume. Not merged. Follow-up nits: make the final-poll
+    test wait for its marker; word the attestation record as supplied. Related follow-ups
+    filed: retire-tmux38-dead-pane-pid-20261128, retire-claude-model-selector-grammar-20261128,
+    retire-authenticated-exit-witness-20261128. Note for the merge of #68: its mutation
+    totals were produced before the mutation runner''s fixture fault was fixed in
+    this change and should be re-run with the corrected runner.'
