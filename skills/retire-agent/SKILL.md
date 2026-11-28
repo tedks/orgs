@@ -190,6 +190,36 @@ still ends `DONE not observed`, the suffix is another unmeasured form. Capture
 the rows from the marker down, sanitize them into a fixture, and fix the
 recognizer. Do not rerun the resume until something has changed.
 
+### An exited Claude pane with an explicit model notice
+
+For an ordinary retirement, confirm these facts read-only before resuming.
+
+- The installed skill recognizes `claude --model MODEL --resume UUID`, and
+  the private receipt is `pending-exit` for the published shard.
+- The existing state records a submitted exit request or an ambiguous request
+  with actual input, a positive Enter count, and a pre-request count for the
+  shard's session UUID. The request targeted the live pinned process, and
+  all pinned original processes have ended.
+- The retained dead pane is on the recorded socket and still reports the
+  pinned pane PID. Its final native model notice names the immutable shard's
+  UUID and is followed by tmux's own status-0 dead-pane row. The current
+  same-session model count exceeds the saved model count. An older state
+  with only a plain count uses zero as the model baseline.
+
+Run `scripts/retire.sh %PANE --resume STATE` once. It re-verifies the published
+handoff and current evidence before publishing the retired receipt. It sends
+no exit input. A genuine native notice is printed only at process exit, so
+one from this pinned pane postdates the request sent to the live process even
+if the older baseline counted only plain notices. The status-0 dead-pane
+row ties the model proof to the pinned pane root's exit.
+
+Claude can clear the screen at exit and leave just the final notice. If the
+saved model count included a quoted block that vanished, the single genuine notice
+can leave the count unchanged. The receipt stays pending. There is no
+supported recovery when the pane has been collected or when tmux retains it
+without the original pane PID. In these cases preserve the published shard,
+pending receipt, and private transaction state.
+
 ## Repair verification
 
 Keep handles for running exec calls until they complete or are deliberately
@@ -199,7 +229,8 @@ accepted transfer; parent-shell exit alone is insufficient. Stop only verified
 owned processes, and record pending or unknown descendants as blockers.
 
 Run `scripts/test-retire.py` and `scripts/test-mutations.py` for isolated
-behavior and guard-removal tests. Set `RETIRE_TEST_SHARED_SCRIPTS` to the
+behavior and guard-removal tests using the [tmux requirement](README.md#isolated-retirement-tests).
+Set `RETIRE_TEST_SHARED_SCRIPTS` to the
 published spawn-agent `scripts` directory to verify a dependency checkout;
 the default is this checkout's sibling spawn-agent. The binding readers'
 standalone suites live under `../_shared/native/tests/`; run each `test-*.py`

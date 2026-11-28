@@ -227,9 +227,10 @@ def main():
             draft_checked = False
             if args.stale_offer_draft:
                 require(run([*tmux, 'send-keys', '-t', pane, '-l', '--', draft]))
-            notice = ('claude --resume ' if harness == 'claude' else 'codex resume ') + context['session_id']
+            command_pattern = (r'claude (?:--model ' + re.escape(model) + r' )?--resume '
+                               if harness == 'claude' else 'codex resume ')
             prefix = r'^Resume this session with:[ \t]*\n' if harness == 'claude' else r'^Token usage: [^\n]+\nTo continue this session, run:[ \t]*\n'
-            pattern = prefix + r'[ \t]*' + re.escape(notice) + r'[ \t]*$'
+            pattern = prefix + r'[ \t]*(' + command_pattern + re.escape(context['session_id']) + r')[ \t]*$'
             deadline = time.monotonic() + 1200
             base_command = [HERE / 'retire.sh', pane, '--retire', '--wait', '60', '--poll', '1']
             command = base_command
@@ -277,7 +278,13 @@ def main():
             assert baseline['session_id'] == context['session_id']
             assert type(state['exit'].get('enters')) is int and state['exit']['enters'] >= 1, 'no actual submitted exit request'
             assert state['exit']['status'] == 'delivered' or state['exit'].get('input_attempted') is True
-            assert len(re.findall(pattern, screen, re.MULTILINE)) > baseline['before'], f'fresh same-session {harness} native notice missing'
+            notices = re.findall(pattern, screen, re.MULTILINE)
+            plain = [notice for notice in notices if not notice.startswith('claude --model ')]
+            models = [notice for notice in notices if notice.startswith('claude --model ')]
+            fresh = models if len(models) > baseline['model'] else []
+            if len(plain) > baseline['plain']:
+                fresh = plain
+            assert fresh, f'fresh same-session {harness} native notice missing'
             pane_dead = require(run([*tmux, 'display-message', '-p', '-t', pane, '#{pane_dead}']))
             assert pane_dead == '1', 'owned launcher pane has not ended'
             actors = [state['identity']['process'], *state['identity']['process'].get('cores', [])]
@@ -291,7 +298,7 @@ def main():
             preserved = json.loads(git('show', 'origin/master:' + shard))
             assert preserved['session_id'] == context['session_id'], 'retirement lost verified native session identity'
             report['results'].append({'harness': harness, 'pane': pane, 'event': state['id'],
-                                      'handoff': 'remote-blob-verified', 'exit_receipt': notice, 'processes_ended': True,
+                                      'handoff': 'remote-blob-verified', 'exit_receipt': fresh[-1], 'processes_ended': True,
                                       'pane_dead': True, 'native_session': context['session_id'], 'identity_source': context['evidence_source']})
             print(harness + ': real handoff, exit receipt, and process end verified', flush=True)
     except BaseException as error:

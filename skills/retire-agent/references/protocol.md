@@ -206,12 +206,35 @@ Ruling RETIRE-FIX-R1 requires two independent exit receipts: all pinned original
 PID/start-time/boot-ID actors ended, and a fresh harness-native exit notice
 naming the exact UUID in the immutable verified shard. Codex's notice block is
 `Token usage: ...`, `To continue this session, run:`, then `codex resume UUID`.
-Claude's block is `Resume this session with:` then `claude --resume UUID`.
-`Shutting down...` is optional. Before requesting exit, persist only the count
-of matching native notice blocks, never terminal text. A submitted command
+Claude's block is `Resume this session with:` then `claude --resume UUID`
+or `claude --model MODEL --resume UUID`. The explicit-model form uses a
+single bare model selector of ASCII letters, digits and hyphens, beginning
+with a letter or digit and distinct from a UUID. Count plain notices from
+the unstyled capture and dim model notices from the styled capture. Either
+form can independently establish freshness by increasing its own count.
+For the model form, the newest match must be the final notice, followed
+by tmux's status-0 dead-pane row for that pane's recorded exit. A narrow
+pane can clip the row at the pane width.
+`Shutting down...` is optional. Before requesting exit, save the two counts
+without terminal text. A legacy `before` count is the plain baseline, and
+the legacy model baseline is zero. If the Claude styled capture fails before
+exit input, the baseline is incomplete and the controller withholds input.
+After the request, the plain path can still verify independently and the
+model path requires a successful styled capture. A submitted command
 receipt or an ambiguous attempt with actual input and a positive Enter count
 is required; typed characters and proven no-input deferrals cannot retire.
-Resume rereads the pinned pane and requires a greater count; cached confirmation is not authority.
+Resume rereads the pinned pane and requires a greater count for the accepted
+form. The controller verifies original process end and native session
+binding separately from the pane text.
+
+This check guards against lifecycle mistakes such as a wrong session, stale
+or quoted text, a process that is still live, or a pane that changed hands.
+The terminal is an unauthenticated channel for both Claude notice forms and
+for Codex. A process with terminal access can deliberately render the cells
+of a native notice and then end itself. Authenticating the writer is outside
+this check's threat model. The harness-provided witness is tracked separately
+as `retire-authenticated-exit-witness-20261128`.
+
 A failed resume of a locally retired state does not republish or downgrade its
 historical remote receipt. Current failure audits remain unconfirmed until the
 current process/notice pair verifies; loaded or forged retired status is never

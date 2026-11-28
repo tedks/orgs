@@ -30,6 +30,17 @@ SHARED = Path(os.environ.get('RETIRE_TEST_SHARED_SCRIPTS', str(HERE.parents[1] /
 CLAUDE_HINT_FIXTURE = 'fixtures/claude-2.1.332-clear-hint-agent-footer.txt'
 CLAUDE_HINT_EVENT = 'feedfacecafebeef0123456789abcdef'
 CLAUDE_HINT_WIDTH = 381
+# Synthetic identities shared by the isolated fixtures.
+FIXTURE_SESSION = str(uuid.UUID(hex='a' * 32))
+OTHER_FIXTURE_SESSION = str(uuid.UUID(hex='b' * 32))
+FIXTURE_PANE = f'%{1}'
+# Only the renderer rows from the measured exit notice.
+CLAUDE_MODEL_NOTICE_HEADER = '\x1b[2mResume this session with:'
+CLAUDE_MODEL_NOTICE_COMMAND = 'claude --model opus --resume ' + FIXTURE_SESSION
+CLAUDE_PLAIN_NOTICE = 'Resume this session with:\nclaude --resume ' + FIXTURE_SESSION + '\n'
+TMUX_DEAD_TIME = 'Fri Jan  1 00:00:00 2021'
+TMUX_DEAD_ROW = '\x1b[0mPane is dead (status 0, ' + TMUX_DEAD_TIME + ')\n'
+RETAINED_PANE_PID_REQUIRED = 'retained dead pane has no pane_pid; run this gate on a tmux that retains it, such as 3.6a'
 
 
 def claude_hint_rows(mode, event, disposition):
@@ -90,7 +101,7 @@ def claude_hint_rows(mode, event, disposition):
 
 def shard_data(event, identity):
     return {'event': event, 'identity': identity, 'author': 'agent',
-            'date': '2026-09-26', 'session_id': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'harness': identity['process']['agent'],
+            'date': '2026-09-26', 'session_id': FIXTURE_SESSION, 'harness': identity['process']['agent'],
             'model': 'test-model', 'working_directory': identity['directory'], 'tmux_window': 'private-test:0',
             'role': 'Utility', 'landed_work': 'none', 'lessons': 'Record receipts before exit.', 'provenance': 'fixture-agent',
             'recovery': {'mission': 'Mission authorized', 'authorization': 'fixture caller', 'pauses': 'none',
@@ -136,7 +147,7 @@ def fixture_records(directory):
             if line.endswith('\n')]
 
 
-def fixture_command(directory, inner):
+def fixture_command(directory, inner, keep_shell=True):
     # The surviving shell also owns a fixture HOME, rather than the host's
     # interactive history/config paths after the actor exits.
     environment = {'RETIRE_TEST_PYTHON': sys.executable, 'HOME': str(directory / 'actor-home'),
@@ -144,23 +155,24 @@ def fixture_command(directory, inner):
                    'CODEX_HOME': str(directory / 'codex-config'),
                    'CLAUDE_CONFIG_DIR': str(directory / 'claude-config')}
     exports = ' '.join(key + '=' + shlex.quote(value) for key, value in environment.items())
-    return 'export ' + exports + '; ' + shlex.join(['bash', '-c', inner]) + '; exec bash --norc'
+    command = 'export ' + exports + '; ' + shlex.join(['bash', '-c', inner])
+    return command + '; exec bash --norc' if keep_shell else command
 
 
 def terminal(directory, mode):
     directory = Path(directory)
     register_fixture(directory, os.getpid(), 'terminal')
     register_fixture(directory, os.getppid(), 'pane-root')
-    session = ('AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA' if mode == 'claude-uppercase'
-               else 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    session = (FIXTURE_SESSION.upper() if mode == 'claude-uppercase'
+               else FIXTURE_SESSION)
     rollout = Path(os.environ['CODEX_HOME']) / 'sessions/rollout-fixture-' / ('rollout-' + session + '.jsonl')
     rollout.parent.mkdir(parents=True, exist_ok=True)
     if not rollout.exists():
         rollout.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': session, 'source': 'cli', 'cwd': os.getcwd()}}) + '\n')
     extra_fd = None
     if mode == 'ambiguous-native-fd':
-        second = rollout.with_name('rollout-bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.jsonl')
-        second.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'source': 'cli', 'cwd': os.getcwd()}}) + '\n')
+        second = rollout.with_name(f'rollout-{OTHER_FIXTURE_SESSION}.jsonl')
+        second.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': OTHER_FIXTURE_SESSION, 'source': 'cli', 'cwd': os.getcwd()}}) + '\n')
         extra_fd = second.open('a')
     native_fd = rollout.open('a')  # Provider reader requires a writable CLI rollout fd.
     if mode == 'missing-native-fd':
@@ -290,7 +302,8 @@ def terminal(directory, mode):
                 draw()
             if (directory / 'human-independent-exit').exists():
                 if exit_enters:
-                    sys.stdout.write('\r\n\x1b[JToken usage: total=42\r\nTo continue this session, run:\r\n  codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\r\n')
+                    sys.stdout.write('\r\n\x1b[JToken usage: total=42\r\nTo continue this session, run:\r\n'
+                                     f'  codex resume {FIXTURE_SESSION}\r\n')
                     sys.stdout.flush()
                 return
             if mode in ('draft', 'stable-draft') and (directory / 'human-cleared-draft').exists():
@@ -347,15 +360,34 @@ def terminal(directory, mode):
                                 draw()
                                 continue
                             if mode == 'hold-notice':
-                                history = 'Token usage: total=42\r\nTo continue this session, run:\r\n  codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\r\n'
+                                history = ('Token usage: total=42\r\nTo continue this session, run:\r\n'
+                                           f'  codex resume {FIXTURE_SESSION}\r\n')
                                 draft = b''
                                 draw()
                             if mode not in ('hold', 'hold-notice'):
                                 (directory / 'terminal.json').write_text(json.dumps({'pastes': pastes, 'enters': enters, 'event': event, 'exit_pasted': pasted_payload, 'exit_enters': exit_enters}))
                                 if mode != 'no-exit-notice':
-                                    session = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' if mode.endswith('wrong-exit-notice') else 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
-                                    notice = ('Resume this session with:\r\nclaude --resume ' if mode.startswith('claude') else ('Token usage: total=42 input=100000 (+ 90000 cached) output=10000 (reasoning 9000)\r\nTo continue this session, run:\r\n  codex resume ' if mode == 'narrow-notice' else 'Token usage: total=42\r\nTo continue this session, run:\r\n  codex resume ')) + session.lower() + '\r\n'
-                                    sys.stdout.write('\r\n\x1b[J' + notice)
+                                    session = OTHER_FIXTURE_SESSION if mode.endswith('wrong-exit-notice') else FIXTURE_SESSION
+                                    if mode.startswith('claude-model-exit-notice'):
+                                        trailing = ' trailing text' if mode.endswith('-trailing') else ''
+                                        notice = (CLAUDE_MODEL_NOTICE_HEADER + '\r\n'
+                                                  + CLAUDE_MODEL_NOTICE_COMMAND + trailing + '\x1b[0m\r\n')
+                                    elif mode.startswith('claude'):
+                                        notice = 'Resume this session with:\r\nclaude --resume ' + session.lower() + '\r\n'
+                                    else:
+                                        usage = ('total=42 input=100000 (+ 90000 cached) output=10000 (reasoning 9000)'
+                                                 if mode == 'narrow-notice' else 'total=42')
+                                        notice = 'Token usage: ' + usage + '\r\nTo continue this session, run:\r\n  codex resume ' + session.lower() + '\r\n'
+                                    # The native exit can leave only its notice
+                                    # after the application screen is cleared.
+                                    narrow = '-narrow' in mode
+                                    if narrow:
+                                        # The offer and exit composer use the normal width.
+                                        # Resize the isolated pane only to render the notice.
+                                        subprocess.run(['tmux', 'resize-window', '-t', os.environ['TMUX_PANE'],
+                                                        '-x', '40'], check=True)
+                                    clear = '\x1b[2J\x1b[3J\x1b[H' if narrow or mode.endswith('with-quote') else '\r\n\x1b[J'
+                                    sys.stdout.write(clear + notice)
                                     sys.stdout.flush()
                                 return
                         else:
@@ -373,7 +405,7 @@ def terminal(directory, mode):
                             if mode == 'codex-real-reply-row-invalid-shard':
                                 data['session_id'] = 'unknown'
                             if mode.endswith('wrong-shard-id'):
-                                data['session_id'] = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+                                data['session_id'] = OTHER_FIXTURE_SESSION
                             if mode == 'claude-switched-wrong-shard-id':
                                 pointer = Path(os.environ['HOME']) / '.claude/session-state' / ('current.' + str(os.getpid()))
                                 fields = pointer.read_text().split()
@@ -523,6 +555,9 @@ def terminal(directory, mode):
                                         history += '  Do not retire yet; recovery still needs correction.\r\n'
                                     elif mode.endswith('later-assistant'):
                                         history += '● Recovery still needs correction.\r\n'
+                        if mode == 'claude-model-exit-notice-with-quote':
+                            history = ('● Quoted exit notice\r\n' + CLAUDE_MODEL_NOTICE_HEADER + '\r\n'
+                                       + CLAUDE_MODEL_NOTICE_COMMAND + '\x1b[0m\r\n' + history)
                         draft = ('● RETIRE-DONE-' + event).encode() if mode in ('composer', 'claude-composer') else (b'ordinary human draft' if mode in ('claude-exit-draft', 'codex-exit-draft') else b'')
                         pasted_payload = False
                     elif not pasting and char == b'\x15':
@@ -649,7 +684,7 @@ class Tests(unittest.TestCase):
     def git(self, *args):
         return self.command('git', '-C', str(self.repo), *args)
 
-    def actor(self, mode='done', node=False, relative=False):
+    def actor(self, mode='done', node=False, relative=False, retain_dead=False):
         (self.directory / 'terminal.json').unlink(missing_ok=True)
         fixture = Path(__file__).resolve()
         if node:
@@ -662,12 +697,14 @@ class Tests(unittest.TestCase):
             if relative:
                 fixture = Path('codex')
         command = shlex.join([sys.executable, str(fixture), '--terminal', str(self.directory), mode])
-        # argv[0] is the harness identity; outer shell survives process exit.
+        # argv[0] is the harness identity. Most fixtures return to a shell.
         inner = 'exec -a ' + ('node' if node else ('claude' if mode.startswith('claude') else 'codex')) + ' ' + command
-        outer = fixture_command(self.directory, inner)
+        outer = fixture_command(self.directory, inner, keep_shell=not retain_dead)
         options = ['-c', str(self.directory)] if relative else []
         width = str(CLAUDE_HINT_WIDTH) if 'claude-hint' in mode else '240'
         pane = self.command(*self.tmux, 'new-session', '-d', '-P', '-F', '#{pane_id}', '-x', width, '-y', '40', *options, outer)
+        if retain_dead:
+            self.command(*self.tmux, 'set-option', '-w', '-t', pane, 'remain-on-exit', 'on')
         self.pane = pane
         self.wait_for(lambda: (self.directory / 'terminal.json').exists())
         return pane
@@ -861,7 +898,7 @@ class Tests(unittest.TestCase):
         data = shard_data(state['id'], state['identity'])
         data.update(author='caller', declined=True, provenance='caller after native declined reply',
                     caller_authored='written by lead on behalf of the session; Ted may resume it',
-                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+                    exact_resume_command='codex resume ' + FIXTURE_SESSION)
         shard.write_text(json.dumps(data))
         resumed = self.invoke('--resume', str(path), '--caller-shard')
         self.assertEqual(resumed.returncode, 0, resumed.stderr)
@@ -885,9 +922,9 @@ class Tests(unittest.TestCase):
         self.assertTrue(state['native_marker_witness'])
         shard = path.with_suffix('.shard')
         data = json.loads(shard.read_text())
-        data['session_id'] = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        data['session_id'] = FIXTURE_SESSION
         shard.write_text(json.dumps(data))
-        rollout = self.directory / 'codex-config/sessions/rollout-fixture-/rollout-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl'
+        rollout = self.directory / f'codex-config/sessions/rollout-fixture-/rollout-{FIXTURE_SESSION}.jsonl'
         with rollout.open('a') as stream:
             stream.write(json.dumps({'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': 'later-turn'}}) + '\n')
         result = self.invoke('--resume', str(path))
@@ -981,7 +1018,7 @@ class Tests(unittest.TestCase):
         self.assertFalse(any('payload' in record for record in ledger))
         index = self.git('show', 'origin/master:waiting/INDEX.md')
         self.assertIn('Session | Provider | Role | State | Last verified', index)
-        self.assertIn('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa | OpenAI | Utility | retired', index)
+        self.assertIn(f'{FIXTURE_SESSION} | OpenAI | Utility | retired', index)
         self.assertFalse((self.repo / 'waiting').exists())
         self.assertFalse((self.repo / 'receipts').exists())
 
@@ -1071,7 +1108,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         state = self.state()[1]
         payload = Path(state['offer']['payload']).read_text()
-        self.assertEqual(state['native_session_id'], 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+        self.assertEqual(state['native_session_id'], FIXTURE_SESSION)
         self.assertIn('controller verified native session ID ' + state['native_session_id'], payload)
         self.assertIn('write ' + str(Path(state['offer']['payload']).with_name(state['id'] + '.shard')), payload)
         self.assertNotIn('Use exactly python3', payload)
@@ -1104,7 +1141,7 @@ class Tests(unittest.TestCase):
         after = ('        if phase == "offer":\n'
                  '            pointer = self.repo.parent / "actor-home/.claude/session-state" / ("current." + str(self.state["identity"]["process"]["pid"]))\n'
                  '            fields = pointer.read_text().split()\n'
-                 '            pointer.write_text("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb " + " ".join(fields[1:]) + "\\n")\n' + before)
+                 f'            pointer.write_text("{OTHER_FIXTURE_SESSION} " + " ".join(fields[1:]) + "\\n")\n' + before)
         entry = self.instrument(before, after)
         with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
             result = self.invoke()
@@ -1153,7 +1190,7 @@ class Tests(unittest.TestCase):
         configured = self.directory / 'claude-config/session-state' / pointer.name
         configured.parent.mkdir(parents=True)
         fields = pointer.read_text().split()
-        configured.write_text('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb ' + ' '.join(fields[1:]) + '\n')
+        configured.write_text(OTHER_FIXTURE_SESSION + ' ' + ' '.join(fields[1:]) + '\n')
         result = self.invoke()
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('pinned Claude native session binding unavailable', result.stderr)
@@ -1166,7 +1203,7 @@ class Tests(unittest.TestCase):
         after = ('        if phase == "exit":\n'
                  '            pointer = self.repo.parent / "actor-home/.claude/session-state" / ("current." + str(self.state["identity"]["process"]["pid"]))\n'
                  '            fields = pointer.read_text().split()\n'
-                 '            pointer.write_text("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb " + " ".join(fields[1:]) + "\\n")\n' + before)
+                 f'            pointer.write_text("{OTHER_FIXTURE_SESSION} " + " ".join(fields[1:]) + "\\n")\n' + before)
         entry = self.instrument(before, after)
         with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
             result = self.invoke()
@@ -1185,7 +1222,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(state['exit']['status'], 'deferred')
         pointer = next((self.directory / 'actor-home/.claude/session-state').glob('current.*'))
         fields = pointer.read_text().split()
-        pointer.write_text('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb ' + ' '.join(fields[1:]) + '\n')
+        pointer.write_text(OTHER_FIXTURE_SESSION + ' ' + ' '.join(fields[1:]) + '\n')
         self.command(*self.tmux, 'send-keys', '-t', self.pane, 'C-u')
         result = self.invoke('--resume', str(path), '--retry-deferred', 'exit')
         self.assertEqual(result.returncode, 2, result.stderr)
@@ -1218,7 +1255,7 @@ class Tests(unittest.TestCase):
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
         state = self.state()[1]
-        self.assertEqual(state['native_session_id'], 'AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA')
+        self.assertEqual(state['native_session_id'], FIXTURE_SESSION.upper())
         self.assertEqual(state['status'], 'retired')
         self.assertTrue(json.loads((self.directory / 'exit-order.json').read_text())['receipt_before_exit'])
 
@@ -1228,7 +1265,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('shard differs from offered native session ID', result.stderr)
         state = self.state()[1]
-        self.assertEqual(state['native_session_id'], 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+        self.assertEqual(state['native_session_id'], FIXTURE_SESSION)
         self.assertTrue(state.get('handoff_receipt'))
         self.assertNotIn('exit', state)
         self.assertFalse((self.directory / 'exit-order.json').exists())
@@ -1268,6 +1305,275 @@ class Tests(unittest.TestCase):
         self.assertIn('fresh same-session exit notice', result.stderr)
         self.assertNotEqual(self.state()[1]['status'], 'retired')
 
+    def test_claude_model_exit_notice_retires_dead_pane(self):
+        self.actor('claude-model-exit-notice', retain_dead=True)
+        result = self.invoke()
+        self.require_retained_dead_pane_identity(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        state = self.state()[1]
+        self.assertEqual(state['status'], 'retired')
+        self.assertEqual(state['exit_notice'], {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 0})
+        self.assertEqual(self.observed()['exit_enters'], 1)
+
+    def legacy_claude_model_exit_pending(self):
+        self.actor('claude-model-exit-notice-with-quote', retain_dead=True)
+        stuck = self.invoke()
+        self.require_retained_dead_pane_identity(stuck)
+        self.assertEqual(stuck.returncode, 2, stuck.stderr)
+        self.assertIn('retirement pending original process end and fresh same-session exit notice', stuck.stderr)
+        path, pending = self.state()
+        saved = pending['exit_notice']
+        self.assertEqual(saved, {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 1})
+        # Store the pre-change representation of the same captured baseline.
+        pending['exit_notice'] = {'session_id': FIXTURE_SESSION, 'before': saved['plain']}
+        path.write_text(json.dumps(pending))
+        self.assertEqual(pending['exit']['enters'], 1)
+        self.assertIsNone(process_token(pending['identity']['process']['pid']))
+        receipt_path = 'origin/master:' + pending['handoff_receipt']
+        self.assertEqual(json.loads(self.git('show', receipt_path))['status'], 'pending-exit')
+        return path, pending, receipt_path
+
+    def test_stuck_claude_model_exit_recovers_with_plain_resume(self):
+        path, pending, receipt_path = self.legacy_claude_model_exit_pending()
+        resumed = self.invoke('--resume', str(path))
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        state = self.state()[1]
+        self.assertEqual(state['status'], 'retired')
+        self.assertEqual(state['exit_notice'], pending['exit_notice'])
+        self.assertEqual(state['exit'], pending['exit'])
+        self.assertEqual(state['shard_hash'], pending['shard_hash'])
+        receipt = json.loads(self.git('show', receipt_path))
+        self.assertEqual((receipt['status'], receipt['exit_notice_session']), ('retired', FIXTURE_SESSION))
+        ledger = [json.loads(line) for line in path.with_suffix('.jsonl').read_text().splitlines()]
+        self.assertEqual([row['phase'] for row in ledger if row['action'] == 'send-attempt'], ['offer', 'exit'])
+        self.assertEqual(self.observed()['exit_enters'], 1)
+
+    def test_legacy_claude_model_exit_refuses_different_pane_root(self):
+        path, pending, receipt_path = self.legacy_claude_model_exit_pending()
+        prior_receipt = self.git('show', receipt_path)
+        different_pid = str(os.getpid())
+        self.assertNotEqual(pending['identity']['pane_pid'], different_pid)
+        pending['identity']['pane_pid'] = different_pid
+        path.write_text(json.dumps(pending))
+        result = self.invoke('--resume', str(path))
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('pane root identity changed', result.stderr)
+        self.assertEqual(self.git('show', receipt_path), prior_receipt)
+        self.assertEqual(self.observed()['exit_enters'], 1)
+
+    def test_claude_model_exit_cleared_quote_can_mask_real_notice(self):
+        self.actor('claude-model-exit-notice-with-quote', retain_dead=True)
+        result = self.invoke()
+        self.require_retained_dead_pane_identity(result)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('fresh same-session exit notice', result.stderr)
+        state = self.state()[1]
+        self.assertEqual(state['exit_notice'], {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': 1})
+        screen = self.command(*self.tmux, 'capture-pane', '-p', '-J', '-S', '-', '-t', self.pane)
+        self.assertEqual(screen.count(CLAUDE_MODEL_NOTICE_COMMAND), 1)
+        self.assertNotIn('Quoted exit notice', screen)
+        receipt = json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))
+        self.assertEqual(receipt['status'], 'pending-exit')
+
+    def run_wrapped_claude_model_exit(self, mode, suffix):
+        self.actor(mode, retain_dead=True)
+        result = self.invoke()
+        self.require_retained_dead_pane_identity(result)
+        capture = [*self.tmux, 'capture-pane', '-p', '-t', self.pane]
+        notice = CLAUDE_MODEL_NOTICE_COMMAND + suffix
+        self.assertEqual(self.command(*self.tmux, 'display-message', '-p', '-t', self.pane, '#{pane_width}'), '40')
+        self.assertNotIn(notice, self.command(*capture))
+        self.assertIn(notice, self.command(*capture, '-J'))
+        return result
+
+    def test_wrapped_claude_model_exit_notice_retires_dead_pane(self):
+        result = self.run_wrapped_claude_model_exit('claude-model-exit-notice-narrow', '')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.state()[1]['status'], 'retired')
+
+    def test_wrapped_claude_model_exit_notice_trailing_text_stays_pending(self):
+        result = self.run_wrapped_claude_model_exit('claude-model-exit-notice-narrow-trailing', ' trailing text')
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('fresh same-session exit notice', result.stderr)
+        state = self.state()[1]
+        receipt = json.loads(self.git('show', 'origin/master:' + state['handoff_receipt']))
+        self.assertEqual(receipt['status'], 'pending-exit')
+
+    def test_claude_styled_baseline_capture_failure_withholds_exit(self):
+        self.actor('claude')
+        before = "            styled = checked(self.tmux + ['capture-pane', '-e', '-p', '-J', '-S', '-'"
+        entry = self.instrument(before, "            raise Stop('fixture styled capture unavailable')\n" + before)
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            result = self.invoke()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('unable to capture Claude model exit notice baseline', result.stderr)
+        state = self.state()[1]
+        self.assertTrue(state.get('handoff_receipt'))
+        self.assertNotIn('exit_notice', state)
+        self.assertNotIn('exit', state)
+        self.assertFalse((self.directory / 'exit-order.json').exists())
+
+    def require_retained_dead_pane_identity(self, result):
+        dead, pid = self.command(*self.tmux, 'display-message', '-p', '-t', self.pane,
+                                 '#{pane_dead}|#{pane_pid}').split('|')
+        self.assertEqual(dead, '1', result.stderr)
+        if not pid:
+            # tmux 3.8 can retain the screen while dropping the pinned PID.
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn('pane root identity changed', result.stderr)
+            self.fail(RETAINED_PANE_PID_REQUIRED)
+        self.assertEqual(pid, self.state()[1]['identity']['pane_pid'])
+
+    def model_notice_observer(self, pane=FIXTURE_PANE, agent='claude'):
+        script = Path(os.environ.get('RETIRE_TEST_SCRIPT', str(HERE / 'retire.sh'))).with_name('retire.py')
+        spec = importlib.util.spec_from_file_location('retire-claude-model-notice-test', script)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        observer = module.Retirement(SimpleNamespace(pane=pane))
+        observer.tmux = ['tmux', '-L', 'inert-owned-unit-test']
+        observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': agent}},
+                          'exit': {'status': 'ambiguous', 'input_attempted': True, 'enters': 1},
+                          'exit_notice': {'session_id': FIXTURE_SESSION, 'before': 0}}
+        return module, observer
+
+    def claude_model_notice_fresh(self, command=CLAUDE_MODEL_NOTICE_COMMAND, header=CLAUDE_MODEL_NOTICE_HEADER,
+                                  before=0, model_before=None, tail='', opening='', agent='claude',
+                                  styled_error=None, dead_metadata='1|0|240|' + TMUX_DEAD_TIME,
+                                  dead_row=TMUX_DEAD_ROW, plain_capture=None):
+        module, observer = self.model_notice_observer(agent=agent)
+        if model_before is None:
+            observer.state['exit_notice']['before'] = before
+        else:
+            observer.state['exit_notice'] = {'session_id': FIXTURE_SESSION, 'plain': before, 'model': model_before}
+        observer.pane = lambda: [FIXTURE_PANE, '123', 'owned', '/owned']
+        styled = opening + header + '\n' + command + '\n' + tail + '\n' + dead_row
+        if plain_capture is None:
+            plain_capture = re.sub(r'\x1b\[[0-9;]*m', '', styled)
+
+        def capture(args, **_):
+            if 'display-message' in args:
+                return dead_metadata
+            if '-e' not in args:
+                return plain_capture
+            if styled_error is not None:
+                raise styled_error
+            return styled
+
+        with patch.object(module, 'checked', side_effect=capture):
+            return observer.fresh_exit_notice(FIXTURE_SESSION)
+
+    def test_claude_versioned_model_exit_notice_verifies(self):
+        self.assertTrue(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND.replace('opus', 'claude-opus-5-5')))
+
+    def test_codex_cannot_use_claude_model_exit_notice(self):
+        self.assertFalse(self.claude_model_notice_fresh(agent='codex'))
+
+    def test_claude_model_exit_notice_wrong_session_is_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND.replace(FIXTURE_SESSION, OTHER_FIXTURE_SESSION)))
+
+    def test_claude_model_exit_notice_quoted_text_is_pending(self):
+        for speaker in ('●', '❯'):
+            with self.subTest(speaker=speaker):
+                self.assertFalse(self.claude_model_notice_fresh(header='Resume this session with:', opening=speaker + ' Quoted exit notice\n'))
+
+    def test_claude_model_exit_notice_before_more_output_is_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(tail='● Later assistant text\n'))
+
+    def test_legacy_claude_model_exit_notice_requires_dead_row(self):
+        self.assertTrue(self.claude_model_notice_fresh())
+        for row in ('', TMUX_DEAD_ROW.replace('status 0', 'status 1'), TMUX_DEAD_ROW.replace('2021', '2022')):
+            with self.subTest(row=row):
+                self.assertFalse(self.claude_model_notice_fresh(dead_row=row))
+
+    def test_legacy_claude_model_exit_notice_requires_dead_pane(self):
+        self.assertFalse(self.claude_model_notice_fresh(dead_metadata='0|0|240|' + TMUX_DEAD_TIME))
+
+    def test_claude_model_exit_notice_requires_zero_dead_status(self):
+        self.assertFalse(self.claude_model_notice_fresh(dead_metadata='1|1|240|' + TMUX_DEAD_TIME))
+
+    def test_claude_model_exit_requires_complete_tmux_metadata(self):
+        for metadata in ('1|0', '1|0|unknown|' + TMUX_DEAD_TIME, '1|0|240|'):
+            with self.subTest(metadata=metadata):
+                self.assertFalse(self.claude_model_notice_fresh(dead_metadata=metadata))
+
+    def test_claude_model_exit_requires_visible_dead_status(self):
+        # This width clips the exit status from the generated marker.
+        self.assertFalse(self.claude_model_notice_fresh(dead_metadata='1|0|20|' + TMUX_DEAD_TIME,
+                                                       dead_row=TMUX_DEAD_ROW[:24] + '\n'))
+
+    def test_claude_model_exit_notice_stale_count_is_pending(self):
+        output = CLAUDE_MODEL_NOTICE_HEADER + '\r\n' + CLAUDE_MODEL_NOTICE_COMMAND + '\x1b[0m\r\n'
+        # Leave the quote untouched when the owned pane exits.
+        command = shlex.join(['printf', '%s', output]) + '; read -r unused'
+        pane = self.command(*self.tmux, 'new-session', '-d', '-P', '-F', '#{pane_id}', '-x', '40', command)
+        self.command(*self.tmux, 'set-option', '-w', '-t', pane, 'remain-on-exit', 'on')
+        capture = [*self.tmux, 'capture-pane', '-p', '-t', pane]
+        self.wait_for(lambda: CLAUDE_MODEL_NOTICE_COMMAND in self.command(*capture, '-J'))
+        self.assertNotIn(CLAUDE_MODEL_NOTICE_COMMAND, self.command(*capture))
+        _, observer = self.model_notice_observer(pane=pane)
+        observer.tmux = self.tmux
+        observer.state['identity']['pane_pid'] = observer.pane()[1]
+        counts, _ = observer.exit_notices(FIXTURE_SESSION)
+        self.assertEqual(counts, {'plain': 0, 'model': 1})
+        observer.state['exit_notice'] = {'session_id': FIXTURE_SESSION, **counts}
+        self.command(*self.tmux, 'send-keys', '-t', pane, 'Enter')
+        self.wait_for(lambda: self.command(*self.tmux, 'display-message', '-p', '-t', pane, '#{pane_dead}') == '1')
+        self.assertTrue(observer.pane()[1], RETAINED_PANE_PID_REQUIRED)
+        self.assertEqual(observer.exit_notices(FIXTURE_SESSION, before=0), (counts, True))
+        self.assertFalse(observer.fresh_exit_notice(FIXTURE_SESSION))
+
+    def test_claude_exit_notice_plain_after_older_model_is_fresh(self):
+        self.assertTrue(self.claude_model_notice_fresh(model_before=1, tail='\x1b[0m' + CLAUDE_PLAIN_NOTICE))
+
+    def test_claude_exit_notice_model_after_older_plain_is_fresh(self):
+        self.assertTrue(self.claude_model_notice_fresh(before=1, model_before=0, opening=CLAUDE_PLAIN_NOTICE))
+
+    def test_claude_exit_notice_dim_quote_before_stale_plain_stays_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(before=1, model_before=0, tail='\x1b[0m' + CLAUDE_PLAIN_NOTICE))
+
+    def test_claude_exit_notice_styled_capture_cannot_add_plain_matches(self):
+        self.assertFalse(self.claude_model_notice_fresh(before=1, model_before=1, opening=CLAUDE_PLAIN_NOTICE * 2,
+                                                       plain_capture=CLAUDE_PLAIN_NOTICE))
+
+    def test_claude_exit_notice_fresh_plain_needs_no_styled_capture(self):
+        self.assertTrue(self.claude_model_notice_fresh(opening=CLAUDE_PLAIN_NOTICE,
+                                                      styled_error=AssertionError('unexpected styled capture')))
+
+    def test_claude_exit_notice_styled_capture_failure_leaves_model_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(before=1, opening=CLAUDE_PLAIN_NOTICE,
+                                                       styled_error=OSError('fixture capture unavailable')))
+
+    def test_claude_model_exit_notice_partial_session_is_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND[:-1]))
+
+    def test_claude_model_exit_notice_trailing_text_is_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND + ' trailing text'))
+
+    def test_claude_model_exit_notice_requires_adjacent_header(self):
+        self.assertFalse(self.claude_model_notice_fresh(header=CLAUDE_MODEL_NOTICE_HEADER + '\n'))
+
+    def test_claude_model_exit_notice_unknown_option_is_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND.replace('--model', '--trust')))
+
+    def test_claude_model_exit_notice_repeated_option_is_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND.replace('opus', 'opus --model opus')))
+
+    def test_claude_model_exit_notice_space_in_selector_is_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND.replace('opus', 'opus alias')))
+
+    def test_claude_model_exit_notice_quoted_selector_is_pending(self):
+        for quote in ("'", '"'):
+            with self.subTest(quote=quote):
+                self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND.replace('opus', quote + 'opus' + quote)))
+
+    def test_claude_model_exit_notice_resume_in_selector_is_pending(self):
+        for model in ('--resume', 'opus --resume ' + OTHER_FIXTURE_SESSION):
+            with self.subTest(model=model):
+                self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND.replace('opus', model)))
+
+    def test_claude_model_exit_notice_uuid_in_selector_is_pending(self):
+        self.assertFalse(self.claude_model_notice_fresh(CLAUDE_MODEL_NOTICE_COMMAND.replace('opus', OTHER_FIXTURE_SESSION)))
+
     def test_missing_exit_notice_is_pending(self):
         self.actor('no-exit-notice')
         result = self.invoke()
@@ -1279,13 +1585,13 @@ class Tests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('retire-notice-test', Path(os.environ.get('RETIRE_TEST_SCRIPT', str(HERE / 'retire.sh'))).with_name('retire.py'))
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        observer = module.Retirement(SimpleNamespace(pane='%1'))
+        observer = module.Retirement(SimpleNamespace(pane=FIXTURE_PANE))
         observer.tmux = ['tmux', '-L', 'inert-owned-unit-test']
-        session = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        session = FIXTURE_SESSION
         observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': 'codex'}},
                           'exit': {'status': 'ambiguous', 'input_attempted': True, 'enters': 1},
                           'exit_notice': {'session_id': session, 'before': 0}}
-        observer.pane = lambda: ['%1', '123', 'owned', '/owned']
+        observer.pane = lambda: [FIXTURE_PANE, '123', 'owned', '/owned']
         banner = 'Token usage: total=42\nTo continue this session, run:\n  codex resume ' + session + '\n'
         with patch.object(module, 'checked', return_value='  codex resume ' + session + '\n'):
             self.assertFalse(observer.fresh_exit_notice(session))
@@ -1303,7 +1609,7 @@ class Tests(unittest.TestCase):
             self.assertFalse(observer.fresh_exit_notice(session))
         # A resumed missing or mismatched baseline cannot gain cached authority.
         observer.state['exit'] = {'status': 'ambiguous', 'input_attempted': True, 'enters': 1}
-        observer.state['exit_notice']['session_id'] = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+        observer.state['exit_notice']['session_id'] = OTHER_FIXTURE_SESSION
         with self.assertRaises(module.Stop):
             observer.fresh_exit_notice(session)
 
@@ -1311,13 +1617,13 @@ class Tests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('retire-deferred-test', Path(os.environ.get('RETIRE_TEST_SCRIPT', str(HERE / 'retire.sh'))).with_name('retire.py'))
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        observer = module.Retirement(SimpleNamespace(pane='%1'))
+        observer = module.Retirement(SimpleNamespace(pane=FIXTURE_PANE))
         observer.tmux = ['tmux', '-L', 'inert-owned-unit-test']
-        session = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        session = FIXTURE_SESSION
         observer.state = {'identity': {'pane_pid': '123', 'process': {'agent': 'codex'}},
                           'exit': {'status': 'deferred', 'input_attempted': False, 'enters': 1},
                           'exit_notice': {'session_id': session, 'before': 0}}
-        observer.pane = lambda: ['%1', '123', 'owned', '/owned']
+        observer.pane = lambda: [FIXTURE_PANE, '123', 'owned', '/owned']
         banner = 'Token usage: total=42\nTo continue this session, run:\n  codex resume ' + session + '\n'
         with patch.object(module, 'checked', return_value=banner):
             self.assertFalse(observer.fresh_exit_notice(session))
@@ -1425,8 +1731,12 @@ class Tests(unittest.TestCase):
         path, state = self.state()
         (self.directory / 'human-independent-exit').touch()
         self.wait_for(lambda: not Path('/proc/' + str(state['identity']['process']['pid'])).exists())
-        for baseline in (None, {'session_id': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'before': '0'},
-                         {'session_id': 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'before': 0}):
+        for baseline in (None, {'session_id': FIXTURE_SESSION, 'before': '0'},
+                         {'session_id': OTHER_FIXTURE_SESSION, 'before': 0},
+                         {'session_id': FIXTURE_SESSION, 'plain': 0},
+                         {'session_id': FIXTURE_SESSION, 'before': 0, 'model': 0},
+                         {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': True},
+                         {'session_id': FIXTURE_SESSION, 'plain': 0, 'model': -1}):
             state['exit_notice'] = baseline
             path.write_text(json.dumps(state))
             result = self.invoke('--resume', str(path))
@@ -1624,7 +1934,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.invoke('--resume', str(path), '--retry-deferred', 'offer').returncode, 2)
         original = path.read_bytes()
         for key, value in (('enters', 0), ('input_attempted', False), ('paste_attempted', False),
-                           ('pane', '%999'), ('input_method', 'typed'), ('payload', '/tmp/foreign')):
+                           ('pane', f'%{999}'), ('input_method', 'typed'), ('payload', '/tmp/foreign')):
             with self.subTest(key=key):
                 changed = json.loads(original)
                 changed['offer'][key] = value
@@ -1715,7 +2025,7 @@ class Tests(unittest.TestCase):
         data = shard_data(state['id'], state['identity'])
         data.update(author='caller', declined=True, provenance='caller from committed artifacts; agent declined',
                     caller_authored='written by lead on behalf of the session; Ted may resume it',
-                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+                    exact_resume_command='codex resume ' + FIXTURE_SESSION)
         shard.write_text(json.dumps(data))
         (self.directory / 'human-cleared-history').touch()
         self.wait_for(lambda: 'Assistant output cleared.' in self.command(*self.tmux, 'capture-pane', '-p', '-t', self.pane))
@@ -1750,7 +2060,7 @@ class Tests(unittest.TestCase):
         data = shard_data(state['id'], state['identity'])
         data.update(author='caller', declined=True, provenance='caller from committed artifacts; agent declined',
                     caller_authored='written by lead on behalf of the session; Ted may resume it',
-                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+                    exact_resume_command='codex resume ' + FIXTURE_SESSION)
         shard.write_text(json.dumps(data))
         result = self.invoke('--resume', str(path), '--caller-shard')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -1783,7 +2093,7 @@ class Tests(unittest.TestCase):
         data = shard_data(state['id'], state['identity'])
         data.update(author='caller', no_agent_shard=True,
                     caller_authored='written by lead on behalf of the session; Ted may resume it',
-                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+                    exact_resume_command='codex resume ' + FIXTURE_SESSION)
         shard.write_text(json.dumps(data))
         result = self.invoke('--resume', str(path), '--caller-shard')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -1795,7 +2105,7 @@ class Tests(unittest.TestCase):
         data = shard_data(state['id'], state['identity'])
         data.update(author='caller', declined=True, provenance='caller from fixture',
                     caller_authored='written by lead on behalf of the session; Ted may resume it',
-                    exact_resume_command='codex resume aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+                    exact_resume_command='codex resume ' + FIXTURE_SESSION)
         path.with_suffix('.shard').write_text(json.dumps(data))
         (self.directory / 'ditz-sync-fail').touch()
         first = self.invoke('--resume', str(path), '--caller-shard')
@@ -1813,7 +2123,7 @@ class Tests(unittest.TestCase):
         data = shard_data(state['id'], state['identity'])
         data.update(author='caller', declined=True, provenance='caller from fixture',
                     caller_authored='written by lead on behalf of the session; Ted may resume it',
-                    exact_resume_command='codex resume bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
+                    exact_resume_command='codex resume ' + OTHER_FIXTURE_SESSION)
         path.with_suffix('.shard').write_text(json.dumps(data))
         result = self.invoke('--resume', str(path), '--caller-shard')
         self.assertEqual(result.returncode, 2, result.stderr)
@@ -1900,7 +2210,7 @@ class Tests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('retire-command-test', HERE / 'retire.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        session = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        session = FIXTURE_SESSION
         worktree = '/tmp/a worktree'
         self.assertEqual(module.caller_resume_command('claude', session, worktree),
                          "cd '/tmp/a worktree' && claude --resume " + session)
@@ -2191,7 +2501,7 @@ class Tests(unittest.TestCase):
         env = dict(self.env, PATH=str(self.directory) + ':' + os.environ['PATH'], GH_HOST='enterprise.invalid')
         env.pop('RETIRE_PRIVATE_CHECK')
         with patch.dict(os.environ, env, clear=True):
-            retirement = module.Retirement(SimpleNamespace(pane='%0'))
+            retirement = module.Retirement(SimpleNamespace(pane=FIXTURE_PANE))
             self.git('remote', 'set-url', 'origin', 'https://github.com/owner/public.git')
             with self.assertRaises(module.Stop):
                 retirement.private()
@@ -2220,7 +2530,7 @@ class Tests(unittest.TestCase):
         shards = [name for name in self.git('ls-tree', '-r', '--name-only', 'origin/master', '--', 'waiting').splitlines()
                   if name.endswith('.md') and name != 'waiting/INDEX.md']
         self.assertEqual(len(shards), 1)
-        self.assertEqual(json.loads(self.git('show', 'origin/master:' + shards[0]))['session_id'], 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+        self.assertEqual(json.loads(self.git('show', 'origin/master:' + shards[0]))['session_id'], FIXTURE_SESSION)
         self.assertFalse((self.repo / 'waiting').exists())
 
     def test_independent_exit_after_handoff_remains_pending(self):
@@ -2663,7 +2973,7 @@ class Tests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         desktop = '/nix/store/kpmq44z3v3pwammvi1iff193yqim4cg2-codex-desktop-26.911.61220/lib/chatgpt/resources/codex'
-        cli = '/users/actor/.npm-global/lib/node_modules/@openai/codex/vendor/bin/codex'
+        cli = str(Path('/users') / 'actor' / '.npm-global/lib/node_modules/@openai/codex/vendor/bin/codex')
         cases = (
             (desktop, (b'app-server', b'--listen', b'stdio://'), desktop, True),
             (desktop, (b'resume',), desktop, False),
@@ -3033,7 +3343,7 @@ class Tests(unittest.TestCase):
         screen.write_text('\n'.join(raw) + '\n')
         observer = module.Retirement.__new__(module.Retirement)
         observer.tmux = ['sh', '-c', 'cat "$0"', str(screen)]  # Appended capture arguments are ignored.
-        observer.args = SimpleNamespace(pane='%1')
+        observer.args = SimpleNamespace(pane=FIXTURE_PANE)
         plain = [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[:3]]
         self.assertTrue(observer.claude_hint_rendered(plain, 0))
         moved = plain[:1] + [plain[1].replace('276.8k', '101.5k')] + plain[2:]
@@ -3060,7 +3370,7 @@ class Tests(unittest.TestCase):
         screen.write_text('\n'.join(raw) + '\n')
         observer = module.Retirement.__new__(module.Retirement)
         observer.tmux = ['sh', '-c', 'cat "$0"', str(screen)]
-        observer.args = SimpleNamespace(pane='%1')
+        observer.args = SimpleNamespace(pane=FIXTURE_PANE)
         return observer, [re.sub(r'\x1b\[[0-9;]*m', '', row) for row in raw[:3]]
 
     def test_claude_rule_only_continuation_before_hint_is_pending(self):
