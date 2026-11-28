@@ -37,3 +37,15 @@ log_events:
     status 0; the helper had verified and published the private recovery shard, then
     left exit pending. Kept the dead pane for verification when the matcher supports
     this form.
+- time: 2026-11-28T16:02:48-00:00
+  who: Ted Smith
+  what: commented
+  comment: 'Recurrence 2026-11-28 (Claude Code 2.1.332, lane launched with --model):
+    the shard was published and verified, the agent asked to leave, the original process
+    ended and the pane shows the native notice ''claude --model <name> --resume <session
+    id>'' naming the shard''s session, but --resume keeps reporting ''retirement pending
+    original process end and fresh same-session exit notice'' and the receipt stays
+    pending-exit. The controller verified process end and the notice by hand and kept
+    the dead pane as evidence. Same defect as retire-agent-claude-exit-model-flag.
+    Every lane dispatched with an explicit model, which named-lane dispatch requires,
+    hits this.'
