@@ -892,6 +892,10 @@ class ControlTests(unittest.TestCase):
     def test_claude_current_compaction_row_is_counted(self):
         for line, expected in (('  ⎿  Compacted', 1),
                                ('  ⎿  Compacted (ctrl+o to see full summary)', 1),
+                               # Claude Code 2.1.332 row, escapes removed: space, U+00A0.
+                               ('  ⎿ \u00a0Compacted ', 1),
+                               ('\u00a0⎿ \u00a0Compacted', 0),
+                               ('  ⎿ \u00a0Compacted\u00a0soon', 0),
                                ('assistant said Compacted', 0)):
             with patch.object(h.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, line, '')):
                 marker = h._pane_marker(self.identity)
@@ -2137,6 +2141,7 @@ def mutations():
         ('live_worker_receipt', 'return record  # live observer owns the final receipt, including continuation', 'pass  # broken: overwrites live observer receipt'),
         ('cancelled_observer_lease_race', atomic_claim, obsolete_lease_first),
         ('scope', "[identity.boot_id, identity.pid, identity.starttime, session_id]", "[identity.boot_id, identity.pid, identity.starttime, session_id, identity.cwd]"),
+        ('claude_332_pane_nbsp', r"⎿[ \t\u00a0]+Compacted", r"⎿[ \t]+Compacted"),
         ('claude_332_owner_unknown', "'session-owner': ('accountUuid', str), ", ''),
         ('claude_332_data_flow_unknown', "'data-flow-records': ('records', list), ", ''),
         ('claude_332_delta_unknown', "'file-history-delta', 'data-flow-incomplete')", "'data-flow-incomplete')"),

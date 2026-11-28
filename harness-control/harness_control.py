@@ -49,7 +49,8 @@ MAX_FILE = 8 * 1024 * 1024
 # Measured on Claude Code 2.1.283/2.1.301 and Codex CLI 0.157.1/0.163.0.
 # Changed UI fails closed.
 _COMPACT_MARKERS = {'claude': 'Compacted (ctrl+o to see full summary)', 'codex': '• Context compacted'}
-_CLAUDE_COMPACT_ROW = re.compile(r'^[ \t]*⎿[ \t]+Compacted(?: \(ctrl\+o to see full summary\))?[ \t]*$', re.MULTILINE)
+# 2.1.332 renders the gap after ⎿ as a space and a NO-BREAK SPACE (U+00A0).
+_CLAUDE_COMPACT_ROW = re.compile(r'^[ \t]*⎿[ \t\u00a0]+Compacted(?: \(ctrl\+o to see full summary\))?[ \t]*$', re.MULTILINE)
 _CLAUDE_COMPACTING = re.compile(r'^\s*[✢✽✻·✶*] Compacting conversation… \([0-9][^()\n]*\)\s*$', re.MULTILINE)
 SAMPLE_JOIN = 7  # verify_pane <=5s plus public read <=1s, then shutdown margin
 
