@@ -6,7 +6,7 @@ type: bugfix
 component: retire-agent
 release:
 reporter: Ted Smith <tedks@riseup.net>
-status: unstarted
+status: in_progress
 disposition:
 creation_time: 2026-11-28T17:56:25-00:00
 references: []
@@ -33,3 +33,7 @@ log_events:
     start identity before exit, then checking /proc for process end), and the suite
     must fail rather than skip when it cannot run those tests. Candidate work, not
     assigned; it becomes urgent at the next tmux server restart.'
+- time: 2026-11-28T17:59:25-00:00
+  who: Ted Smith
+  what: started
+  comment: ""
