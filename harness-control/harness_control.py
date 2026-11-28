@@ -258,8 +258,33 @@ def _compact_event(path, baseline, harness, session_id):
     return None
 
 
+# Claude session bookkeeping rows: no uuid, no message, never user input or a
+# tool call, so they neither start nor end a root turn and leave idle as it
+# was. Each must name this session and carry its measured typed field. The
+# first five were measured on 2.1.283; the rest on 2.1.332, where every one was
+# observed after a completed turn's turn_duration and before the next input.
+# Turn state stays with the user/assistant/system rows: a pending tool call is
+# an assistant tool_use row with no linked turn_duration after it.
+_CLAUDE_METADATA = {
+    'mode': ('mode', str), 'permission-mode': ('permissionMode', str), 'atis-latch': ('atis', str),
+    'ai-title': ('aiTitle', str), 'last-prompt': ('lastPrompt', str),
+    'session-owner': ('accountUuid', str), 'tools-used': ('tools', list),
+    'data-flow-records': ('records', list), 'cost-state': ('startTime', int),
+    'pr-link': ('prNumber', int), 'agent-name': ('agentName', str),
+    'bridge-session': ('bridgeSessionId', str), 'frame-link': ('artifactCount', int),
+    'artifact-comment-monitor': ('artifacts', dict), 'artifact-autoreact-ledger': ('artifacts', dict),
+    'derived-from': ('sessions', list),
+}
+# Non-message rows that clear idle (file-history-snapshot alone is neutral).
+# file-history-delta and data-flow-incomplete were measured on 2.1.332 only
+# inside turns, so they read as busy until a later linked turn_duration.
+# continued-in (the conversation moved to another session) stays unknown.
+_CLAUDE_BUSY_OR_NEUTRAL = ('file-history-snapshot', 'queue-operation', 'progress',
+                           'file-history-delta', 'data-flow-incomplete')
+
+
 def _native_idle(record, focus_after=None):
-    """Measured Claude Code 2.1.283 / Codex CLI 0.157.1 root-turn markers.
+    """Measured Claude Code 2.1.283 and 2.1.332 / Codex CLI 0.157.1 root-turn markers.
 
     Read a bounded tail; never persist message content. Completion is evidence
     of observed idle, not an atomic reservation against later human input.
@@ -397,10 +422,11 @@ def _native_idle(record, focus_after=None):
                         turns_seen = max(user_turns_seen, 1)
                     else:
                         raise ControlError('superseded_by_new_input')
-                metadata = {'mode': 'mode', 'permission-mode': 'permissionMode', 'atis-latch': 'atis',
-                            'ai-title': 'aiTitle', 'last-prompt': 'lastPrompt'}
-                if kind in metadata:
-                    if row.get('sessionId') != record['session_id'] or not isinstance(row.get(metadata[kind]), str):
+                if kind in _CLAUDE_METADATA:
+                    field, types = _CLAUDE_METADATA[kind]
+                    value = row.get(field)
+                    if (row.get('sessionId') != record['session_id'] or not isinstance(value, types)
+                            or isinstance(value, bool)):
                         raise ControlError('idle_metadata_malformed')
                     continue
                 if kind == 'system' and row.get('subtype') == 'compact_boundary':
@@ -414,7 +440,7 @@ def _native_idle(record, focus_after=None):
                         parent = row['uuid']
                     continue
                 if kind not in ('user', 'assistant', 'tool', 'attachment', 'system'):
-                    if kind not in ('file-history-snapshot', 'queue-operation', 'progress'):
+                    if kind not in _CLAUDE_BUSY_OR_NEUTRAL:
                         raise ControlError('idle_record_shape_unknown')
                     if kind != 'file-history-snapshot':
                         idle = False
