@@ -1,35 +1,42 @@
 # Usage tooling migration: dotfiles to Orgs
 
 Status: draft spec, 2026-11-28. Nothing here is merged or enabled on any host.
-Authority: requested by the CEO through the dotfiles coordinator; every step
-that changes installed behaviour needs the dotfiles owner's go and the CEO's.
+Authority: requested by the CEO through the dotfiles coordinator. Every step
+that changes what a host runs needs the dotfiles owner's go and the CEO's.
 
 ## Overview
 
 The usage tooling is the code that counts tokens per agent session, reads
-provider quota meters, raises the token tripwire and, once two in-flight
-changes land, serves the quota snapshot. It lives in the dotfiles repository
-under `scripts/usage/`. Orgs already depends on it: the `usage` skill,
-`harness-control`'s `get_usage`, the quota-reset monitor and the doctrine's
-task-boundary ritual all read its CLI.
+provider quota meters, raises the token tripwire and, once two in-review
+changes land, serves the quota snapshot. It lives in the private dotfiles
+repository under `scripts/usage/`. Orgs already depends on it: the `usage`
+skill, `harness-control`'s `get_usage`, the quota-reset monitor and the
+doctrine's task-boundary ritual all read its CLI.
 
 This spec moves the implementation into Orgs and leaves dotfiles as the
-install layer, the same split the search guard uses: Orgs owns the code under
-`skills/_shared/`, dotfiles keeps thin installed entry points and the
+install layer, the split the search guard already uses: Orgs owns the code
+under `skills/_shared/`, dotfiles keeps the installed entry points and the
 installers.
 
 ### Assumptions
 
-- Orgs is a public repository. dotfiles is private. Anything that enters
-  Orgs is published.
-- Hosts reach Orgs code through the managed skills view: the skills root
-  (`$AGENT_SKILLS_ROOT`, default `~/.claude/skills`) contains `_shared`,
-  which resolves to the Orgs checkout the host's installer validated.
+- Orgs is a public repository and so is the frontend repository that owns
+  the quota contract. dotfiles is private. Anything pushed to an Orgs branch
+  is published, including a draft pull request's commits, and cannot be
+  recalled by deleting the branch.
+- Hosts reach Orgs code through the managed skills view at
+  `~/.claude/skills`, whose `_shared` entry resolves to the Orgs checkout the
+  host's installer validated.
+- `~/.bin/token-*` are symlinks to files in the dotfiles checkout. Pulling
+  dotfiles therefore changes what those names run with no installer step in
+  between.
+- `harness-control` runs with `AGENT_SKILLS_ROOT` set to a pinned copy of
+  `skills/_shared` from the revision it was built from, not the host's
+  checkout.
 - The tools are Python 3.11+ standard library only and stay that way.
-- Two dotfiles pull requests are in review now and add the quota service
-  (`snapshot`, `observe`, `serve`) and its installer. They are not restarted,
-  rebased onto this move, or blocked by it.
 - The on-disk store and the config file are machine-owned and do not move.
+  The store has one format, read and written by both copies during the
+  migration.
 
 ## Goals and Non-goals
 
@@ -37,90 +44,103 @@ Goals:
 
 1. One implementation of `token-usage`, `token-tripwire` and
    `token-calibrate`, including the quota service, owned and tested in Orgs.
+   On a host, every caller runs the same copy.
 2. No observable change for any consumer at cutover: same command names on
-   `PATH` and in `~/.bin`, same subcommands, flags, output bytes and exit
-   codes, same config and state paths, same cron row and unit behaviour.
-3. Nothing private is published: no real session ids, request ids, hostnames,
-   user names, project or worktree names, or measured figures from a real
-   host, in files or in history.
-4. Every step is reversible by reverting one dotfiles pull request and
-   rerunning the installer, with no store migration in either direction.
-5. The in-flight quota-service work lands where it is being reviewed and is
-   imported at its merged head.
+   `PATH` and in `~/.bin`, same subcommands, flags, output and exit codes,
+   same config and state paths, same cron row and unit behaviour.
+3. Nothing private is published: no real session, request or rollout ids,
+   hostnames, user names, home paths, project or worktree names, pane ids,
+   or figures measured on a real host, in any pushed commit.
+4. A host can be switched back to the dotfiles copy by one installer run,
+   with no store migration in either direction, until the dotfiles copy is
+   removed.
+5. The in-review quota-service work lands where it is being reviewed and is
+   imported at its merged head. It is not restarted or rebased onto this
+   move.
 
 Non-goals:
 
 - No behaviour change, refactor, rename or new feature in the moved code,
-  with one exception named below (`token-usage paths`).
-- No Nix packaging of the tools. They are reached through the skills view,
-  as the search guard is.
-- The Sui usage analyzers (`sui_*`) do not move. They are fleet-specific and
-  unrelated.
-- Installers, the cron row, systemd units, the adapters list, the machine
-  config and the state store stay in dotfiles.
+  except the `paths` subcommand named below, which lands in dotfiles before
+  the import.
+- No Nix packaging of the tools.
+- The Sui usage analyzers (`sui_*`) do not move.
+- Installers, the cron row, the systemd unit file, the adapters list, the
+  installer's ownership records, the machine config and the state store stay
+  in dotfiles.
 - The quota contract (`quota-snapshot/1`, `quota-observation/1`) is not
-  changed here. Its owner stays the frontend repository that authored it.
-- Git history of `scripts/usage` is not carried over. It contains fixture
-  data derived from real transcripts.
+  changed. The frontend repository stays its owner.
+- Git history of `scripts/usage` is not carried over.
 
 ## Firewalled Entities and Contract Boundaries
 
 | Entity | Repository | Owns |
 |---|---|---|
-| Usage implementation | Orgs, `skills/_shared/usage/` | `token_usage.py`, `tripwire.py`, `calibrate.py`, `quota_service.py`, the vendored `quota_contract.py`, their tests, synthetic fixtures, README |
-| Install layer | dotfiles | `.bin/token-usage`, `.bin/token-tripwire`, `.bin/token-calibrate` as exec proxies; `install-token-tripwire`, `install-quota-service`, the cron row, the `token-usage-serve` unit, the adapters list; machine config and store |
-| Quota contract | frontend repository | the canonical `contract.py` and its fixtures for `quota-snapshot/1` and `quota-observation/1` |
-| Consumers | Orgs, dotfiles, frontend | `usage` skill, `harness-control` `get_usage`, quota-reset monitor; `npm-ai-update`; the desktop frontends |
+| Usage implementation | Orgs, `skills/_shared/usage/` | `token_usage.py`, `tripwire.py`, `calibrate.py`, `quota_service.py`, the vendored `quota_contract.py`, tests, synthetic fixtures, README |
+| Install layer | dotfiles | the three entry-point proxies; the activation step that points `~/.bin/token-*` at them; `install-token-tripwire`, `install-quota-service`, the cron row, the `token-usage-serve` unit; machine config and store |
+| Quota contract | frontend repository | the canonical validator, its tests and fixtures for `quota-snapshot/1` and `quota-observation/1` |
+| Consumers | Orgs, dotfiles, frontend | `usage` skill, `harness-control` `get_usage`, quota-reset monitor; `npm-ai-update`, the cron row, the unit; the desktop frontends |
 
-Boundaries and their contracts:
+Boundaries:
 
-- **`usage-cli`** ([contracts/usage-cli.md](../../contracts/usage-cli.md)):
-  between the usage implementation and every consumer. The command line is
-  the API. Consumers never import the Python modules or read the store.
+- **`usage-cli`** ([contract](../../contracts/usage-cli.md)): the usage
+  implementation provides the command line; every consumer depends on it and
+  on nothing else. Consumers never import the modules or read the store.
 - **`usage-install-layout`**
-  ([contracts/usage-install-layout.md](../../contracts/usage-install-layout.md)):
-  between the usage implementation and the install layer. Where the entry
-  points are under the skills root, what a proxy may assume, and what an
-  installer may ask the tool instead of importing it.
-- **Quota contract** (existing, external): between the quota service inside
-  the usage implementation and the frontends. Orgs vendors a byte-identical
-  copy of the canonical validator and pins its digest in a test; a contract
-  change is made upstream first and re-vendored.
+  ([contract](../../contracts/usage-install-layout.md)): what the install
+  layer may assume about the implementation's files, and what it must
+  guarantee about activation.
+- **Quota contract** (external, existing): between the quota service inside
+  the implementation and the frontends, for both `token-usage snapshot` and
+  the `serve` socket. Orgs carries the frontend's validator, its copied tests
+  and fixtures unchanged, pinned by digest
+  `afac23cacb98c580d15999f314a82ffcb8ef858c649a2296703471a24d1f1e52`. A
+  contract change is made in the frontend repository first and re-vendored.
 
 ### Decisions
 
-- **Location.** `skills/_shared/usage/`, beside `skills/_shared/search-guard/`.
-  The `usage` skill (`skills/usage/`) remains a consumer of the CLI and does
-  not import from `_shared/usage`.
-- **Proxy shape.** The three dotfiles entry points become small exec proxies,
-  exactly like the search-guard proxy: resolve the skills root, require an
-  absolute path and an executable target, `exec` it with the caller's
-  arguments. They stop being symlinks into dotfiles' own tree.
-- **Fail closed.** When the Orgs implementation is absent, a proxy prints one
-  line to stderr naming the missing path and the remedy, and exits 127.
-  There is no fallback implementation. Consumers already treat a failing CLI
-  as "usage unavailable"; a caller that tests only for the command's
-  existence must also check its exit status.
-- **Installer gate.** The three entry points join the dotfiles adapters list,
-  so an installer run against an Orgs checkout that lacks them refuses to
-  link the proxies rather than installing ones that exit 127.
-- **`token-usage paths`.** `install-token-tripwire` imports `token_usage` to
-  learn the state directory. After the move that import would reach into
-  Orgs internals. The one addition this migration makes is a read-only
-  subcommand that prints the resolved config and state paths as JSON; the
-  installer calls it. It lands in Orgs as its own change after the import.
-- **Fixtures.** The two compressed count fixtures are rebuilt from synthetic
-  transcripts with generated ids and neutral project names; tests that assert
-  totals are updated to the synthetic totals. The fixture generator that
-  reads a host's real transcripts is not published. README passages that
-  quote measured figures or name hosts and projects are rewritten.
-- **Publication guard.** `tests/test_setup_leaks.py` covers the new
-  directory, and the import change adds a check that fails on a UUID-shaped
-  id not on an allow list of synthetic ids.
-- **Gates.** The three unit suites and the two quota suites become Bazel
-  targets under `skills/_shared/usage/` and join `//:portable_tools_test`.
-  The two mutation checks are separate targets, run when a guard changes and
-  before the import is accepted.
+- **Location.** `skills/_shared/usage/`. The `usage` skill stays a CLI
+  consumer and does not import from it.
+- **Pulling dotfiles activates nothing.** The cutover change adds the
+  proxies at new paths in dotfiles and leaves the existing `.bin/token-*`
+  entries untouched. A host switches only when its installer runs the
+  activation step. How dotfiles lays this out is the install layer's design;
+  the invariant is in the layout contract.
+- **Activation is validated, ordered and reversible.** Before switching, the
+  installer checks the host's Orgs checkout: the three entry points are
+  executable, their program files are byte-identical to the dotfiles copy,
+  and `paths` answers with the expected schema. It then stops the serve unit
+  if enabled, repoints the three `~/.bin` names, restarts the unit and checks
+  the result. The same step with the source set to dotfiles switches back.
+- **One copy per host.** The proxies resolve
+  `${TOKEN_USAGE_IMPL:-$HOME/.claude/skills/_shared/usage}`. They do not use
+  `AGENT_SKILLS_ROOT`, so `harness-control` runs the host's copy rather than
+  its own pinned one.
+- **Fail closed.** A proxy whose target is missing prints one line naming the
+  path and the remedy and exits 127. No fallback implementation. The serve
+  unit must not restart-loop on that status, and a caller that tests only for
+  the command's existence must also check its exit status; both are install
+  layer changes in the cutover.
+- **`token-usage paths`.** `install-token-tripwire` and
+  `install-quota-service` import `token_usage` to learn the state directory.
+  A read-only subcommand replaces those imports. It lands in dotfiles before
+  the import, so both copies have it, the installers' tests keep running
+  against the dotfiles copy, and the two copies stay byte-identical.
+- **Program files are byte-identical; everything else is audited.** The five
+  program files are copied unchanged if the publication audit finds nothing
+  private in them. If it finds something, the fix lands in dotfiles first and
+  the import is taken from the later commit. The vendored contract validator,
+  its copied tests and its fixtures are also unchanged. README, the other
+  tests and all other fixtures are rewritten or rebuilt for publication.
+- **Publication audit, a named gate (M2a).** Described under Milestones.
+- **Both copies are frozen** from the import commit until the dotfiles copy
+  is removed. A fix lands in dotfiles, is ported to Orgs unchanged, and the
+  pairing is recorded. Activation refuses a host whose copies differ.
+- **Gates.** The unit suites and the quota suites become Bazel targets under
+  `skills/_shared/usage/` and join `//:portable_tools_test`. The mutation
+  checks `tests/mutate_tripwire.py` and `tests/mutate_calibrate.py` are
+  separate targets; each must report every mutant killed at the import
+  commit and whenever a guard changes.
 
 ## Boundary Diagram
 
@@ -133,8 +153,10 @@ graph LR
     QR["quota-reset monitor"]
   end
   subgraph dotfiles
-    PX["exec proxies<br/>.bin/token-*"]
-    INST["installers, cron row, unit"]
+    PX["proxies + activation"]
+    INST["installers"]
+    CRON["cron row"]
+    UNIT["serve unit"]
     NPM["npm-ai-update"]
   end
   subgraph frontend
@@ -142,16 +164,24 @@ graph LR
     FE["desktop frontends"]
   end
   STORE[("machine config and store")]
-  PX -- "usage-install-layout" --> IMPL
-  INST -- "usage-install-layout" --> IMPL
-  SK -- "usage-cli" --> PX
-  HC -- "usage-cli" --> PX
-  QR -- "usage-cli (JSON input)" --> PX
-  NPM -- "usage-cli" --> PX
-  FE -- "usage-cli + quota contract" --> PX
+  IMPL -- "usage-cli" --> SK
+  IMPL -- "usage-cli" --> HC
+  IMPL -- "usage-cli" --> QR
+  IMPL -- "usage-cli" --> NPM
+  IMPL -- "usage-cli" --> CRON
+  IMPL -- "usage-cli" --> UNIT
+  IMPL -- "usage-cli (paths)" --> INST
+  IMPL -- "quota contract: snapshot, serve socket" --> FE
   CT -- "vendored, digest-pinned" --> IMPL
+  IMPL -- "usage-install-layout" --> PX
+  PX -. "route: ~/.bin names" .-> IMPL
   IMPL --- STORE
 ```
+
+Solid edges point from provider to consumer and are labelled with the
+contract. The dotted edge is the invocation route: every consumer reaches the
+implementation through the `~/.bin` names or `PATH`, which the install layer
+points at the proxies.
 
 ## Interpretations Log
 
@@ -159,64 +189,106 @@ None yet.
 
 ## Milestones
 
-Each milestone is one draft pull request unless stated, and each names its
-rollback. M3 is the only one that changes installed behaviour.
+Owners are named. "Go" means the dotfiles owner's and the CEO's explicit
+approval. Only M3 activation and M5 change what a host runs.
 
-- **M0. Spec.** This document and its two contracts, CLEAN at a formal
-  council round. No code.
-- **M1. Quota service lands in dotfiles** (dotfiles owner; two pull requests
-  already in review). Not gated on this spec. Stop condition for the
-  migration: if either is abandoned, M2 imports dotfiles master without it
-  and the quota service is re-proposed against Orgs.
-- **M2. Import into Orgs.** Copy `scripts/usage` (without `sui_*`) at one
-  recorded dotfiles commit, after M1, into `skills/_shared/usage/`. Program
-  files are byte-identical to that commit; the change description lists every
-  file that differs and why (fixtures, README, tests that named real
-  projects or asserted fixture totals, Bazel wiring). Acceptance: all suites
-  and both mutation checks pass in Orgs; the publication guard passes; a
-  comparison script shows program files identical to the recorded commit.
-  No host changes: nothing installed refers to the new path. Rollback:
-  revert the pull request.
-- **M2b. `token-usage paths`.** The read-only subcommand and its test, in
-  Orgs. Rollback: revert.
-- **M3. Cutover in dotfiles** (dotfiles owner). The three `.bin` entries
-  become exec proxies; the adapters list gains the three entry points;
-  `install-token-tripwire` and `install-quota-service` call the CLI instead
-  of importing; an installed-proxies test runs against a synthetic skills
-  root. The dotfiles copy of the code stays in place, unused. Precondition:
-  no commit touched dotfiles `scripts/usage` program files after the M2
-  commit, or each such commit was ported to Orgs first; the pull request
-  shows that comparison. Per host: update the Orgs checkout, then run the
-  installer. Acceptance per host: `token-usage snapshot --no-scan` and
-  `token-tripwire status` succeed through `~/.bin`; the next cron tick
-  appends to the same log; the store's files are unchanged in format.
-  Rollback: revert this pull request and rerun the installer; the symlinks
-  return and the store needs nothing.
-- **M4. Consumer and document follow-ups.** Orgs: `usage` skill text, the
+- **M0. Spec.** This document and its contracts, CLEAN at a formal council
+  round. Owner: Orgs.
+- **M1. Quota service lands in dotfiles.** The two in-review pull requests,
+  both merged. Owner: dotfiles. If either is abandoned or changed in scope,
+  the migration stops here and returns to the dotfiles owner and the CEO; no
+  partial baseline is imported.
+- **M1b. `paths` lands in dotfiles.** `token-usage paths` as the CLI
+  contract defines it, with tests; `install-token-tripwire` and
+  `install-quota-service` call it instead of importing. Owner: dotfiles,
+  drafted by Orgs on request. Acceptance: installer tests pass; `paths`
+  output equals what the import returned on the same environment for each
+  config-precedence case; no other output changes.
+- **M2a. Publication audit.** Owner: Orgs, with the dotfiles owner's
+  sign-off. Done on a local staging tree before anything is pushed to Orgs.
+  1. An export inventory lists every file at the import commit with one of:
+     copy unchanged, rewrite, rebuild, exclude. The dotfiles owner approves
+     it.
+  2. Text files marked rewrite are rewritten; the two count fixtures are
+     rebuilt from synthetic transcripts with generated ids, synthetic home
+     paths and neutral project names, and tests that assert their totals are
+     updated. The generator that reads a host's real transcripts is excluded.
+  3. A guard scans every file of the staged tree, decompressing compressed
+     files, for: UUIDs and request and rollout ids not on a list of
+     synthetic ids; `/home/` paths other than the listed synthetic ones;
+     hostnames, user names, project and worktree names from a deny list that
+     is kept outside Orgs and supplied at run time; pane ids. It runs on
+     every commit of the import branch, locally, before the first push.
+  4. A fresh reviewer at the Lead tier, with access to both trees, reads the
+     staged tree and the guard's output and returns a verdict on publication
+     alone. The foreign council seats cannot see the private tree and do not
+     substitute for this reviewer.
+  5. The audit record (inventory, guard output, reviewer verdict, the
+     dotfiles owner's sign-off) is kept privately; the pull request states
+     only that the gate passed and at which staged commit.
+  Acceptance: zero guard hits, reviewer CLEAN, sign-off recorded. A hit in a
+  program file is fixed in dotfiles and the audit restarts from the new
+  commit.
+- **M2. Import into Orgs.** The audited tree becomes one Orgs pull request.
+  Owner: Orgs. Acceptance: the M2a record names the pushed commits; program
+  files and the vendored contract files compare equal to the import commit,
+  shown by a comparison script's output; all suites and both mutation checks
+  pass; a consumer-driven test feeds the real `posture --no-scan --json` and
+  `meters --check --json` output on the synthetic store through
+  `harness-control`'s validator and the quota-reset monitor's parser; each
+  entry point runs by absolute path through a symlinked directory from an
+  unrelated working directory. No host changes. Revert is safe only while no
+  host is activated.
+- **M3. Cutover.** Owner: dotfiles; Orgs drafts on request. One dotfiles
+  pull request: the proxies at new paths, the activation step, the unit and
+  `npm-ai-update` changes named under Decisions, the installer tests.
+  Merging it changes no host. Then, per host and only with the go:
+  1. Update the host's Orgs checkout to a revision containing M2; rebuild
+     `harness-control` if the host has it.
+  2. Run the activation step. It refuses, changing nothing, unless the
+     validation under Decisions passes.
+  3. Evidence, recorded per host in the dotfiles owner's host inventory:
+     the three `~/.bin` names resolve to the proxies; `token-usage paths`,
+     `snapshot --no-scan` and `token-tripwire status` exit 0 through them;
+     the next cron tick exits 0, shown by the store's state advancing and no
+     new error line in the cron log; where enabled, the unit is active after
+     its restart with its restart count unchanged afterwards and answers a
+     snapshot request with a valid object; `get_usage` returns a posture.
+  Switching back is the same step with the source set to dotfiles, followed
+  by the same evidence. A partial failure leaves the activation step's
+  record of which names it switched; rerunning it in either direction
+  completes or undoes them.
+- **M4. Documents.** No behaviour. Orgs owner: `skills/usage/SKILL.md`, the
   role checklist's wording, the planning note that says the scripts stay in
-  dotfiles. Frontend spec: where the service lives. No behaviour.
-- **M5. Remove the dotfiles copy** (dotfiles owner), after M3 has run on
-  every host for at least one weekly quota window with no rollback. From
-  here rollback means restoring the directory from dotfiles history.
+  dotfiles. Frontend owner: the "where the code lives" section of its spec.
+  dotfiles owner: its agent instructions' pointer to the usage README.
+  Acceptance: each names the shipped layout.
+- **M5. Remove the dotfiles copy.** Owner: dotfiles, with the go. Requires:
+  the host inventory shows every host, including ones that were offline,
+  activated with M3 evidence and at least one weekly quota window since with
+  no switch back; the dotfiles commit that still holds the copy is recorded
+  as the recovery revision; restoring from it and switching one host back
+  has been rehearsed. Removes the program files, their tests, the Bazel
+  exports of them and the installer tests' dependence on them, and the
+  activation step's comparison. Does not remove the proxies, installers, the
+  unit file or anything an enabled host links.
 
-Between M2 and M3 two copies exist. The dotfiles copy is the installed one
-and is frozen: a fix goes to dotfiles and is ported to Orgs in the same
-sitting, and the M3 precondition checks it.
+**The two-copy window (M2 to M5).** The dotfiles owner approves any fix; the
+Orgs owner ports it in the same change set; the Orgs tracker issue for this
+migration records each pair of commits. Changes to the installers, the unit
+or the vendored contract in that window are checked against both copies
+before they merge. The activation step's comparison enforces the pairing on
+every host at every run.
 
-Stop conditions for the whole migration: a consumer-visible difference found
-at any milestone; private data found in a pushed Orgs commit (stop, remove
-the branch, report to the CEO before anything else); the dotfiles owner or
-the CEO withholding the go for M3.
+Stop conditions: a consumer-visible difference at any milestone; a guard hit
+or reviewer finding that cannot be fixed in dotfiles; private data found in a
+pushed Orgs commit (stop all pushes, report to the CEO at once; the remedy is
+removal of the commits and the pull request's refs by the hosting provider,
+and the data is treated as disclosed); the go withheld.
 
 ## Open Questions
 
-1. **Who runs M3 on which hosts, and when.** Decides: dotfiles owner with the
-   CEO. Blocks: M3 only.
-2. **Vendoring direction for the quota contract once the frontend is also
-   public.** Options: frontend stays canonical (this spec); Orgs becomes
-   canonical and the frontend vendors. Recommendation: no change now.
-   Decides: CEO. Blocks: nothing.
-3. **Soak length before M5.** This spec says one weekly quota window.
+1. **Which hosts activate, in what order, and when.** Decides: dotfiles
+   owner with the CEO. Blocks: M3 activation only.
+2. **Soak length before M5.** This spec says one weekly quota window.
    Decides: dotfiles owner. Blocks: M5 only.
-4. **Should the search guard's tests also join the portable suite**, for
-   parity with the usage tests? Out of scope here; filed separately.
