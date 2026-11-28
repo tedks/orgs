@@ -282,8 +282,6 @@ def terminal(directory, mode):
                 elif mode == 'codex-real-reply-row-late':
                     history += '• RETIRE-DONE-' + event + '\r\n• Worked for 19s • 19:35\r\n'
                     record_codex_completion('RETIRE-DONE-' + event)
-                else:
-                    history += '● RETIRE-DONE-' + event + '\r\n'
                 due = None
                 draw()
             cleared = directory / 'human-cleared-history'
@@ -459,8 +457,6 @@ def terminal(directory, mode):
                                     history += '● RETIRE-DONE-' + ('0' * 32) + '\r\n'
                                 elif mode == 'prose-marker':
                                     history += '● Shard written.\r\n  RETIRE-DONE-' + event + '\r\n'
-                                elif mode == 'late-done':
-                                    due = time.monotonic() + .2
                                 elif mode in ('claude-real-reply-row-late', 'claude-real-reply-row-status-late', 'codex-real-reply-row-late'):
                                     due = time.monotonic() + 1
                                 elif 'claude-hint' in mode:
@@ -2889,8 +2885,20 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.observed()['pastes'], 1)
 
     def test_last_poll_interval_is_observed(self):
-        self.actor('late-done')
-        result = self.invoke('--poll', '.4')
+        self.actor()
+        before = '                    while time.monotonic() < deadline:\n                        disposition = self.observe()\n'
+        # Drive one ordinary miss and expire the deadline during that sample.
+        # The real terminal observer can then see DONE only at the final read.
+        after = ('                    observe = self.observe\n'
+                 '                    def miss_first_poll():\n'
+                 '                        nonlocal deadline\n'
+                 '                        deadline = time.monotonic()\n'
+                 '                        self.observe = observe\n'
+                 '                        return None\n'
+                 '                    self.observe = miss_first_poll\n' + before)
+        entry = self.instrument(before, after)
+        with patch.dict(os.environ, {'RETIRE_TEST_SCRIPT': str(entry)}):
+            result = self.invoke('--wait', '4')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.state()[1]['disposition'], 'DONE')
 
