@@ -29,18 +29,21 @@ view of one night. What it can and cannot support:
 - **Authority travelled by assertion.** Each directive said it relayed the
   CEO. This CTO had no committed record to check that against. It is the
   same class of gap, authority reachable only through a live message, that
-  a November cold-start audit filed as
-  `cto-reseat-authority-not-in-artifacts-20261116`. The directives this CTO
+  an earlier cold-start audit filed as a protocol defect. The directives
+  this CTO
   received all asked for drafts and reversible work, with merges held for
   named approvals, so it acted only on what it could already do on its own
   authority. That shows a way to act under an unverifiable directive. It
   does not show that doing so is safe in general.
 - **The relaying seat also held a lane.** It was a project CTO with its own
   pull requests in review, and it was named as an approver for work it had
-  asked this CTO to stage. This CTO saw no harm from that. It also had no
-  way to see harm if there was any.
+  asked this CTO to stage. This CTO saw its own lane only: the directives
+  it received and the reviews of its own work. It saw nothing of the
+  relaying seat's lane, its other directives or its reasoning, so it can
+  report no harm without being able to rule any out.
 - **Transport was unreliable in one visible way.** Many of this CTO's own
-  control messages that night came back from the sender marked ambiguous
+  control messages that night came back from the sending tool marked
+  ambiguous
   although they had landed, and each of those needed a manual read of the
   recipient's pane. The relaying seat reported that many of its sends did
   the same. No count was kept, so this is an impression, not a rate.
@@ -58,9 +61,9 @@ Master control as described differs from that hat in three ways:
 1. It is a standing seat, not an occasional one.
 2. It monitors. This draft takes that to mean reading committed records,
    quota posture and CTO sitreps on a stated cadence. It does not mean
-   reading panes or watching lanes turn by turn, which the CTO hat already
-   rules out for CTOs, and the doctrine's rule that routine healthy
-   acknowledgements stay silent still applies to it.
+   watching lanes turn by turn, which the CTO hat rules out for CTOs, and
+   this draft also excludes reading other seats' panes. The doctrine's rule
+   that routine healthy acknowledgements stay silent still applies to it.
 3. It issues directives, where the Interface only carries the CEO's.
 
 Whether master control replaces the Interface or sits beside a narrower
@@ -70,10 +73,12 @@ answer works.
 Two existing rules bear on every part of the design:
 
 - Standing authority: a coordinator pauses for four things only (money,
-  keys, product scope and rulings, irreversible or outward acts), and "a
+  the CEO's keys or secrets, product scope and rulings, irreversible or
+  outward acts), and "a
   queue of approvals waiting on one person is the failure this exists to
   prevent." The CEO "is not an approval queue."
-- Precedence: CEO rulings come first. A pause holds until the authority
+- Precedence: CEO rulings come first.
+- Mission continuation: an explicit pause is absolute until the authority
   that set it lifts it.
 
 ## The role, as proposed
@@ -98,7 +103,8 @@ The seat's budget is part of open question 1.
     *Prompt-only.* No merges in another project. *Auditable.*
   - add approval points. An envelope in a directive may repeat what the
     CEO set; it never adds a "go" a CTO did not already need.
-    *Auditable.*
+    *Auditable* where the CEO's envelope is on record; *prompt-only*
+    otherwise.
   - issue a pause of its own, or lift one. A relayed CEO pause is the
     CEO's, and only the CEO lifts it. *Auditable.*
   - interpret CEO rulings or answer for the CEO from policy. *Prompt-only.*
@@ -109,8 +115,10 @@ The seat's budget is part of open question 1.
     stay between their owners. *Prompt-only.*
   - arbitrate shared provider quota between projects. Each CTO owns its
     project's budget; a conflict over a shared window goes to the CEO.
-- **Escalates:** money, keys, product scope and rulings, irreversible or
-  outward acts, and any conflict between two CTOs that no existing rule
+    *Prompt-only*; a breach would show only as a directive that tells a CTO
+    how to spend its budget.
+- **Escalates:** money, keys and secrets, product scope and rulings,
+  irreversible or outward acts, and any conflict between two CTOs that no existing rule
   settles.
 - **Reports:** to the CEO only. Sitreps on request; blockers at once, one
   at a time, never batched.
@@ -121,16 +129,27 @@ A directive's force follows where it comes from.
 
 | Kind | Source | Force on the receiving CTO |
 |---|---|---|
-| Relay | The CEO's words, quoted with their time | A CEO ruling. The CTO may ask the CEO about it; it may not decline it. |
-| Policy | A written, standing CEO policy that names this action and these circumstances | Advisory. The CTO may decline or defer with a recorded reason. |
-| Request | Another CTO asking for something a CTO may already grant on its own authority | Advisory, as above. Master control is a carrier here; the request gains no authority by passing through it. |
+| Relay | An explicit CEO instruction that names the project or recipient and the action, quoted with its time | A CEO ruling, once verified (below). The CTO acknowledges it, or asks the CEO about it; it may not decline it. |
+| Policy | A written, standing CEO policy that names this action and these circumstances | The policy binds as a CEO ruling. Master control's claim that it applies here is advisory: the CTO may dispute the match with a recorded reason, and the dispute goes to the CEO. It may not decline the policy itself. |
+| Request | Another CTO asking for something the receiving CTO may already grant on its own authority | Advisory. The CTO may decline or defer with a recorded reason. Master control is a carrier; the request gains no authority by passing through it. |
+
+A relay binds only as far as the CEO's own words go. A remark, a
+suggestion, or an instruction about one project is not an instruction to
+another, and master control may not make it one by choosing an excerpt.
+Because the same seat selects the quotation, routes it and writes the
+record, a matching entry in master control's record shows only what master
+control recorded. It does not show that the CEO said it or meant this
+recipient. So a relay counts as verified only when the CTO can check it
+against something the CEO authored: a ruling the CEO wrote in a tracker or
+decision record, or the CEO's direct confirmation. Where that authoritative
+source should live is part of open question 7. Until one exists, every
+relay is unverified and the rule under *Provenance and record* applies.
 
 Anything else is not a directive master control may send. In particular, a
-request that would need new authority (work in a project outside the
-asking CTO's scope that the receiving CTO could not start on its own
-standing authority), and a reading of a broad policy that does not name
-the action, both go to the CEO as questions. Whether to delegate more than
-this is open question 8.
+request that would need new authority (work the receiving CTO could not
+start on its own standing authority), and a reading of a broad policy that
+does not name the action, both go to the CEO as questions. Whether to
+delegate more than this is open question 8.
 
 A directive names the intent, why it comes now, the envelope as the CEO
 set it, and a checkpoint. It does not name the how. Allocation, staffing,
@@ -139,14 +158,24 @@ sequencing and tier stay with the CTO.
 ### What a directive obliges
 
 On receipt the CTO owes a disposition by the directive's checkpoint:
-accepted, declined or deferred (for the two advisory kinds), or a question
-to the CEO (for a relay). The CTO records it in its own project record and
-sends master control the event id. Master control alone writes its own
-decision record, so each record keeps one owner. A missed checkpoint is a
-fact master control reports in its next sitrep, not something it enforces.
-A scheduling conflict between two advisory directives is the CTO's to
-settle; a conflict between a relay and anything else is a question for the
-CEO.
+
+- for a verified relay: acknowledged, or a question to the CEO;
+- for a policy directive: acknowledged, or a disputed match that goes to
+  the CEO;
+- for a request, or any unverified directive: accepted, declined or
+  deferred, with a reason.
+
+The CTO records the disposition in its own project record and sends master
+control the event id. Master control alone writes its own decision record,
+so each record keeps one owner. A missed checkpoint is a fact master
+control reports in its next sitrep, not something it enforces.
+
+When instructions conflict, the CEO's most recent explicit instruction
+governs, whichever route it came by, direct or relayed and verified. A
+scheduling conflict between two advisory directives is the CTO's to
+settle. Where it is unclear which CEO instruction is later or whether one
+supersedes the other, the CTO asks the CEO and holds the conflicting part
+until answered.
 
 ### Provenance and record
 
@@ -156,10 +185,12 @@ CEO.
 2. Before sending, master control commits the directive (id, kind, source,
    recipient, envelope, checkpoint) to its decision record on a verified
    private remote. Where that record lives and who may read it is open
-   question 7; public records cite only sanitized evidence.
+   question 7; public records cite only sanitized evidence. A source that
+   contains keys, secrets or other restricted material is never quoted
+   into the record; the directive points to where the CEO put it.
 
-A CTO that cannot check a directive's source against that record treats it
-as unverified. It may still do whatever it could already do on its own
+A CTO that cannot check a directive's source, as described above for each
+kind, treats it as unverified. It may still do whatever it could already do on its own
 authority, and it records that it did so on its own authority and not on
 the directive. That is what this CTO did on the night described.
 
@@ -168,8 +199,9 @@ the directive. That is what this CTO did on the night described.
 Everything in the CTO hat today: the intent as written, the roster, lane
 creation and retirement, merges of gated clean work, tier per lane, the
 provider budget for its project, and direct access to the CEO. The CEO may
-steer any CTO directly, as now. A direct CEO instruction outranks any
-directive, and the CTO tells master control so its record stays true.
+steer any CTO directly, as now. A direct CEO instruction is itself a CEO
+ruling and needs no relay; the CTO tells master control when one changes
+what a directive asked, so its record stays true.
 
 ### What changes for the CEO
 
@@ -188,13 +220,16 @@ alternatives.
   relayer's selection of what the CEO said. Quoting the source limits the
   problem; it does not remove it.
 - **Drift into command.** A seat that sees everything will see things it
-  could fix faster itself. Four of the fences above are prompt-only.
+  could fix faster itself. Several of the fences above are prompt-only,
+  and each is marked.
 - **An approval queue by another name.** Described above. The seat should
   be judged on how little waits on it.
 - **Review independence.** A seat that directs work has an interest in its
   outcome. This draft keeps it out of every review and approval role
   outright. If the CEO wants an exception when reviewers are scarce, that
-  is a ruling for the CEO, not a default.
+  is a ruling for the CEO, not a default. Under a dual-hat or rotating
+  arrangement the same ban follows the holder; question 1 says what that
+  costs.
 - **A seat that never retires.** A standing seat still compacts, migrates
   and is replaced. Its own re-seat is exactly the cold-start defect cited
   above: unless the CEO's authority for the new holder is on a committed
@@ -216,22 +251,31 @@ recommendation and what it blocks. The recommendations are the author's.
    - (a) A dedicated session with no lane of its own.
    - (b) The hat worn by one project's CTO, as on the night described.
    - (c) Rotating among CTOs.
+   Under (b) and (c) the holder is also a CTO, so the review and approval
+   ban has to be worked out per holder: it keeps its duties inside its own
+   project, but for as long as it holds the hat, and for work it directed
+   while holding it, it cannot be reviewer or approver of record in any
+   other project, and someone else must be named. Under (c) that follows
+   each holder past the end of its turn for the work it directed.
    Recommendation: (a). It has no lane competing for quota or review, and
    the context load argues for it. It still has interests: its own earlier
    directives and its own continuity. Cost: a standing Frontier seat and
    its quota. Blocks: staffing and budget for the seat.
 
 2. **Who starts a lane in a project that has no CTO?**
-   - (a) Nothing starts until the CEO seats a CTO.
-   - (b) Master control seats a CTO on a relay directive, meaning the CEO
-     has said to start that project; it hands over the intent and never
-     runs the lane. Until the CTO is seated the project has no budget
-     owner, so the CEO's instruction must name the budget.
-   - (c) Master control may run a bounded lane itself. This gives it lane
+   - (a) Nothing starts until the CEO seats a CTO directly.
+   - (b) The CEO names the project, the CTO's provider and model, and the
+     budget; master control relays that appointment and hands over the
+     intent. The choice is the CEO's and master control only carries it.
+   - (c) The CEO delegates the choice: within a named budget and scope,
+     master control selects and seats the CTO. This is a new delegation,
+     since seating a CTO changes a roster and spends Frontier quota.
+   - (d) Master control may run a bounded lane itself. This gives it lane
      authority, which the CEO's description excludes.
-   Recommendation: (b). It needs a new delegation from the CEO: seating a
-   CTO changes a roster and spends Frontier quota. Blocks: work in dormant
-   projects.
+   In (b) and (c) the CEO's instruction must name who owns the project's
+   budget until the CTO is seated, and under the split in question 5 the
+   seating act itself is the Interface's, on master control's routing.
+   Recommendation: (b). Blocks: work in dormant projects.
 
 3. **How is "I'll coordinate locally" recorded?** Peers settling things
    directly is the doctrine's default, not a gap. The question is what
@@ -254,8 +298,10 @@ recommendation and what it blocks. The recommendations are the author's.
      sitrep; (b) master control holds one ordered queue and presents the
      questions together, which trades time-to-decision for the CEO's
      attention and is the approval queue the doctrine warns against;
-     (c) master control answers from written policy and says which, which
-     makes it an interpreter of rulings.
+     (c) the CEO delegates interpretation: master control may answer from
+     written policy and must say which. That is a grant of authority the
+     baseline role does not have, and it makes the seat an interpreter of
+     rulings.
      Recommendation: (a). Independent work in the lane continues while the
      question is open.
    - A permission prompt in the CTO's own session that only the human can
@@ -274,39 +320,63 @@ recommendation and what it blocks. The recommendations are the author's.
      migrations, compaction on request) and doctrine and infrastructure.
    Under either, someone other than master control must hold lifecycle
    control over master control itself: who may pause, retire or re-seat
-   it, how a successor takes over, and who dispatches during a vacancy.
+   it, and how a successor takes over. For a vacancy the CEO chooses
+   between a named interim holder and no holder, in which case CTOs use
+   their existing direct route to the CEO and nothing is dispatched. In
+   both, the outgoing holder's authority to send directives ends at the
+   recorded handover and the successor's starts when the CEO's authority
+   for it is on record, so there are never two.
    Recommendation: (b), with the CEO as the authority over master
-   control's own seat and that authority committed to record before a
-   successor acts. It keeps the seat that directs separate from the seat
-   that retires. Blocks: the doctrine amendment's shape.
+   control's own seat, and no holder during a vacancy. It keeps the seat
+   that directs separate from the seat that retires. Blocks: the doctrine
+   amendment's shape.
 
-6. **What committed record must a relayed pause or lift carry before a CTO
-   acts on it?** Current doctrine already says who may lift a pause: the
-   authority that set it. The open part is evidence.
-   - (a) The CEO's words quoted in a relay directive, committed to the
-     decision record first.
-   - (b) As (a), plus the CTO checks the record itself before resuming.
-   - (c) A lift is never relayed; the CEO tells the CTO directly.
-   Recommendation: (b) for a pause, which is safe to obey early; (c) for a
-   lift, which is not. A pause also freezes directives already sent to
-   that lane until it is lifted. Blocks: how fast a paused lane can
-   resume.
+6. **What evidence does a relayed pause, and a relayed lift, need?**
+   Current doctrine already says who may lift a pause: the authority that
+   set it. The open part is evidence, and the two directions differ.
+   - Honoring a pause. Recommendation, not offered as a choice: a CTO
+     holds at once on any notice of a CEO pause, verified or not, because
+     holding is safe; it then checks the source and reports a mismatch to
+     the CEO. An unverified pause is a temporary hold until the CEO
+     confirms or denies it.
+   - Resuming. Options: (a) a verified relay is enough; (b) a verified
+     relay plus the CTO's own check of the CEO-authored source; (c) a lift
+     is never relayed, and the CEO tells the CTO directly.
+     Recommendation: (c).
+   Directives sent to a lane before or during its pause do not resume by
+   themselves: after a lift the CTO checks each for supersession before
+   acting. Blocks: how fast a paused lane can resume.
 
-7. **Where does the decision record live, and who may read it?**
-   - (a) A private remote only the CEO and master control read. Recipients
-     cannot verify their own directives.
-   - (b) A private remote every CTO can read. Recipients verify; a
-     successor reconstructs; every CTO sees every directive.
-   - (c) Per-project private records that master control writes into, one
-     per recipient. Recipients verify their own; the cross-project view
-     needs master control.
-   Recommendation: (b), with source quotations kept to the words that
-   carry the instruction. If the record is unreachable, a directive is
-   unverified and the rule above applies. Blocks: provenance checking.
+7. **Where do the records live, and who may read them?** Two records are
+   in play: the CEO-authored source that makes a relay verifiable, and
+   master control's own decision record.
+   - (a) A private record only the CEO and master control read. Recipients
+     cannot check anything, so under this draft's rule every relay stays
+     unverified.
+   - (b) A private record every CTO can read: the CEO writes rulings
+     there, master control writes directives there. Recipients verify; a
+     successor reconstructs; every CTO sees every directive and ruling.
+   - (c) Per-recipient records, each owned and written by master control
+     alone, plus a CEO-authored ruling record the recipient can read.
+     Recipients verify their own; the cross-project view needs master
+     control.
+   In every option, restricted material is referenced and never quoted,
+   and quotations are kept to the words that carry the instruction.
+   Recommendation: (b). If a record is unreachable, a directive is
+   unverified. Blocks: provenance checking, and whether any relay can
+   bind.
 
-8. **May master control act on anything beyond the three kinds?** The
-   draft says no. The alternative is a written delegation from the CEO,
-   for example a standing policy that lets it re-task idle capacity toward
-   a named priority. Recommendation: start with none, and add written
-   policies one at a time as cases arise. Blocks: how often the CEO is
-   asked.
+8. **Does the CEO want to grant master control any discretion?** The draft
+   gives it none: a written policy that names the action and the
+   circumstances is already the policy kind. The alternative is a concrete
+   grant, for example: "when a project's lanes are idle and a CEO-named
+   priority is unstaffed, master control may ask that project's CTO to
+   take it, without a per-case instruction." Such a grant would transfer
+   the decision of which CTO to ask and when; it would apply only in the
+   circumstances it names; and its directives would stay advisory unless
+   the CEO says they bind.
+   - (a) No discretion.
+   - (b) Named grants, written one at a time as cases arise, each saying
+     what it transfers and whether it binds.
+   Recommendation: (a) to start, moving to (b) case by case. Blocks: how
+   often the CEO is asked.
